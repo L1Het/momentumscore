@@ -418,7 +418,7 @@ function closeAt(closes,indexFromEnd){
 }
 function pctChange(latest,old){return Number.isFinite(latest)&&Number.isFinite(old)&&old!==0?(latest/old-1)*100:NaN}
 async function fetchYahooHistory(symbol){
-  const url='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(symbol)+'?range=1y&interval=1d&events=history';
+  const url='https://momentumscore-yahoo.e-latth.workers.dev/?symbol='+encodeURIComponent(symbol);
   const response=await fetch(url,{cache:'no-store'});
   if(!response.ok)throw new Error('HTTP '+response.status);
   const data=await response.json();
