@@ -1,0 +1,2 @@
+# momentumscore
+Aktiescreening och poängmodell
