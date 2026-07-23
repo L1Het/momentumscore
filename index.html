@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v6.5</title>
+<title>MomentumScore v6.6</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -75,11 +75,12 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .chart-label{fill:var(--muted);font-size:10px}
 .dev-positive{color:var(--green)}.dev-negative{color:var(--red)}
 
+.rsi-low{color:var(--green)}.rsi-high{color:var(--red)}.rsi-neutral{color:var(--yellow)}
 </style>
 </head>
 <body>
 <header>
-<h1>MomentumScore v6.5 – utvecklingsöversikt</h1>
+<h1>MomentumScore v6.6 – RSI och RSI-trend</h1>
 <div class="tabs">
 <button class="tab active" data-tab="input">Mata in</button>
 <button class="tab" data-tab="scores">Poäng</button>
@@ -210,6 +211,8 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
           <option value="scoreChange">Poängförändring</option>
           <option value="priceChange">Kursutveckling</option>
           <option value="maChange">Kurs/MA200-utveckling</option>
+<option value="rsi">RSI</option>
+<option value="rsiChange">RSI-förändring</option>
           <option value="score">Nuvarande poäng</option>
           <option value="company">Bolag</option>
           <option value="updated">Senast uppdaterad</option>
@@ -234,6 +237,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
       <div class="chartbox"><h3>Kursutveckling</h3><div id="priceChart"></div></div>
       <div class="chartbox"><h3>Kurs / MA200-utveckling</h3><div id="ma200Chart"></div></div>
       <div class="chartbox"><h3>Poängutveckling</h3><div id="scoreChart"></div></div>
+<div class="chartbox"><h3>RSI 14-utveckling</h3><div id="rsiChart"></div></div>
     </div>
     <div class="tablewrap" style="margin-top:12px"><table id="developmentTable"></table></div>
   </div>
@@ -242,7 +246,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v6.5 – samtliga regler</h2>
+<h2>MomentumScore v6.6 – samtliga regler</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -285,7 +289,7 @@ Under 1,0 = 5 p · 1,0–2,0 = 4 p · över 2,0 till 3,0 = 2 p · över 3,0 = 0 
 </div>
 <div class="actions"><button id="updatePrices">🔄 Uppdatera aktiekurser nu</button><button class="secondary" id="saveSettings">Spara inställningar</button></div>
 <div id="marketStatus" class="note" style="margin-top:10px">Ingen uppdatering pågår.</div>
-<p class="note"><b>Uppdateras:</b> aktiekurs och avstånd till MA200. MA200-trend 1 vecka, 1 månad och 3 månader behåller de manuellt inmatade värdena. P/E och rapportdata ändras inte. Kurs, Kurs/MA200 och totalpoäng sparas i historiken vid varje lyckad uppdatering. Automatisk uppdatering sker endast när sidan är öppen eller öppnas – en lokal HTML-fil kan inte arbeta i bakgrunden när den är stängd.</p>
+<p class="note"><b>Uppdateras:</b> aktiekurs och avstånd till MA200. MA200-trend 1 vecka, 1 månad och 3 månader behåller de manuellt inmatade värdena. P/E och rapportdata ändras inte. Kurs, Kurs/MA200, RSI 14 och totalpoäng sparas i historiken vid varje lyckad uppdatering. Automatisk uppdatering sker endast när sidan är öppen eller öppnas – en lokal HTML-fil kan inte arbeta i bakgrunden när den är stängd.</p>
 <p class="note">Yahoo-symbolen skapas automatiskt från tickern, exempelvis SAND → SAND.ST och BIOG B → BIOG-B.ST. Om ett bolag inte kan hämtas visas det i statusrutan och övriga bolag fortsätter uppdateras.</p>
 </div>
 </section>
@@ -374,7 +378,7 @@ function calc(r){
   return{trend,revCount:rc,revMomentum,revMedian,revHistory,rev,epsCount:ec,epsMomentum,epsMedian,epsHistory,eps,peScore,roe,debt,fcf,total,qualified,rating,warning:fail.join(' · '),failReasons:fail}
 }
 function snapshot(r,kind){const raw={};ids.forEach(k=>raw[k]=r[k]??'');return{savedAt:nowISO(),kind,raw,score:calc(r)}}
-function normalizeRow(r){const n={...r};n.companyType=n.companyType==='investment'?'investment':'regular';if(n.ma1&&!n.ma1m)n.ma1m=n.ma1;if(n.ma3&&!n.ma3m)n.ma3m=n.ma3;if(!('ma1w'in n))n.ma1w='';if(!('price'in n))n.price='';n.yahooSymbol=inferYahooSymbol(n.ticker||'');if(!('rev3y'in n))n.rev3y='';if(!('ekYoy'in n))n.ekYoy='';if(!('ek3y'in n))n.ek3y='';if(!('eps3y'in n))n.eps3y='';n.createdAt=n.createdAt||nowISO();n.updatedAt=n.updatedAt||n.createdAt;n.history=Array.isArray(n.history)?n.history:[snapshot(n,'Importerad tidigare version')];n.transactions=Array.isArray(n.transactions)?n.transactions:[];n.marketHistory=Array.isArray(n.marketHistory)?n.marketHistory:[];return n}
+function normalizeRow(r){const n={...r};n.companyType=n.companyType==='investment'?'investment':'regular';if(n.ma1&&!n.ma1m)n.ma1m=n.ma1;if(n.ma3&&!n.ma3m)n.ma3m=n.ma3;if(!('ma1w'in n))n.ma1w='';if(!('price'in n))n.price='';n.yahooSymbol=inferYahooSymbol(n.ticker||'');if(!('rev3y'in n))n.rev3y='';if(!('ekYoy'in n))n.ekYoy='';if(!('ek3y'in n))n.ek3y='';if(!('eps3y'in n))n.eps3y='';n.createdAt=n.createdAt||nowISO();n.updatedAt=n.updatedAt||n.createdAt;n.history=Array.isArray(n.history)?n.history:[snapshot(n,'Importerad tidigare version')];n.transactions=Array.isArray(n.transactions)?n.transactions:[];n.marketHistory=Array.isArray(n.marketHistory)?n.marketHistory:[];if(!('rsi14'in n))n.rsi14='';return n}
 function loadAndMigrate(){try{const x=JSON.parse(localStorage.getItem(storageKey)||'null');if(Array.isArray(x))return x.map(normalizeRow)}catch{}for(const k of oldKeys){try{const x=JSON.parse(localStorage.getItem(k)||'null');if(Array.isArray(x)&&x.length){const y=x.map(normalizeRow);localStorage.setItem(storageKey,JSON.stringify(y));return y}}catch{}}return[]}
 function persist(){localStorage.setItem(storageKey,JSON.stringify(rows))} function formRow(){const r={};ids.forEach(k=>r[k]=document.getElementById(k).value.trim());return r} function cls(v){return v>=80?'good':v>=70?'warn':'bad'}
 function holdings(r){let shares=0,cost=0,realized=0,dividends=0,fees=0,ever=false;for(const t of r.transactions||[]){const q=num(t.qty)||0,p=num(t.price)||0,f=num(t.fee)||0,d=num(t.dividend)||0;fees+=f;if(['Köp','Öka'].includes(t.type)){shares+=q;cost+=q*p+f;ever=true}else if(['Minska','Sälj'].includes(t.type)){const avg=shares>0?cost/shares:0,sq=Math.min(q,shares);realized+=sq*p-f-sq*avg;shares-=sq;cost-=sq*avg;if(shares<1e-9){shares=0;cost=0}ever=true}else if(t.type==='Utdelning')dividends+=d}return{shares,avg:shares>0?cost/shares:0,realized,dividends,fees,ever}}
@@ -458,6 +462,11 @@ function developmentMetrics(r){
     priceAll:first?changePct(num(first.price),currentPrice):NaN,
     maAll:first?currentMa-num(first.ma200):NaN,
     scoreAll:first?currentScore-num(first.score):NaN,
+    currentRsi:num(r.rsi14),
+    rsi1:prev1?num(r.rsi14)-num(prev1.rsi14):NaN,
+    rsi7:prev7?num(r.rsi14)-num(prev7.rsi14):NaN,
+    rsi30:prev30?num(r.rsi14)-num(prev30.rsi14):NaN,
+    rsiAll:first?num(r.rsi14)-num(first.rsi14):NaN,
     points:hist.length
   };
 }
@@ -481,7 +490,7 @@ function renderDevelopment(){
   list.sort((a,b)=>{
     if(sort==='company')return (a.r.company||'').localeCompare(b.r.company||'','sv');
     if(sort==='updated')return new Date(b.r.updatedAt)-new Date(a.r.updatedAt);
-    const map={scoreChange:'scoreAll',priceChange:'priceAll',maChange:'maAll',score:'currentScore'};
+    const map={scoreChange:'scoreAll',priceChange:'priceAll',maChange:'maAll',rsi:'currentRsi',rsiChange:'rsiAll',score:'currentScore'};
     const key=map[sort]||'scoreAll';
     const av=Number.isFinite(a.m[key])?a.m[key]:-Infinity;
     const bv=Number.isFinite(b.m[key])?b.m[key]:-Infinity;
@@ -500,7 +509,7 @@ function renderDevelopment(){
 
   table.innerHTML='<tr>'+[
     'Ticker','Bolag','Kurs','1 dag','1 vecka','1 månad','Sedan start',
-    'Kurs/MA200','MA200-utv.','Poäng','Poängförändring','Datapunkter','Senast uppdaterad'
+    'Kurs/MA200','MA200-utv.','RSI 14','RSI-status','RSI-förändring','Poäng','Poängförändring','Datapunkter','Senast uppdaterad'
   ].map(x=>`<th>${x}</th>`).join('')+'</tr>'+
   list.map(x=>`<tr class="development-row" data-i="${x.i}" style="cursor:pointer">
     <td>${x.r.ticker||''}</td>
@@ -512,6 +521,9 @@ function renderDevelopment(){
     <td class="${classByValue(x.m.priceAll)}"><b>${signed(x.m.priceAll,' %')}</b></td>
     <td>${fmt(x.m.currentMa)} %</td>
     <td class="${classByValue(x.m.maAll)}">${signed(x.m.maAll,' p.e.')}</td>
+    <td class="${rsiClass(x.m.currentRsi)}"><b>${fmt(x.m.currentRsi)}</b></td>
+    <td class="${rsiClass(x.m.currentRsi)}">${rsiStatus(x.m.currentRsi)}</td>
+    <td class="${classByValue(x.m.rsiAll)}">${signed(x.m.rsiAll,' p')}</td>
     <td class="${cls(x.m.currentScore)}"><b>${x.m.currentScore}</b></td>
     <td class="${classByValue(x.m.scoreAll)}"><b>${signed(x.m.scoreAll,' p')}</b></td>
     <td>${x.m.points}</td>
@@ -532,19 +544,21 @@ function openDevelopmentDetail(i){
     ['Datapunkter',m.points],
     ['Kursutveckling',signed(m.priceAll,' %')],
     ['Kurs/MA200 förändring',signed(m.maAll,' p.e.')],
-    ['Poängförändring',signed(m.scoreAll,' p')]
+    ['Poängförändring',signed(m.scoreAll,' p')],['RSI 14',fmt(m.currentRsi)],['RSI-förändring',signed(m.rsiAll,' p')]
   ].map(([a,b],idx)=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
   document.getElementById('priceChart').innerHTML=miniChart(hist,'price');
   document.getElementById('ma200Chart').innerHTML=miniChart(hist,'ma200');
   document.getElementById('scoreChart').innerHTML=miniChart(hist,'score');
-  document.getElementById('developmentTable').innerHTML='<tr><th>Datum</th><th>Kurs</th><th>Kursförändring</th><th>Kurs/MA200</th><th>MA200-förändring</th><th>Poäng</th><th>Poängförändring</th></tr>'+
+  document.getElementById('rsiChart').innerHTML=miniChart(hist,'rsi14');
+  document.getElementById('developmentTable').innerHTML='<tr><th>Datum</th><th>Kurs</th><th>Kursförändring</th><th>Kurs/MA200</th><th>MA200-förändring</th><th>RSI 14</th><th>RSI-förändring</th><th>Poäng</th><th>Poängförändring</th></tr>'+
     hist.slice().reverse().map((x,revIndex)=>{
       const originalIndex=hist.length-1-revIndex;
       const prev=originalIndex>0?hist[originalIndex-1]:null;
       const pCh=prev?changePct(num(prev.price),num(x.price)):NaN;
       const mCh=prev?num(x.ma200)-num(prev.ma200):NaN;
       const sCh=prev?num(x.score)-num(prev.score):NaN;
-      return `<tr><td>${new Date(x.savedAt).toLocaleString('sv-SE')}</td><td>${fmt(num(x.price))}</td><td class="${classByValue(pCh)}">${signed(pCh,' %')}</td><td>${fmt(num(x.ma200))} %</td><td class="${classByValue(mCh)}">${signed(mCh,' p.e.')}</td><td>${fmt(num(x.score))}</td><td class="${classByValue(sCh)}">${signed(sCh,' p')}</td></tr>`;
+      const rCh=prev?num(x.rsi14)-num(prev.rsi14):NaN;
+      return `<tr><td>${new Date(x.savedAt).toLocaleString('sv-SE')}</td><td>${fmt(num(x.price))}</td><td class="${classByValue(pCh)}">${signed(pCh,' %')}</td><td>${fmt(num(x.ma200))} %</td><td class="${classByValue(mCh)}">${signed(mCh,' p.e.')}</td><td class="${rsiClass(num(x.rsi14))}">${fmt(num(x.rsi14))}</td><td class="${classByValue(rCh)}">${signed(rCh,' p')}</td><td>${fmt(num(x.score))}</td><td class="${classByValue(sCh)}">${signed(sCh,' p')}</td></tr>`;
     }).join('');
   document.getElementById('developmentDetail').scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -656,6 +670,34 @@ function closeAt(closes,indexFromEnd){
   return i>=0?closes[i]:NaN;
 }
 function pctChange(latest,old){return Number.isFinite(latest)&&Number.isFinite(old)&&old!==0?(latest/old-1)*100:NaN}
+
+function calculateRSI(closes,period=14){
+  if(!Array.isArray(closes)||closes.length<period+1)return NaN;
+  let gains=0,losses=0;
+  for(let i=closes.length-period;i<closes.length;i++){
+    const diff=closes[i]-closes[i-1];
+    if(diff>0)gains+=diff;
+    else losses+=Math.abs(diff);
+  }
+  const avgGain=gains/period;
+  const avgLoss=losses/period;
+  if(avgLoss===0)return 100;
+  const rs=avgGain/avgLoss;
+  return 100-(100/(1+rs));
+}
+function rsiStatus(v){
+  if(!Number.isFinite(v))return '–';
+  if(v<35)return 'Låg';
+  if(v>70)return 'Hög';
+  return 'Neutral';
+}
+function rsiClass(v){
+  if(!Number.isFinite(v))return '';
+  if(v<35)return 'rsi-low';
+  if(v>70)return 'rsi-high';
+  return 'rsi-neutral';
+}
+
 async function fetchYahooHistory(symbol){
   const url='https://momentumscore-yahoo.e-latth.workers.dev/?symbol='+encodeURIComponent(symbol);
   const response=await fetch(url,{cache:'no-store'});
@@ -669,7 +711,14 @@ async function fetchYahooHistory(symbol){
   const latest=closes[closes.length-1];
   const maSlice=closes.slice(-Math.min(200,closes.length));
   const ma200=maSlice.reduce((a,b)=>a+b,0)/maSlice.length;
-  return {price:latest,ma200:pctChange(latest,ma200),ma1w:pctChange(latest,closeAt(closes,5)),ma1m:pctChange(latest,closeAt(closes,21)),ma3m:pctChange(latest,closeAt(closes,63))};
+  return {
+    price:latest,
+    ma200:pctChange(latest,ma200),
+    ma1w:pctChange(latest,closeAt(closes,5)),
+    ma1m:pctChange(latest,closeAt(closes,21)),
+    ma3m:pctChange(latest,closeAt(closes,63)),
+    rsi14:calculateRSI(closes,14)
+  };
 }
 async function updateAllPrices(silent=false){
   const btn=document.getElementById('updatePrices'),status=document.getElementById('marketStatus');
@@ -681,12 +730,20 @@ async function updateAllPrices(silent=false){
     if(!symbol){failed.push((r.company||r.ticker||'Okänt')+': Yahoo-symbol saknas');continue}
     try{
       const q=await fetchYahooHistory(symbol);
-      const updated={...r,yahooSymbol:symbol,price:q.price.toFixed(2),ma200:q.ma200.toFixed(2),updatedAt:nowISO()};
+      const updated={
+        ...r,
+        yahooSymbol:symbol,
+        price:q.price.toFixed(2),
+        ma200:q.ma200.toFixed(2),
+        rsi14:Number.isFinite(q.rsi14)?q.rsi14.toFixed(2):'',
+        updatedAt:nowISO()
+      };
       const scoreAfter=calc(updated);
       updated.marketHistory=[...(r.marketHistory||[]),{
         savedAt:nowISO(),
         price:q.price.toFixed(2),
         ma200:q.ma200.toFixed(2),
+        rsi14:Number.isFinite(q.rsi14)?q.rsi14.toFixed(2):'',
         score:scoreAfter.total
       }];
       updated.history=[...(r.history||[]),snapshot(updated,'Automatisk kursuppdatering')];
@@ -712,7 +769,7 @@ document.getElementById('developmentOwnership').onchange=renderDevelopment;
 document.getElementById('developmentQualification').onchange=renderDevelopment;
 document.getElementById('developmentHistoryFilter').onchange=renderDevelopment;
 document.getElementById('developmentSort').onchange=renderDevelopment;
-document.getElementById('closeDevelopmentDetail').onclick=()=>document.getElementById('developmentDetail').classList.add('hidden');document.getElementById('closeDetail').onclick=()=>document.getElementById('detailModal').classList.remove('open');document.getElementById('detailEdit').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex)};document.getElementById('detailNewQuarter').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex);quarter()};document.getElementById('detailPeUpdate').onclick=()=>document.getElementById('peTool').classList.remove('hidden');document.getElementById('cancelPeUpdate').onclick=()=>document.getElementById('peTool').classList.add('hidden');document.getElementById('newPrice').oninput=pePreview;document.getElementById('savePeUpdate').onclick=savePe;document.getElementById('txType').onchange=reasonUI;document.getElementById('saveTx').onclick=saveTx;document.getElementById('wipe').onclick=()=>{if(confirm('Radera allt?')){rows=[];persist();render()}};document.getElementById('exportBtn').onclick=()=>{const b=new Blob([JSON.stringify(rows,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='momentumscore-v6-5-data.json';a.click();URL.revokeObjectURL(a.href)};document.getElementById('importFile').onchange=e=>{
+document.getElementById('closeDevelopmentDetail').onclick=()=>document.getElementById('developmentDetail').classList.add('hidden');document.getElementById('closeDetail').onclick=()=>document.getElementById('detailModal').classList.remove('open');document.getElementById('detailEdit').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex)};document.getElementById('detailNewQuarter').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex);quarter()};document.getElementById('detailPeUpdate').onclick=()=>document.getElementById('peTool').classList.remove('hidden');document.getElementById('cancelPeUpdate').onclick=()=>document.getElementById('peTool').classList.add('hidden');document.getElementById('newPrice').oninput=pePreview;document.getElementById('savePeUpdate').onclick=savePe;document.getElementById('txType').onchange=reasonUI;document.getElementById('saveTx').onclick=saveTx;document.getElementById('wipe').onclick=()=>{if(confirm('Radera allt?')){rows=[];persist();render()}};document.getElementById('exportBtn').onclick=()=>{const b=new Blob([JSON.stringify(rows,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='momentumscore-v6-6-data.json';a.click();URL.revokeObjectURL(a.href)};document.getElementById('importFile').onchange=e=>{
   const f=e.target.files[0];
   if(!f)return;
   const rd=new FileReader();
