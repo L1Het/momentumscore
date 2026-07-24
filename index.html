@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v6.8</title>
+<title>MomentumScore v6.9</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -80,7 +80,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v6.8 – senaste stängningskurs</h1>
+<h1>MomentumScore v6.9 – automatisk MA200-trend</h1>
 <div class="tabs">
 <button class="tab active" data-tab="input">Mata in</button>
 <button class="tab" data-tab="scores">Poäng</button>
@@ -246,7 +246,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v6.8 – samtliga regler</h2>
+<h2>MomentumScore v6.9 – samtliga regler</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -289,8 +289,8 @@ Under 1,0 = 5 p · 1,0–2,0 = 4 p · över 2,0 till 3,0 = 2 p · över 3,0 = 0 
 </div>
 <div class="actions"><button id="updatePrices">🔄 Uppdatera aktiekurser nu</button><button class="secondary" id="saveSettings">Spara inställningar</button></div>
 <div id="marketStatus" class="note" style="margin-top:10px">Ingen uppdatering pågår.</div>
-<p class="note"><b>Uppdateras:</b> aktiekurs och avstånd till MA200. MA200-trend 1 vecka, 1 månad och 3 månader behåller de manuellt inmatade värdena. P/E och rapportdata ändras inte. Kurs, Kurs/MA200, RSI 14 och totalpoäng sparas i historiken vid varje lyckad uppdatering. Automatisk uppdatering sker endast när sidan är öppen eller öppnas – en lokal HTML-fil kan inte arbeta i bakgrunden när den är stängd.</p>
-<p class="note">Yahoo-symbolen skapas automatiskt från tickern, exempelvis SAND → SAND.ST och BIOG B → BIOG-B.ST. Kurs, MA200 och RSI räknas från ordinarie dagliga stängningskurser. Om Yahoos sista dagscandle är null används meta.regularMarketPrice som den senaste avslutade handelsdagens kurs och läggs till i samma serie. Om ett bolag inte kan hämtas visas det i statusrutan och övriga bolag fortsätter uppdateras.</p>
+<p class="note"><b>Uppdateras:</b> aktiekurs och avstånd till MA200. MA200-trend 1 vecka, 1 månad och 3 månader beräknas automatiskt när Yahoo har tillräckligt lång historik. Annars behålls det manuella värdet. P/E och rapportdata ändras inte. Kurs, Kurs/MA200, RSI 14 och totalpoäng sparas i historiken vid varje lyckad uppdatering. Automatisk uppdatering sker endast när sidan är öppen eller öppnas – en lokal HTML-fil kan inte arbeta i bakgrunden när den är stängd.</p>
+<p class="note">Yahoo-symbolen skapas automatiskt från tickern, exempelvis SAND → SAND.ST och BIOG B → BIOG-B.ST. Kurs, MA200, RSI och MA200-trend räknas från två års ordinarie dagliga stängningskurser. MA200-trend 1 vecka kräver minst 205 handelsdagar, 1 månad minst 221 och 3 månader minst 263. Om tillräcklig historik saknas behålls det manuella värdet. Om ett bolag inte kan hämtas visas det i statusrutan och övriga bolag fortsätter uppdateras.</p>
 </div>
 </section>
 
@@ -698,8 +698,25 @@ function rsiClass(v){
   return 'rsi-neutral';
 }
 
+
+function movingAverageAtOffset(closes,period=200,offset=0){
+  const end=closes.length-offset;
+  const start=end-period;
+  if(start<0||end<=0)return NaN;
+  const slice=closes.slice(start,end);
+  if(slice.length!==period)return NaN;
+  return slice.reduce((sum,v)=>sum+v,0)/period;
+}
+function maTrendPct(closes,offset){
+  const current=movingAverageAtOffset(closes,200,0);
+  const previous=movingAverageAtOffset(closes,200,offset);
+  return Number.isFinite(current)&&Number.isFinite(previous)&&previous!==0
+    ?(current/previous-1)*100
+    :NaN;
+}
+
 async function fetchYahooHistory(symbol){
-  const url='https://momentumscore-yahoo.e-latth.workers.dev/?symbol='+encodeURIComponent(symbol);
+  const url='https://momentumscore-yahoo.e-latth.workers.dev/?symbol='+encodeURIComponent(symbol)+'&range=2y';
   const response=await fetch(url,{cache:'no-store'});
   if(!response.ok)throw new Error('HTTP '+response.status);
   const data=await response.json();
@@ -731,9 +748,9 @@ async function fetchYahooHistory(symbol){
   return {
     price:latest,
     ma200:pctChange(latest,ma200),
-    ma1w:pctChange(latest,closeAt(closes,5)),
-    ma1m:pctChange(latest,closeAt(closes,21)),
-    ma3m:pctChange(latest,closeAt(closes,63)),
+    ma1w:maTrendPct(closes,5),
+    ma1m:maTrendPct(closes,21),
+    ma3m:maTrendPct(closes,63),
     rsi14:calculateRSI(closes,14)
   };
 }
@@ -752,6 +769,14 @@ async function updateAllPrices(silent=false){
         yahooSymbol:symbol,
         price:q.price.toFixed(2),
         ma200:q.ma200.toFixed(2),
+        ma1w:Number.isFinite(q.ma1w)?q.ma1w.toFixed(2):r.ma1w,
+        ma1m:Number.isFinite(q.ma1m)?q.ma1m.toFixed(2):r.ma1m,
+        ma3m:Number.isFinite(q.ma3m)?q.ma3m.toFixed(2):r.ma3m,
+        maTrendSource:{
+          ma1w:Number.isFinite(q.ma1w)?'Yahoo 2 år':'Manuell',
+          ma1m:Number.isFinite(q.ma1m)?'Yahoo 2 år':'Manuell',
+          ma3m:Number.isFinite(q.ma3m)?'Yahoo 2 år':'Manuell'
+        },
         rsi14:Number.isFinite(q.rsi14)?q.rsi14.toFixed(2):'',
         updatedAt:nowISO()
       };
@@ -760,6 +785,14 @@ async function updateAllPrices(silent=false){
         savedAt:nowISO(),
         price:q.price.toFixed(2),
         ma200:q.ma200.toFixed(2),
+        ma1w:Number.isFinite(q.ma1w)?q.ma1w.toFixed(2):r.ma1w,
+        ma1m:Number.isFinite(q.ma1m)?q.ma1m.toFixed(2):r.ma1m,
+        ma3m:Number.isFinite(q.ma3m)?q.ma3m.toFixed(2):r.ma3m,
+        maTrendSource:{
+          ma1w:Number.isFinite(q.ma1w)?'Yahoo 2 år':'Manuell',
+          ma1m:Number.isFinite(q.ma1m)?'Yahoo 2 år':'Manuell',
+          ma3m:Number.isFinite(q.ma3m)?'Yahoo 2 år':'Manuell'
+        },
         rsi14:Number.isFinite(q.rsi14)?q.rsi14.toFixed(2):'',
         score:scoreAfter.total
       }];
@@ -786,7 +819,7 @@ document.getElementById('developmentOwnership').onchange=renderDevelopment;
 document.getElementById('developmentQualification').onchange=renderDevelopment;
 document.getElementById('developmentHistoryFilter').onchange=renderDevelopment;
 document.getElementById('developmentSort').onchange=renderDevelopment;
-document.getElementById('closeDevelopmentDetail').onclick=()=>document.getElementById('developmentDetail').classList.add('hidden');document.getElementById('closeDetail').onclick=()=>document.getElementById('detailModal').classList.remove('open');document.getElementById('detailEdit').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex)};document.getElementById('detailNewQuarter').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex);quarter()};document.getElementById('detailPeUpdate').onclick=()=>document.getElementById('peTool').classList.remove('hidden');document.getElementById('cancelPeUpdate').onclick=()=>document.getElementById('peTool').classList.add('hidden');document.getElementById('newPrice').oninput=pePreview;document.getElementById('savePeUpdate').onclick=savePe;document.getElementById('txType').onchange=reasonUI;document.getElementById('saveTx').onclick=saveTx;document.getElementById('wipe').onclick=()=>{if(confirm('Radera allt?')){rows=[];persist();render()}};document.getElementById('exportBtn').onclick=()=>{const b=new Blob([JSON.stringify(rows,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='momentumscore-v6-8-data.json';a.click();URL.revokeObjectURL(a.href)};document.getElementById('importFile').onchange=e=>{
+document.getElementById('closeDevelopmentDetail').onclick=()=>document.getElementById('developmentDetail').classList.add('hidden');document.getElementById('closeDetail').onclick=()=>document.getElementById('detailModal').classList.remove('open');document.getElementById('detailEdit').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex)};document.getElementById('detailNewQuarter').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex);quarter()};document.getElementById('detailPeUpdate').onclick=()=>document.getElementById('peTool').classList.remove('hidden');document.getElementById('cancelPeUpdate').onclick=()=>document.getElementById('peTool').classList.add('hidden');document.getElementById('newPrice').oninput=pePreview;document.getElementById('savePeUpdate').onclick=savePe;document.getElementById('txType').onchange=reasonUI;document.getElementById('saveTx').onclick=saveTx;document.getElementById('wipe').onclick=()=>{if(confirm('Radera allt?')){rows=[];persist();render()}};document.getElementById('exportBtn').onclick=()=>{const b=new Blob([JSON.stringify(rows,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='momentumscore-v6-9-data.json';a.click();URL.revokeObjectURL(a.href)};document.getElementById('importFile').onchange=e=>{
   const f=e.target.files[0];
   if(!f)return;
   const rd=new FileReader();
