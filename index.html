@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v6.12</title>
+<title>MomentumScore v6.12.1</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -86,7 +86,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v6.12 – säker migrering</h1>
+<h1>MomentumScore v6.12.1 – säker migrering</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -267,7 +267,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v6.12 – samtliga regler</h2>
+<h2>MomentumScore v6.12.1 – samtliga regler</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -463,10 +463,7 @@ function persist(){localStorage.setItem(storageKey,JSON.stringify(rows))} functi
 function holdings(r){let shares=0,cost=0,realized=0,dividends=0,fees=0,ever=false;for(const t of r.transactions||[]){const q=num(t.qty)||0,p=num(t.price)||0,f=num(t.fee)||0,d=num(t.dividend)||0;fees+=f;if(['Köp','Öka'].includes(t.type)){shares+=q;cost+=q*p+f;ever=true}else if(['Minska','Sälj'].includes(t.type)){const avg=shares>0?cost/shares:0,sq=Math.min(q,shares);realized+=sq*p-f-sq*avg;shares-=sq;cost-=sq*avg;if(shares<1e-9){shares=0;cost=0}ever=true}else if(t.type==='Utdelning')dividends+=d}return{shares,avg:shares>0?cost/shares:0,realized,dividends,fees,ever}}
 
 function growthLabel(r){return (r?.companyType||document.getElementById('companyType').value)==='investment'?'EK-tillväxt':'Omsättning'}
-function setCompanyType(type){
-  const chosen=type==='investment'?'investment':'regular';
-  document.getElementById('companyType').value=chosen;
-  
+
 function databaseHealth(){
   const companies=rows.length;
   const histories=rows.reduce((s,r)=>s+(r.history?.length||0),0);
@@ -499,13 +496,17 @@ function restoreLocalBackup(){
     if(!confirm(`Återställa lokal backup med ${backup.length} bolag?`))return;
     const current=cloneJson(rows);
     const restored=migrateDatabase(backup);
-    validateNoDataLoss([],restored);
     localStorage.setItem(storageKey,JSON.stringify(restored));
     rows=restored;
     render();renderDatabaseHealth();
     toast('Lokal backup återställd');
   }catch(e){toast('Backupen kunde inte återställas');console.error(e)}
 }
+
+function setCompanyType(type){
+  const chosen=type==='investment'?'investment':'regular';
+  document.getElementById('companyType').value=chosen;
+  
 
 document.querySelectorAll('.type-choice').forEach(b=>b.classList.toggle('active',b.dataset.companyType===chosen));
   document.querySelectorAll('.investment-only').forEach(e=>e.style.display=chosen==='investment'?'block':'none');
