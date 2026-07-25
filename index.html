@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v6.12.1</title>
+<title>MomentumScore v6.12.4</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -86,7 +86,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v6.12.1 – säker migrering</h1>
+<h1>MomentumScore v6.12.4 – snabb dagsuppdatering</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -124,6 +124,13 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 <div class="grid">
 <div><label>Ticker</label><input id="ticker"></div>
 <div><label>Bolag</label><input id="company"></div>
+<div><label>Börs</label><select id="market">
+<option value="SE">Sverige – Stockholm (.ST)</option>
+<option value="DK">Danmark – Köpenhamn (.CO)</option>
+<option value="NO">Norge – Oslo (.OL)</option>
+<option value="FI">Finland – Helsingfors (.HE)</option>
+<option value="IS">Island – Reykjavik (.IC)</option>
+</select></div>
 <div><label>Yahoo-symbol (valfri korrigering)</label><input id="yahooSymbol" placeholder="Exempel: SAND.ST"></div>
 <div><label>Aktiekurs</label><input id="price" inputmode="decimal"></div>
 
@@ -267,7 +274,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v6.12.1 – samtliga regler</h2>
+<h2>MomentumScore v6.12.4 – samtliga regler</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -316,7 +323,7 @@ Under 1,0 = 5 p · 1,0–2,0 = 4 p · över 2,0 till 3,0 = 2 p · över 3,0 = 0 
   <div id="databaseHealth" class="note" style="margin-top:10px">Ingen kontroll har körts.</div>
 </div>
 <p class="note"><b>Uppdateras:</b> aktiekurs, MA200-nivå, avstånd till MA200, MA200-trend 1 vecka, 1 månad och 3 månader samt RSI 14. Trenderna räknas från verkliga dagliga stängningskurser. P/E och rapportdata ändras inte. Kurs, Kurs/MA200, RSI 14 och totalpoäng sparas i historiken vid varje lyckad uppdatering. Innan varje massuppdatering skapas dessutom en lokal säkerhetskopia. Versionsmigrering lägger bara till saknade fält och bevarar befintliga listor, och uppdateringen avbryts automatiskt om någon äldre historik skulle saknas. Automatisk uppdatering sker endast när sidan är öppen eller öppnas – en lokal HTML-fil kan inte arbeta i bakgrunden när den är stängd.</p>
-<p class="note">Yahoo-symbolen skapas automatiskt från tickern, exempelvis SAND → SAND.ST och BIOG B → BIOG-B.ST. Yahoo hämtar hela tillgängliga kurshistoriken. Appen lagrar de senaste 400 handelsdagarna och räknar själv MA200 och MA200-trenderna. Om Yahoos sista dagscandle är null används meta.regularMarketPrice som den senaste avslutade handelsdagens kurs och läggs till i samma serie. Om ett bolag inte kan hämtas visas det i statusrutan och övriga bolag fortsätter uppdateras.</p>
+<p class="note">Sverige är standard. Välj Danmark, Norge, Finland eller Island när du matar in ett nordiskt bolag. Yahoo-symbolen får då rätt suffix automatiskt, exempelvis NOVO B → NOVO-B.CO, EQNR → EQNR.OL och NOKIA → NOKIA.HE. När ett bolag saknar minst 263 handelsdagar hämtar Yahoo två års grundhistorik. Därefter begär appen ett mycket litet femdagarsfönster men sparar bara den senaste tillgängliga kursen och slår ihop den med den lokala historiken. Appen lagrar de senaste 400 handelsdagarna och räknar själv MA200 och MA200-trenderna. Om Yahoos sista dagscandle är null används meta.regularMarketPrice som den senaste avslutade handelsdagens kurs och läggs till i samma serie. Om ett bolag inte kan hämtas visas det i statusrutan och övriga bolag fortsätter uppdateras.</p>
 </div>
 </section>
 
@@ -335,7 +342,7 @@ Under 1,0 = 5 p · 1,0–2,0 = 4 p · över 2,0 till 3,0 = 2 p · över 3,0 = 0 
 </div></div>
 
 <script>
-const ids=['companyType','ticker','company','yahooSymbol','price','ma200','ma1w','ma1m','ma3m','rev1','rev2','rev3','rev4','rev3y','ekYoy','ek3y','eps1','eps2','eps3','eps4','eps3y','pe','pe3','pe5','roe','debt','fcf'];
+const ids=['companyType','ticker','company','market','yahooSymbol','price','ma200','ma1w','ma1m','ma3m','rev1','rev2','rev3','rev4','rev3y','ekYoy','ek3y','eps1','eps2','eps3','eps4','eps3y','pe','pe3','pe5','roe','debt','fcf'];
 const numericIds=['price','ma200','ma1w','ma1m','ma3m','rev1','rev2','rev3','rev4','rev3y','ekYoy','ek3y','eps1','eps2','eps3','eps4','eps3y','pe','pe3','pe5','roe','debt','fcf'], storageKey='momentumScore_v4_rows', backupKey='momentumScore_v4_rows_backup_before_update', oldKeys=['momentumScore_v3_rows','momentumRows'];
 const settingsKey='momentumScore_market_settings', dbVersionKey='momentumScore_db_version', appDbVersion=12;
 let editing=null,detailIndex=null,rows=loadAndMigrate();
@@ -406,7 +413,7 @@ function calc(r){
   return{trend,revCount:rc,revMomentum,revMedian,revHistory,rev,epsCount:ec,epsMomentum,epsMedian,epsHistory,eps,peScore,roe,debt,fcf,total,qualified,rating,warning:fail.join(' · '),failReasons:fail}
 }
 function snapshot(r,kind){const raw={};ids.forEach(k=>raw[k]=r[k]??'');return{savedAt:nowISO(),kind,raw,score:calc(r)}}
-function normalizeRow(r){const n={...r};n.companyType=n.companyType==='investment'?'investment':'regular';if(n.ma1&&!n.ma1m)n.ma1m=n.ma1;if(n.ma3&&!n.ma3m)n.ma3m=n.ma3;if(!('ma1w'in n))n.ma1w='';if(!('price'in n))n.price='';n.yahooSymbol=n.yahooSymbol||inferYahooSymbol(n.ticker||'');if(!('rev3y'in n))n.rev3y='';if(!('ekYoy'in n))n.ekYoy='';if(!('ek3y'in n))n.ek3y='';if(!('eps3y'in n))n.eps3y='';n.createdAt=n.createdAt||nowISO();n.updatedAt=n.updatedAt||n.createdAt;n.history=Array.isArray(n.history)?n.history:[snapshot(n,'Importerad tidigare version')];n.transactions=Array.isArray(n.transactions)?n.transactions:[];n.marketHistory=Array.isArray(n.marketHistory)?n.marketHistory:[];n.priceHistory=Array.isArray(n.priceHistory)?n.priceHistory:[];if(!('ma200Level'in n))n.ma200Level='';if(!('technicalSource'in n))n.technicalSource='Manuell';if(!('rsi14'in n))n.rsi14='';return n}
+function normalizeRow(r){const n={...r};n.companyType=n.companyType==='investment'?'investment':'regular';n.market=['SE','DK','NO','FI','IS'].includes(n.market)?n.market:'SE';if(n.ma1&&!n.ma1m)n.ma1m=n.ma1;if(n.ma3&&!n.ma3m)n.ma3m=n.ma3;if(!('ma1w'in n))n.ma1w='';if(!('price'in n))n.price='';n.market=['SE','DK','NO','FI','IS'].includes(n.market)?n.market:'SE';n.yahooSymbol=n.yahooSymbol||inferYahooSymbol(n.ticker||'',n.market);if(!('rev3y'in n))n.rev3y='';if(!('ekYoy'in n))n.ekYoy='';if(!('ek3y'in n))n.ek3y='';if(!('eps3y'in n))n.eps3y='';n.createdAt=n.createdAt||nowISO();n.updatedAt=n.updatedAt||n.createdAt;n.history=Array.isArray(n.history)?n.history:[snapshot(n,'Importerad tidigare version')];n.transactions=Array.isArray(n.transactions)?n.transactions:[];n.marketHistory=Array.isArray(n.marketHistory)?n.marketHistory:[];n.priceHistory=Array.isArray(n.priceHistory)?n.priceHistory:[];if(!('ma200Level'in n))n.ma200Level='';if(!('technicalSource'in n))n.technicalSource='Manuell';if(!('rsi14'in n))n.rsi14='';return n}
 
 function mergePriceHistory(existing,incoming){
   const map=new Map();
@@ -425,7 +432,7 @@ function migrateDatabase(inputRows){
     n.marketHistory=Array.isArray(n.marketHistory)?n.marketHistory:[];
     n.history=Array.isArray(n.history)?n.history:[];
     n.transactions=Array.isArray(n.transactions)?n.transactions:[];
-    n.yahooSymbol=n.yahooSymbol||inferYahooSymbol(n.ticker||'');
+    n.yahooSymbol=n.yahooSymbol||inferYahooSymbol(n.ticker||'',n.market);
     if(!('marketUpdatedAt' in n))n.marketUpdatedAt='';
     if(!('fundamentalUpdatedAt' in n))n.fundamentalUpdatedAt=n.updatedAt||n.createdAt||'';
     if(!('ma200Level' in n))n.ma200Level='';
@@ -607,20 +614,29 @@ function historyPointAtOrBefore(hist,daysAgo){
   }
   return best;
 }
+function pricePointTradingDaysBack(priceHistory,offset){
+  const h=(Array.isArray(priceHistory)?priceHistory:[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  const i=h.length-1-offset;
+  return i>=0?h[i]:null;
+}
 function developmentMetrics(r){
   const hist=developmentHistory(r);
   const first=hist[0],last=hist[hist.length-1];
   const currentScore=calc(r).total;
   const currentPrice=num(r.price);
   const currentMa=num(r.ma200);
+  const daily=(Array.isArray(r.priceHistory)?r.priceHistory:[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  const day1=pricePointTradingDaysBack(daily,1);
+  const day5=pricePointTradingDaysBack(daily,5);
+  const day21=pricePointTradingDaysBack(daily,21);
   const prev1=historyPointAtOrBefore(hist,1);
   const prev7=historyPointAtOrBefore(hist,7);
   const prev30=historyPointAtOrBefore(hist,30);
   return{
     hist,first,last,currentScore,currentPrice,currentMa,
-    price1:prev1?changePct(num(prev1.price),currentPrice):NaN,
-    price7:prev7?changePct(num(prev7.price),currentPrice):NaN,
-    price30:prev30?changePct(num(prev30.price),currentPrice):NaN,
+    price1:day1?changePct(num(day1.close),currentPrice):(prev1?changePct(num(prev1.price),currentPrice):NaN),
+    price7:day5?changePct(num(day5.close),currentPrice):(prev7?changePct(num(prev7.price),currentPrice):NaN),
+    price30:day21?changePct(num(day21.close),currentPrice):(prev30?changePct(num(prev30.price),currentPrice):NaN),
     priceAll:first?changePct(num(first.price),currentPrice):NaN,
     maAll:first?currentMa-num(first.ma200):NaN,
     scoreAll:first?currentScore-num(first.score):NaN,
@@ -629,7 +645,8 @@ function developmentMetrics(r){
     rsi7:prev7?num(r.rsi14)-num(prev7.rsi14):NaN,
     rsi30:prev30?num(r.rsi14)-num(prev30.rsi14):NaN,
     rsiAll:first?num(r.rsi14)-num(first.rsi14):NaN,
-    points:hist.length
+    points:hist.length,
+    priceDays:daily.length
   };
 }
 function renderDevelopment(){
@@ -759,7 +776,7 @@ function deduplicateRows(input){
 }
 function save(){
   const r=formRow();
-  r.yahooSymbol=r.yahooSymbol||inferYahooSymbol(r.ticker);
+  r.yahooSymbol=r.yahooSymbol||inferYahooSymbol(r.ticker,r.market);
   if(!r.ticker&&!r.company)return alert('Fyll i ticker eller bolag.');
   const duplicate=duplicateIndex(r,editing);
   if(duplicate>=0){
@@ -806,11 +823,12 @@ function openDetail(i){detailIndex=i;const r=rows[i],c=calc(r),h=holdings(r),g=g
 function saveTx(){const r=rows[detailIndex],t={type:document.getElementById('txType').value,date:document.getElementById('txDate').value||todayISO(),qty:document.getElementById('txQty').value,price:document.getElementById('txPrice').value,fee:document.getElementById('txFee').value,dividend:document.getElementById('txDividend').value,reasons:[...document.querySelectorAll('.reasonBox:checked')].map(x=>x.value),scoreAtTransaction:calc(r),savedAt:nowISO()};r.transactions=[...(r.transactions||[]),t];r.updatedAt=nowISO();persist();render();openDetail(detailIndex)}
 function pePreview(){const r=rows[detailIndex],op=num(r.price),ope=num(r.pe),np=num(document.getElementById('newPrice').value),npe=op>0&&Number.isFinite(ope)&&Number.isFinite(np)?ope*np/op:NaN;document.getElementById('newPe').value=Number.isFinite(npe)?npe.toFixed(2):''}
 function savePe(){const r=rows[detailIndex],np=num(document.getElementById('newPrice').value),npe=num(document.getElementById('newPe').value);if(!Number.isFinite(np)||!Number.isFinite(npe))return alert('Fyll i giltig kurs');const u={...r,price:String(np),pe:String(npe),updatedAt:nowISO(),fundamentalUpdatedAt:nowISO()};u.history=[...(r.history||[]),snapshot(u,'Kursjusterad P/E')];rows[detailIndex]=u;persist();render();openDetail(detailIndex)}
-function inferYahooSymbol(ticker){
+function inferYahooSymbol(ticker,market='SE'){
   const t=String(ticker||'').trim().toUpperCase();
   if(!t)return '';
   if(t.includes('.'))return t;
-  return t.replace(/\s+/g,'-')+'.ST';
+  const suffix={SE:'.ST',DK:'.CO',NO:'.OL',FI:'.HE',IS:'.IC'}[market]||'.ST';
+  return t.replace(/\s+/g,'-')+suffix;
 }
 function loadMarketSettings(){
   const defaults={source:'yahoo',interval:'manual',auto:'off',lastUpdate:''};
@@ -869,27 +887,59 @@ function maTrendPct(closes,offset){
   const current=movingAverageAtOffset(closes,200,0),past=movingAverageAtOffset(closes,200,offset);
   return Number.isFinite(current)&&Number.isFinite(past)&&past!==0?(current/past-1)*100:NaN;
 }
-async function fetchYahooHistory(symbol){
-  const url='https://momentumscore-yahoo.e-latth.workers.dev/?symbol='+encodeURIComponent(symbol)+'&range=max';
-  const response=await fetch(url,{cache:'no-store'});
+function mergeDailyPrices(existing,incoming){
+  const map=new Map();
+  for(const p of [...(Array.isArray(existing)?existing:[]),...(Array.isArray(incoming)?incoming:[])]){
+    const date=String(p?.date||'').slice(0,10),close=num(p?.close);
+    if(date&&Number.isFinite(close))map.set(date,{date,close:Number(close.toFixed(4))});
+  }
+  return [...map.values()].sort((a,b)=>a.date.localeCompare(b.date)).slice(-400);
+}
+function technicalFromPriceHistory(history){
+  const closes=(history||[]).map(p=>num(p.close)).filter(Number.isFinite);
+  if(closes.length<263)throw new Error('För få handelsdagar för MA200-trend');
+  const latest=closes[closes.length-1],ma200Level=movingAverageAtOffset(closes,200,0);
+  return{
+    price:latest,ma200Level,ma200:pctChange(latest,ma200Level),
+    ma1w:maTrendPct(closes,5),ma1m:maTrendPct(closes,21),ma3m:maTrendPct(closes,63),
+    rsi14:calculateRSI(closes,14)
+  };
+}
+async function fetchYahooHistory(symbol,existingHistory=[]){
+  const hasEnough=Array.isArray(existingHistory)&&existingHistory.length>=263;
+  const range=hasEnough?'5d':'2y';
+  const url='https://momentumscore-yahoo.e-latth.workers.dev/?symbol='+encodeURIComponent(symbol)+'&range='+range;
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),18000);
+  let response;
+  try{
+    response=await fetch(url,{cache:'no-store',signal:controller.signal});
+  }catch(e){
+    if(e?.name==='AbortError')throw new Error('Tidsgränsen 18 sekunder överskreds');
+    throw e;
+  }finally{
+    clearTimeout(timeout);
+  }
   if(!response.ok)throw new Error('HTTP '+response.status);
   const data=await response.json();
   const result=data?.chart?.result?.[0];
   if(!result)throw new Error(data?.chart?.error?.description||'Ingen kursdata');
   const timestamps=result.timestamp||[],rawClose=result.indicators?.quote?.[0]?.close||[];
-  const valid=[];
-  for(let i=0;i<rawClose.length;i++)if(Number.isFinite(rawClose[i]))valid.push({time:timestamps[i]||0,close:rawClose[i]});
-  if(valid.length<263)throw new Error('För få handelsdagar för MA200-trend');
+  let incoming=[];
+  for(let i=0;i<rawClose.length;i++){
+    if(Number.isFinite(rawClose[i])&&timestamps[i]){
+      incoming.push({date:new Date(timestamps[i]*1000).toISOString().slice(0,10),close:rawClose[i]});
+    }
+  }
   const metaPrice=Number(result.meta?.regularMarketPrice),metaTime=Number(result.meta?.regularMarketTime)||0;
-  const lastValid=valid[valid.length-1];
-  if(Number.isFinite(metaPrice)&&metaTime>lastValid.time+6*3600)valid.push({time:metaTime,close:metaPrice});
-  const closes=valid.map(x=>x.close),latest=closes[closes.length-1],ma200Level=movingAverageAtOffset(closes,200,0);
-  const priceHistory=valid.slice(-400).map(x=>({date:new Date(x.time*1000).toISOString().slice(0,10),close:Number(x.close.toFixed(4))}));
-  return{
-    price:latest,ma200Level,ma200:pctChange(latest,ma200Level),
-    ma1w:maTrendPct(closes,5),ma1m:maTrendPct(closes,21),ma3m:maTrendPct(closes,63),
-    rsi14:calculateRSI(closes,14),priceHistory
-  };
+  if(Number.isFinite(metaPrice)&&metaTime){
+    incoming.push({date:new Date(metaTime*1000).toISOString().slice(0,10),close:metaPrice});
+  }
+  incoming=mergeDailyPrices([],incoming);
+  if(hasEnough&&incoming.length)incoming=[incoming[incoming.length-1]];
+  const priceHistory=mergeDailyPrices(existingHistory,incoming);
+  const technical=technicalFromPriceHistory(priceHistory);
+  return{...technical,priceHistory,fetchMode:hasEnough?'Endast senaste kurs':'Två års grundhistorik'};
 }
 function cloneJson(value){return JSON.parse(JSON.stringify(value))}
 function preserveStoredArrays(original,updated){
@@ -920,30 +970,30 @@ function validateNoDataLoss(before,after){
 
 async function updateAllPrices(silent=false){
   const btn=document.getElementById('updatePrices'),status=document.getElementById('marketStatus');
-  btn.disabled=true;status.textContent='Uppdaterar 0 av '+rows.length+' bolag…';
+  btn.disabled=true;status.textContent='Förbereder uppdatering av '+rows.length+' bolag…';await new Promise(resolve=>setTimeout(resolve,50));
   const beforeAll=cloneJson(rows);
   savePreUpdateBackup();
   let ok=0,failed=[];
   try{
     for(let i=0;i<rows.length;i++){
-      const r=rows[i],symbol=(r.yahooSymbol||inferYahooSymbol(r.ticker)).trim();
+      const r=rows[i],symbol=(r.yahooSymbol||inferYahooSymbol(r.ticker,r.market)).trim();
       status.textContent='Uppdaterar '+(i+1)+' av '+rows.length+': '+(r.company||r.ticker||symbol);
       if(!symbol){failed.push((r.company||r.ticker||'Okänt')+': Yahoo-symbol saknas');continue}
       try{
-        const q=await fetchYahooHistory(symbol);
+        const q=await fetchYahooHistory(symbol,r.priceHistory||[]);
         const savedAt=nowISO();
         const updatedBase={
           ...r,yahooSymbol:symbol,price:q.price.toFixed(2),ma200Level:q.ma200Level.toFixed(4),
           ma200:q.ma200.toFixed(2),ma1w:q.ma1w.toFixed(2),ma1m:q.ma1m.toFixed(2),ma3m:q.ma3m.toFixed(2),
           rsi14:Number.isFinite(q.rsi14)?q.rsi14.toFixed(2):r.rsi14,
-          priceHistory:q.priceHistory,technicalSource:'Yahoo Finance (egen beräkning)',technicalSourceDate:savedAt,
+          priceHistory:q.priceHistory,technicalSource:'Yahoo Finance – '+q.fetchMode,technicalSourceDate:savedAt,
           marketUpdatedAt:savedAt,updatedAt:r.updatedAt||savedAt
         };
         const scoreAfter=calc(updatedBase);
         const marketPoint={savedAt,price:updatedBase.price,ma200Level:updatedBase.ma200Level,ma200:updatedBase.ma200,
           ma1w:updatedBase.ma1w,ma1m:updatedBase.ma1m,ma3m:updatedBase.ma3m,rsi14:updatedBase.rsi14,score:scoreAfter.total};
         const safe=preserveStoredArrays(r,updatedBase);safe.marketHistory.push(marketPoint);rows[i]=safe;
-        ok++;
+        ok++;persist();
       }catch(e){failed.push((r.company||r.ticker||symbol)+': '+e.message)}
     }
     validateNoDataLoss(beforeAll,rows);
@@ -952,7 +1002,7 @@ async function updateAllPrices(silent=false){
     const settings=loadMarketSettings();
     if(ok>0){settings.lastUpdate=nowISO();localStorage.setItem(settingsKey,JSON.stringify(settings))}
     renderMarketSettings();
-    status.innerHTML='<b>'+ok+' bolag uppdaterades.</b>'+(failed.length?'<br>Misslyckades: '+failed.join(' · '):'');
+    status.innerHTML='<b>'+ok+' bolag uppdaterades.</b><br>Bolag med minst 263 sparade handelsdagar hämtade endast den senaste tillgängliga kursen. Övriga hämtade två års grundhistorik.'+(failed.length?'<br>Misslyckades: '+failed.join(' · '):'');
     if(!silent&&failed.length===rows.length)alert('Ingen kurs kunde hämtas. Kontrollera internetanslutning och Yahoo-symboler.');
   }catch(e){
     rows=beforeAll;
@@ -972,7 +1022,10 @@ function maybeAutoUpdate(){
 
 document.querySelectorAll('.type-choice').forEach(b=>b.onclick=()=>setCompanyType(b.dataset.companyType));
 setCompanyType(document.getElementById('companyType').value||'regular');
-document.querySelectorAll('.tab[data-tab]').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));ids.forEach(k=>document.getElementById(k).addEventListener('input',renderPreview));document.getElementById('ticker').addEventListener('input',()=>{document.getElementById('yahooSymbol').value=inferYahooSymbol(document.getElementById('ticker').value)});document.getElementById('save').onclick=save;document.getElementById('clearForm').onclick=clearForm;document.getElementById('newQuarter').onclick=quarter;document.getElementById('searchAll').oninput=render;document.getElementById('ownershipFilter').onchange=render;document.getElementById('sortField').onchange=render;document.getElementById('topFilter').onchange=renderTop;document.getElementById('developmentSearch').oninput=renderDevelopment;
+document.querySelectorAll('.tab[data-tab]').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));ids.forEach(k=>document.getElementById(k).addEventListener('input',renderPreview));
+function refreshAutoYahooSymbol(){document.getElementById('yahooSymbol').value=inferYahooSymbol(document.getElementById('ticker').value,document.getElementById('market').value)}
+document.getElementById('ticker').addEventListener('input',refreshAutoYahooSymbol);
+document.getElementById('market').addEventListener('change',refreshAutoYahooSymbol);document.getElementById('save').onclick=save;document.getElementById('clearForm').onclick=clearForm;document.getElementById('newQuarter').onclick=quarter;document.getElementById('searchAll').oninput=render;document.getElementById('ownershipFilter').onchange=render;document.getElementById('sortField').onchange=render;document.getElementById('topFilter').onchange=renderTop;document.getElementById('developmentSearch').oninput=renderDevelopment;
 document.getElementById('dashboardSearch').oninput=renderDashboard;
 document.getElementById('dashboardFilter').onchange=renderDashboard;
 document.getElementById('dashboardSort').onchange=renderDashboard;
