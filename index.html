@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v7.5</title>
+<title>MomentumScore v7.6</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -97,7 +97,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v7.5 – stabil import</h1>
+<h1>MomentumScore v7.6 – komplett modelljämförelse</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -115,6 +115,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
   <div class="card">
     <div class="searchbar">
       <div><label>Sök bolag</label><input id="dashboardSearch" type="search" autocomplete="off" placeholder="Bolagsnamn eller ticker..."></div>
+      <div><label>Modell</label><select id="dashboardModel"><option value="blue">🔵 Blå</option><option value="white">⚪ Vit</option><option value="both">Båda</option></select></div>
       <div><label>Visa</label><select id="dashboardFilter"><option value="all">Alla</option><option value="qualified">Kvalificerade</option><option value="owned">Ägs nu</option><option value="strong">80+ poäng</option></select></div>
       <div><label>Börs</label><select id="dashboardMarket"><option value="all">Alla nordiska</option><option value="SE">Stockholm</option><option value="DK">Köpenhamn</option><option value="NO">Oslo</option><option value="FI">Helsingfors</option><option value="IS">Reykjavik</option></select></div>
       <div><label>Sortering</label><select id="dashboardSort"><option value="score">Poäng</option><option value="scoreChange">Poängförändring</option><option value="ma200">Kurs/MA200</option><option value="rsi">RSI</option><option value="company">Bolag</option></select></div>
@@ -210,13 +211,14 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="top" class="panel">
-<div class="card">
-<label>Visa</label>
+<div class="card"><div class="searchbar">
+<div><label>Modell</label><select id="topModel"><option value="blue">🔵 Blå</option><option value="white">⚪ Vit</option><option value="both">Båda</option></select></div>
+<div><label>Visa</label>
 <select id="topFilter">
 <option value="qualified">Endast kvalificerade</option>
 <option value="all">Alla bolag</option><option value="owned">Ägs nu</option>
-</select>
-</div>
+</select></div>
+</div></div>
 <div id="summary" class="summary"></div>
 <div class="card tablewrap"><table id="topTable"></table></div>
 </section>
@@ -237,6 +239,10 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
           <option value="owned">Ägs nu</option>
           <option value="notOwned">Ägs inte</option>
         </select>
+      </div>
+      <div>
+        <label>Modell</label>
+        <select id="developmentModel"><option value="blue">🔵 Blå</option><option value="white">⚪ Vit</option><option value="both">Båda</option></select>
       </div>
       <div>
         <label>Grundregler</label>
@@ -296,7 +302,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v7.5 – regler för Blå och Vit</h2>
+<h2>MomentumScore v7.6 – regler för Blå och Vit</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -339,6 +345,7 @@ Dessutom krävs minst 263 handelsdagar för både aktien och jämförelseindex.<
 <div class="rowcard"><b>Vit – Fundamental utveckling, max 25 p</b><br>Omsättning/EK max 10 p och vinst max 15 p. Samma objektiva kvartalsmomentum och historikberäkning som i Blå används, men skalas till den nya viktningen.</div>
 <div class="rowcard"><b>Vit – Kvalitet, max 10 p</b><br>ROE, nettoskuld/EBITDA och FCF-marginal använder samma trösklar som Blå och skalas gemensamt från 15 till 10 poäng.</div>
 <div class="rowcard"><b>Vit – Värdering, max 10 p</b><br>Mot vart och ett av 3- och 5-årssnitten: vid eller under snittet 5 p · högst 10 % över 4 p · högst 20 % över 2 p · högst 35 % över 1 p · mer än 35 % över 0 p.</div>
+<div class="rowcard"><b>Vit – poäng innan indexdata finns</b><br>Vit består av 75 poäng från aktie- och rapportdata samt 25 poäng relativ styrka. Om jämförelseindex saknas visas därför en preliminär poäng med en asterisk, exempelvis 67*. Bolaget markeras då som Underlag saknas – inte Ej kvalificerat. Efter kursuppdatering eller import av en komplett v7.6-säkerhetskopia räknas hela 100-poängsmodellen.</div>
 <div class="rowcard"><b>Vit – Bedömning</b><br>90–100 = Mycket stark · 80–89 = Stark · 70–79 = Bevakning · under 70 = Avstå. Ett brutet grundkrav ger alltid Ej kvalificerad.</div>
 <div class="rowcard"><b>Import och versionskompatibilitet</b><br>Säkerhetskopior från version 6 och 7 kan importeras. Importförlopp och eventuella fel visas direkt bredvid filväljaren. Saknade fält för börs, Yahoo-symbol, teknisk historik och modeller fylls i automatiskt utan att äldre history, marketHistory eller transaktioner tas bort.</div>
 
@@ -498,15 +505,16 @@ function whiteCalc(r){
   const fundamentalOk=investment?Number.isFinite(v.ekYoy)&&v.ekYoy>0&&Number.isFinite(b.epsMedian)&&b.epsMedian>0:Number.isFinite(b.revMedian)&&b.revMedian>0&&Number.isFinite(b.epsMedian)&&b.epsMedian>0;
   const technicalOk=Number.isFinite(v.ma200)&&v.ma200>0&&Number.isFinite(v.ma3m)&&v.ma3m>0;
   const relativeOk=Number.isFinite(rs6)&&rs6>0;
+  const dataReady=stockHistory.length>=263&&indexHistory.length>=263;
   const fail=[];
   if(stockHistory.length<263)fail.push('För få aktiedagar');
-  if(indexHistory.length<263)fail.push('Jämförelseindex saknas');
+  if(indexHistory.length<263)fail.push('Jämförelseindex saknas – kör kursuppdatering eller importera en komplett v7.6-säkerhetskopia');
   if(!fundamentalOk)fail.push('Grundkrav 1: positiv aktuell omsättnings-/EK- och vinstutveckling saknas');
   if(!technicalOk)fail.push('Grundkrav 2: kurs över MA200 och positiv MA200 3m krävs');
-  if(!relativeOk)fail.push('Grundkrav 3: aktien slår inte index på 6 månader');
-  const qualified=stockHistory.length>=263&&indexHistory.length>=263&&fundamentalOk&&technicalOk&&relativeOk;
-  const rating=!qualified?'Ej kvalificerad':total>=90?'Mycket stark':total>=80?'Stark':total>=70?'Bevakning':'Avstå';
-  return{trend,relative,fundamental,quality,valuation,total,qualified,rating,rs3,rs6,rs12,stock3,stock6,stock12,index3,index6,index12,ma50,ma200Level,golden,warning:fail.join(' · '),failReasons:fail}
+  if(dataReady&&!relativeOk)fail.push('Grundkrav 3: aktien slår inte index på 6 månader');
+  const qualified=dataReady&&fundamentalOk&&technicalOk&&relativeOk;
+  const rating=!dataReady?'Underlag saknas':!qualified?'Ej kvalificerad':total>=90?'Mycket stark':total>=80?'Stark':total>=70?'Bevakning':'Avstå';
+  return{trend,relative,fundamental,quality,valuation,total,qualified,dataReady,rating,rs3,rs6,rs12,stock3,stock6,stock12,index3,index6,index12,ma50,ma200Level,golden,warning:fail.join(' · '),failReasons:fail}
 }
 function latestModelDelta(r,key,currentValue){
   const hist=(Array.isArray(r.marketHistory)?r.marketHistory:[]).slice().sort((a,b)=>new Date(a.savedAt)-new Date(b.savedAt));
@@ -646,69 +654,51 @@ function listRows(){
 
 
 function renderDashboard(){
-  const table=document.getElementById('dashboardTable');
-  if(!table)return;
-
+  const table=document.getElementById('dashboardTable');if(!table)return;
   const q=(document.getElementById('dashboardSearch')?.value||'').toLowerCase();
+  const model=document.getElementById('dashboardModel')?.value||'blue';
   const filter=document.getElementById('dashboardFilter')?.value||'all';
   const market=document.getElementById('dashboardMarket')?.value||'all';
   const sort=document.getElementById('dashboardSort')?.value||'score';
 
-  let list=rows.map((r,i)=>({
-    r,i,c:calc(r),w:whiteCalc(r),h:holdings(r),m:developmentMetrics(r)
-  }));
-
+  let list=rows.map((r,i)=>({r,i,s:selectedModelValues(r,model),h:holdings(r),m:developmentMetrics(r)}));
   if(q)list=list.filter(x=>`${x.r.ticker||''} ${x.r.company||''}`.toLowerCase().includes(q));
   if(market!=='all')list=list.filter(x=>(x.r.market||'SE')===market);
-  if(filter==='qualified')list=list.filter(x=>x.c.qualified);
+  if(filter==='qualified')list=list.filter(x=>x.s.qualified);
   if(filter==='owned')list=list.filter(x=>x.h.shares>0);
-  if(filter==='strong')list=list.filter(x=>x.c.qualified&&x.c.total>=80);
+  if(filter==='strong')list=list.filter(x=>x.s.qualified&&x.s.score>=80);
 
   list.sort((a,b)=>{
     if(sort==='company')return (a.r.company||'').localeCompare(b.r.company||'','sv');
-    if(sort==='ma200')return (num(b.r.ma200)||-Infinity)-(num(a.r.ma200)||-Infinity);
-    if(sort==='rsi')return (num(b.r.rsi14)||-Infinity)-(num(a.r.rsi14)||-Infinity);
-    if(sort==='scoreChange')return (Number.isFinite(b.m.scoreAll)?b.m.scoreAll:-Infinity)-(Number.isFinite(a.m.scoreAll)?a.m.scoreAll:-Infinity);
-    return b.c.total-a.c.total;
+    if(sort==='ma200')return num(b.r.ma200)-num(a.r.ma200);
+    if(sort==='rsi')return num(b.r.rsi14)-num(a.r.rsi14);
+    if(sort==='scoreChange')return modelHistoryDelta(b.r,model,b.s.score)-modelHistoryDelta(a.r,model,a.s.score);
+    return b.s.score-a.s.score
   });
 
-  const settings=loadMarketSettings();
-  const summary=document.getElementById('dashboardSummary');
-  if(summary){
-    summary.innerHTML=[
-      ['Blå kvalificerade',rows.filter(r=>calc(r).qualified).length],
-      ['Vit kvalificerade',rows.filter(r=>whiteCalc(r).qualified).length],
-      ['Kvalificerade i båda',rows.filter(r=>calc(r).qualified&&whiteCalc(r).qualified).length],
-      ['Ägs nu',rows.filter(r=>holdings(r).shares>0).length],
-      ['Senaste marknadsdata',settings.lastUpdate?new Date(settings.lastUpdate).toLocaleString('sv-SE'):'Aldrig']
-    ].map(([a,b])=>`<div class="metric"><small>${a}</small><b style="${typeof b==='string'?'font-size:15px':''}">${b}</b></div>`).join('');
-  }
+  const settings=loadMarketSettings(),modelName=model==='blue'?'Blå':model==='white'?'Vit':'Båda';
+  document.getElementById('dashboardSummary').innerHTML=[
+    ['Blå kvalificerade',rows.filter(r=>calc(r).qualified).length],
+    ['Vit kvalificerade',rows.filter(r=>whiteCalc(r).qualified).length],
+    ['Båda',rows.filter(r=>calc(r).qualified&&whiteCalc(r).qualified).length],
+    [modelName+' underlag saknas',rows.filter(r=>!selectedModelValues(r,model).dataReady).length],
+    ['Senaste marknadsdata',settings.lastUpdate?new Date(settings.lastUpdate).toLocaleString('sv-SE'):'Aldrig']
+  ].map(([a,b])=>`<div class="metric"><small>${a}</small><b style="${typeof b==='string'?'font-size:15px':''}">${b}</b></div>`).join('');
 
   table.innerHTML='<tr>'+[
-    'Ticker','Bolag','Börs','🔵 Blå','⚪ Vit','Kurs','Kurs/MA200',
-    'MA200 3m','RSI','Ägs','Blå status','Vit status','Marknadsdata'
+    'Ticker','Bolag','Börs','🔵 Blå','⚪ Vit','Vald modell','Status','Kurs','Kurs/MA200','MA200 3m','RSI','Ägs','Marknadsdata'
   ].map(x=>`<th>${x}</th>`).join('')+'</tr>'+
   list.map(x=>`<tr class="dashboard-row" data-i="${x.i}">
-    <td>${x.r.ticker||''}</td>
-    <td>${x.r.company||''}</td>
-    <td>${marketLabel(x.r.market||'SE')}</td>
-    <td class="model-blue"><b>${x.c.total}</b></td>
-    <td class="model-white"><b>${x.w.total}</b></td>
-    <td>${fmt(num(x.r.price))}</td>
-    <td>${signed(num(x.r.ma200),' %')}</td>
+    <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td><td>${marketLabel(x.r.market||'SE')}</td>
+    <td class="model-blue"><b>${x.s.b.total}</b></td><td class="model-white"><b>${x.s.w.total}${x.s.w.dataReady?'':'*'}</b></td>
+    <td><b>${x.s.score}</b></td><td title="${x.s.warning||''}">${x.s.rating}</td>
+    <td>${fmt(num(x.r.price))}</td><td>${signed(num(x.r.ma200),' %')}</td>
     <td class="${classByValue(num(x.r.ma3m))}">${signed(num(x.r.ma3m),' %')}</td>
-    <td class="${rsiClass(num(x.r.rsi14))}">${fmt(num(x.r.rsi14))}</td>
-    <td>${x.h.shares>0?'Ja':'Nej'}</td>
-    <td>${x.c.qualified?x.c.rating:'Ej kval.'}</td>
-    <td title="${x.w.warning||''}">${x.w.qualified?x.w.rating:'Ej kval.'}</td>
+    <td class="${rsiClass(num(x.r.rsi14))}">${fmt(num(x.r.rsi14))}</td><td>${x.h.shares>0?'Ja':'Nej'}</td>
     <td class="${ageClass(x.r.marketUpdatedAt||x.r.technicalSourceDate)}">${ageText(x.r.marketUpdatedAt||x.r.technicalSourceDate)}</td>
   </tr>`).join('');
-
-  document.querySelectorAll('.dashboard-row').forEach(tr=>{
-    tr.onclick=()=>openDetail(Number(tr.dataset.i));
-  });
+  document.querySelectorAll('.dashboard-row').forEach(tr=>tr.onclick=()=>openDetail(Number(tr.dataset.i)));
 }
-
 function render(){
   const l=listRows(),table=document.getElementById('scoreTable');
   if(scoreView==='simple'){
@@ -738,10 +728,39 @@ function render(){
   document.querySelectorAll('.score-row').forEach(row=>row.onclick=()=>openDetail(Number(row.dataset.i)));
   renderTop();renderDevelopment();renderDashboard()
 }
-function renderTop(){let l=rows.map((r,i)=>({r,c:calc(r),h:holdings(r),i})).sort((a,b)=>b.c.total-a.c.total),m=document.getElementById('topFilter').value;if(m==='qualified')l=l.filter(x=>x.c.qualified);if(m==='owned')l=l.filter(x=>x.h.shares>0);document.getElementById('summary').innerHTML=[['Sparade',rows.length],['Kvalificerade',rows.filter(r=>calc(r).qualified).length],['Ägs nu',rows.filter(r=>holdings(r).shares>0).length],['80+ poäng',rows.filter(r=>calc(r).qualified&&calc(r).total>=80).length]].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');document.getElementById('topTable').innerHTML='<tr><th>Rank</th><th>Ticker</th><th>Bolag</th><th>Ägs</th><th>Grundregler</th><th>Orsak om ej godkänd</th><th>Total</th><th>Bedömning</th><th>Uppdaterad</th></tr>'+l.slice(0,20).map((x,i)=>`<tr><td>${i+1}</td><td>${x.r.ticker||''}</td><td>${x.r.company||''}</td><td>${x.h.shares>0?'Ja':'Nej'}</td><td>${x.c.qualified?'Godkänd':'Ej kvalificerad'}</td><td style="white-space:normal;min-width:260px;text-align:left">${x.c.warning||'–'}</td><td class="${cls(x.c.total)}"><b>${x.c.total}</b></td><td>${x.c.rating}</td><td>${dateFmt(x.r.updatedAt)}</td></tr>`).join('')}
+function selectedModelValues(r,model){
+  const b=calc(r),w=whiteCalc(r);
+  if(model==='white')return{score:w.total,qualified:w.qualified,dataReady:w.dataReady,rating:w.rating,warning:w.warning,b,w};
+  if(model==='both')return{score:Math.round((b.total+w.total)/2),qualified:b.qualified&&w.qualified,dataReady:w.dataReady,rating:b.qualified&&w.qualified?'Godkänd i båda':(!w.dataReady?'Vit underlag saknas':'Ej godkänd i båda'),warning:[b.warning,w.warning].filter(Boolean).join(' · '),b,w};
+  return{score:b.total,qualified:b.qualified,dataReady:true,rating:b.rating,warning:b.warning,b,w}
+}
+function renderTop(){
+  const model=document.getElementById('topModel')?.value||'blue';
+  const mode=document.getElementById('topFilter')?.value||'qualified';
+  let l=rows.map((r,i)=>({r,i,h:holdings(r),s:selectedModelValues(r,model)}));
+  if(mode==='qualified')l=l.filter(x=>x.s.qualified);
+  if(mode==='owned')l=l.filter(x=>x.h.shares>0);
+  l.sort((a,b)=>b.s.score-a.s.score);
 
+  const modelName=model==='blue'?'Blå':model==='white'?'Vit':'Båda';
+  document.getElementById('summary').innerHTML=[
+    ['Sparade',rows.length],
+    [modelName+' kvalificerade',rows.filter(r=>selectedModelValues(r,model).qualified).length],
+    ['Ägs nu',rows.filter(r=>holdings(r).shares>0).length],
+    [modelName+' 80+',rows.filter(r=>{const s=selectedModelValues(r,model);return s.qualified&&s.score>=80}).length]
+  ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
 
-
+  document.getElementById('topTable').innerHTML='<tr><th>Rank</th><th>Ticker</th><th>Bolag</th><th>🔵 Blå</th><th>⚪ Vit</th><th>Vald modell</th><th>Status</th><th>Orsak/underlag</th><th>Ägs</th></tr>'+
+    l.slice(0,20).map((x,i)=>`<tr class="top-row" data-i="${x.i}">
+      <td>${i+1}</td><td>${x.r.ticker||''}</td><td>${x.r.company||''}</td>
+      <td class="model-blue"><b>${x.s.b.total}</b></td>
+      <td class="model-white"><b>${x.s.w.total}${x.s.w.dataReady?'':'*'}</b></td>
+      <td><b>${x.s.score}</b></td><td>${x.s.rating}</td>
+      <td style="white-space:normal;min-width:300px;text-align:left">${x.s.warning||'–'}</td>
+      <td>${x.h.shares>0?'Ja':'Nej'}</td>
+    </tr>`).join('');
+  document.querySelectorAll('.top-row').forEach(tr=>tr.onclick=()=>openDetail(Number(tr.dataset.i)));
+}
 function developmentHistory(r){
   const source=(Array.isArray(r?.marketHistory)?r.marketHistory:[]).slice().sort((a,b)=>new Date(a.savedAt)-new Date(b.savedAt));
   const byDay=new Map();
@@ -825,69 +844,64 @@ function developmentMetrics(r){
     priceDays:daily.length
   };
 }
+function modelHistoryDelta(r,model,current){
+  const key=model==='white'?'whiteScore':'blueScore';
+  const hist=(Array.isArray(r.marketHistory)?r.marketHistory:[]).slice().sort((a,b)=>new Date(a.savedAt)-new Date(b.savedAt));
+  for(let i=hist.length-1;i>=0;i--){const v=num(hist[i][key]);if(Number.isFinite(v))return current-v}
+  if(model==='blue')return developmentMetrics(r).scoreAll;
+  return NaN
+}
 function renderDevelopment(){
-  const table=document.getElementById('developmentOverviewTable');
-  if(!table)return;
+  const table=document.getElementById('developmentOverviewTable');if(!table)return;
   const q=(document.getElementById('developmentSearch')?.value||'').toLowerCase();
   const own=document.getElementById('developmentOwnership')?.value||'all';
+  const model=document.getElementById('developmentModel')?.value||'blue';
   const qual=document.getElementById('developmentQualification')?.value||'all';
   const histMin=Number(document.getElementById('developmentHistoryFilter')?.value||0);
   const sort=document.getElementById('developmentSort')?.value||'scoreChange';
 
-  let list=rows.map((r,i)=>({r,i,c:calc(r),h:holdings(r),m:developmentMetrics(r)}));
+  let list=rows.map((r,i)=>{
+    const s=selectedModelValues(r,model),m=developmentMetrics(r);
+    return{r,i,s,h:holdings(r),m,scoreDelta:modelHistoryDelta(r,model,s.score)}
+  });
   if(q)list=list.filter(x=>`${x.r.ticker||''} ${x.r.company||''}`.toLowerCase().includes(q));
   if(own==='owned')list=list.filter(x=>x.h.shares>0);
   if(own==='notOwned')list=list.filter(x=>x.h.shares<=0);
-  if(qual==='qualified')list=list.filter(x=>x.c.qualified);
-  if(qual==='unqualified')list=list.filter(x=>!x.c.qualified);
+  if(qual==='qualified')list=list.filter(x=>x.s.qualified);
+  if(qual==='unqualified')list=list.filter(x=>!x.s.qualified&&x.s.dataReady);
   if(histMin)list=list.filter(x=>x.m.points>=histMin);
 
   list.sort((a,b)=>{
     if(sort==='company')return (a.r.company||'').localeCompare(b.r.company||'','sv');
     if(sort==='updated')return new Date(b.r.updatedAt)-new Date(a.r.updatedAt);
-    const map={scoreChange:'scoreAll',priceChange:'priceAll',maChange:'maAll',rsi:'currentRsi',rsiChange:'rsiAll',score:'currentScore'};
-    const key=map[sort]||'scoreAll';
-    const av=Number.isFinite(a.m[key])?a.m[key]:-Infinity;
-    const bv=Number.isFinite(b.m[key])?b.m[key]:-Infinity;
-    return bv-av;
+    if(sort==='score')return b.s.score-a.s.score;
+    if(sort==='scoreChange')return (Number.isFinite(b.scoreDelta)?b.scoreDelta:-Infinity)-(Number.isFinite(a.scoreDelta)?a.scoreDelta:-Infinity);
+    const map={priceChange:'priceAll',maChange:'maAll',rsi:'currentRsi',rsiChange:'rsiAll'};
+    const key=map[sort]||'priceAll';
+    return (Number.isFinite(b.m[key])?b.m[key]:-Infinity)-(Number.isFinite(a.m[key])?a.m[key]:-Infinity)
   });
 
-  const withHistory=list.filter(x=>x.m.points>0).length;
-  const scoreUp=list.filter(x=>x.m.scoreAll>0).length;
-  const priceUp=list.filter(x=>x.m.priceAll>0).length;
   document.getElementById('developmentOverviewSummary').innerHTML=[
-    ['Visade bolag',list.length],
-    ['Med historik',withHistory],
-    ['Poäng upp',scoreUp],
-    ['Kurs upp',priceUp]
+    ['Visade bolag',list.length],['Kvalificerade',list.filter(x=>x.s.qualified).length],
+    ['Poäng upp',list.filter(x=>x.scoreDelta>0).length],['Kurs upp',list.filter(x=>x.m.priceAll>0).length]
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
 
   table.innerHTML='<tr>'+[
-    'Ticker','Bolag','Kurs','1 dag','1 vecka','1 månad','Sedan start',
-    'Kurs/MA200','MA200-utv.','RSI 14','RSI-status','RSI-förändring','Poäng','Poängförändring','Datapunkter','Senast uppdaterad'
+    'Ticker','Bolag','🔵 Blå','⚪ Vit','Vald modell','Status','Δ vald poäng','Kurs','1 dag','1 vecka','1 månad','Sedan start',
+    'Kurs/MA200','MA200-utv.','RSI 14','Datapunkter','Senast uppdaterad'
   ].map(x=>`<th>${x}</th>`).join('')+'</tr>'+
   list.map(x=>`<tr class="development-row" data-i="${x.i}" style="cursor:pointer">
-    <td>${x.r.ticker||''}</td>
-    <td>${x.r.company||''}</td>
-    <td>${fmt(x.m.currentPrice)}</td>
-    <td class="${classByValue(x.m.price1)}">${signed(x.m.price1,' %')}</td>
-    <td class="${classByValue(x.m.price7)}">${signed(x.m.price7,' %')}</td>
-    <td class="${classByValue(x.m.price30)}">${signed(x.m.price30,' %')}</td>
+    <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td>
+    <td class="model-blue"><b>${x.s.b.total}</b></td><td class="model-white"><b>${x.s.w.total}${x.s.w.dataReady?'':'*'}</b></td>
+    <td><b>${x.s.score}</b></td><td title="${x.s.warning||''}">${x.s.rating}</td>
+    <td class="${classByValue(x.scoreDelta)}"><b>${signed(x.scoreDelta,' p')}</b></td>
+    <td>${fmt(x.m.currentPrice)}</td><td class="${classByValue(x.m.price1)}">${signed(x.m.price1,' %')}</td>
+    <td class="${classByValue(x.m.price7)}">${signed(x.m.price7,' %')}</td><td class="${classByValue(x.m.price30)}">${signed(x.m.price30,' %')}</td>
     <td class="${classByValue(x.m.priceAll)}"><b>${signed(x.m.priceAll,' %')}</b></td>
-    <td>${fmt(x.m.currentMa)} %</td>
-    <td class="${classByValue(x.m.maAll)}">${signed(x.m.maAll,' p.e.')}</td>
-    <td class="${rsiClass(x.m.currentRsi)}"><b>${fmt(x.m.currentRsi)}</b></td>
-    <td class="${rsiClass(x.m.currentRsi)}">${rsiStatus(x.m.currentRsi)}</td>
-    <td class="${classByValue(x.m.rsiAll)}">${signed(x.m.rsiAll,' p')}</td>
-    <td class="${cls(x.m.currentScore)}"><b>${x.m.currentScore}</b></td>
-    <td class="${classByValue(x.m.scoreAll)}"><b>${signed(x.m.scoreAll,' p')}</b></td>
-    <td>${x.m.points}</td>
-    <td>${dateFmt(x.r.updatedAt)}</td>
+    <td>${fmt(x.m.currentMa)} %</td><td class="${classByValue(x.m.maAll)}">${signed(x.m.maAll,' p.e.')}</td>
+    <td class="${rsiClass(x.m.currentRsi)}"><b>${fmt(x.m.currentRsi)}</b></td><td>${x.m.points}</td><td>${dateFmt(x.r.updatedAt)}</td>
   </tr>`).join('');
-
-  document.querySelectorAll('.development-row').forEach(row=>{
-    row.onclick=()=>openDevelopmentDetail(Number(row.dataset.i));
-  });
+  document.querySelectorAll('.development-row').forEach(row=>row.onclick=()=>openDevelopmentDetail(Number(row.dataset.i)));
 }
 function openDevelopmentDetail(i){
   const r=rows[i];
@@ -1263,19 +1277,25 @@ function refreshAutoYahooSymbol(){document.getElementById('yahooSymbol').value=i
 document.getElementById('ticker').addEventListener('input',refreshAutoYahooSymbol);
 document.getElementById('market').addEventListener('change',refreshAutoYahooSymbol);document.getElementById('save').onclick=save;document.getElementById('clearForm').onclick=clearForm;document.getElementById('newQuarter').onclick=quarter;document.getElementById('searchAll').oninput=render;document.getElementById('ownershipFilter').onchange=render;document.getElementById('modelFilter').onchange=render;document.getElementById('scoreMarketFilter').onchange=render;document.getElementById('sortField').onchange=render;
 document.getElementById('simpleScoreView').onclick=()=>{scoreView='simple';document.getElementById('simpleScoreView').classList.add('active');document.getElementById('analysisScoreView').classList.remove('active');render()};
-document.getElementById('analysisScoreView').onclick=()=>{scoreView='analysis';document.getElementById('analysisScoreView').classList.add('active');document.getElementById('simpleScoreView').classList.remove('active');render()};document.getElementById('topFilter').onchange=renderTop;document.getElementById('developmentSearch').oninput=renderDevelopment;
-document.getElementById('dashboardSearch').oninput=renderDashboard;
+document.getElementById('analysisScoreView').onclick=()=>{scoreView='analysis';document.getElementById('analysisScoreView').classList.add('active');document.getElementById('simpleScoreView').classList.remove('active');render()};document.getElementById('topFilter').onchange=renderTop;document.getElementById('topModel').onchange=renderTop;document.getElementById('developmentSearch').oninput=renderDevelopment;
+document.getElementById('dashboardSearch').oninput=renderDashboard;document.getElementById('dashboardModel').onchange=renderDashboard;
 document.getElementById('dashboardFilter').onchange=renderDashboard;document.getElementById('dashboardMarket').onchange=renderDashboard;
 document.getElementById('dashboardSort').onchange=renderDashboard;
 document.getElementById('input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&e.target.tagName==='INPUT'){e.preventDefault();save()}});
 
-document.getElementById('developmentOwnership').onchange=renderDevelopment;
+document.getElementById('developmentOwnership').onchange=renderDevelopment;document.getElementById('developmentModel').onchange=renderDevelopment;
 document.getElementById('developmentQualification').onchange=renderDevelopment;
 document.getElementById('developmentHistoryFilter').onchange=renderDevelopment;
 document.getElementById('developmentSort').onchange=renderDevelopment;
 document.getElementById('closeDevelopmentDetail').onclick=()=>document.getElementById('developmentDetail').classList.add('hidden');document.getElementById('closeDetail').onclick=()=>document.getElementById('detailModal').classList.remove('open');document.getElementById('detailEdit').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex)};document.getElementById('detailNewQuarter').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex);quarter()};document.getElementById('detailPeUpdate').onclick=()=>document.getElementById('peTool').classList.remove('hidden');document.getElementById('cancelPeUpdate').onclick=()=>document.getElementById('peTool').classList.add('hidden');document.getElementById('newPrice').oninput=pePreview;document.getElementById('savePeUpdate').onclick=savePe;document.getElementById('txType').onchange=reasonUI;document.getElementById('saveTx').onclick=saveTx;document.getElementById('wipe').onclick=()=>{if(confirm('Radera allt?')){rows=[];persist();render()}};async function exportBackup(){
   const suggested='Levande-aktier-'+new Date().toISOString().slice(0,10)+'.json';
-  const content=JSON.stringify(rows,null,2);
+  const content=JSON.stringify({
+    format:'MomentumScoreBackup',
+    version:'7.6',
+    exportedAt:new Date().toISOString(),
+    rows,
+    benchmarkHistories
+  },null,2);
   try{
     if('showSaveFilePicker' in window){
       const handle=await window.showSaveFilePicker({
@@ -1352,6 +1372,8 @@ async function importSelectedFile(file){
   setImportStatus('Tolkar JSON-filen…');
   await new Promise(resolve=>setTimeout(resolve,0));
   const parsed=JSON.parse(text);
+  const importedBenchmarks=parsed&&typeof parsed==='object'&&!Array.isArray(parsed)&&parsed.benchmarkHistories&&typeof parsed.benchmarkHistories==='object'
+    ?parsed.benchmarkHistories:{};
   const imported=extractImportedRows(parsed);
   if(!imported.length)throw new Error('Filen innehåller inga bolag');
 
@@ -1367,6 +1389,7 @@ async function importSelectedFile(file){
     localStorage.removeItem(benchmarkKey);
     localStorage.removeItem(storageKey);
     localStorage.setItem(storageKey,compact);
+    if(Object.keys(importedBenchmarks).length)localStorage.setItem(benchmarkKey,JSON.stringify(importedBenchmarks));
     localStorage.setItem(dbVersionKey,String(appDbVersion));
   }catch(e){
     try{
@@ -1382,7 +1405,7 @@ async function importSelectedFile(file){
   }
 
   rows=result.clean;
-  benchmarkHistories={};
+  benchmarkHistories=importedBenchmarks;
   const uiErrors=[];
   for(const [name,fn] of [
     ['Poäng/översikt',()=>render()],
@@ -1392,7 +1415,7 @@ async function importSelectedFile(file){
   ]){
     try{fn()}catch(e){uiErrors.push(name+': '+e.message);console.error(name,e)}
   }
-  setImportStatus(`Import klar: ${rows.length} bolag. ${result.skipped.length?result.skipped.length+' dubbletter hoppades över. ':''}${uiErrors.length?'Visningsvarning: '+uiErrors.join(' · '):''}`,uiErrors.length>0);
+  setImportStatus(`Import klar: ${rows.length} bolag. ${Object.keys(benchmarkHistories).length?'Jämförelseindex följde med.':'Jämförelseindex saknas – kör kursuppdatering för full Vit poäng.'} ${result.skipped.length?result.skipped.length+' dubbletter hoppades över. ':''}${uiErrors.length?'Visningsvarning: '+uiErrors.join(' · '):''}`,uiErrors.length>0);
   toast(`Import klar: ${rows.length} bolag`);
 }
 document.getElementById('chooseImportFile').onclick=()=>document.getElementById('importFile').click();
