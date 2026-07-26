@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v7.0</title>
+<title>MomentumScore v7.1</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -97,7 +97,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v7.0 – nordisk aktieöversikt</h1>
+<h1>MomentumScore v7.1 – säkra kvartalsuppdateringar</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -177,7 +177,8 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 <button class="secondary hidden" id="newQuarter">Nytt kvartal</button>
 <button class="secondary" id="clearForm">Rensa formulär</button>
 </div>
-<p class="note">Vanligt bolag använder omsättning Q1–Q4. Investmentbolag använder EK Tillväxt Y-Y och EK Tillväxt 3 år. Vinst Q1–Q4 används för båda. Nytt kvartal blir permanent först när du sparar.</p>
+<div id="quarterModeNotice" class="note hidden"><b>Nytt kvartal:</b> aktiekurs, Kurs/MA200 och MA200-trender hämtas från sparad marknadsdata och kan inte skrivas över här.</div>
+<p class="note">Vanligt bolag använder omsättning Q1–Q4. Investmentbolag använder EK Tillväxt Y-Y och EK Tillväxt 3 år. Vinst Q1–Q4 används för båda. Vid Nytt kvartal bevaras aktiekurs, Kurs/MA200 och MA200-trender automatiskt från den egna marknadsdatan. Ändringen blir permanent först när du sparar.</p>
 </div>
 </section>
 
@@ -292,7 +293,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v7.0 – samtliga regler</h2>
+<h2>MomentumScore v7.1 – samtliga regler</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -363,7 +364,7 @@ Under 1,0 = 5 p · 1,0–2,0 = 4 p · över 2,0 till 3,0 = 2 p · över 3,0 = 0 
 const ids=['companyType','ticker','company','market','yahooSymbol','price','ma200','ma1w','ma1m','ma3m','rev1','rev2','rev3','rev4','rev3y','ekYoy','ek3y','eps1','eps2','eps3','eps4','eps3y','pe','pe3','pe5','roe','debt','fcf'];
 const numericIds=['price','ma200','ma1w','ma1m','ma3m','rev1','rev2','rev3','rev4','rev3y','ekYoy','ek3y','eps1','eps2','eps3','eps4','eps3y','pe','pe3','pe5','roe','debt','fcf'], storageKey='momentumScore_v4_rows', backupKey='momentumScore_v4_rows_backup_before_update', oldKeys=['momentumScore_v3_rows','momentumRows'];
 const settingsKey='momentumScore_market_settings', dbVersionKey='momentumScore_db_version', appDbVersion=12;
-let editing=null,detailIndex=null,scoreView='simple',rows=loadAndMigrate();
+let editing=null,detailIndex=null,scoreView='simple',quarterMode=false,rows=loadAndMigrate();
 const nowISO=()=>new Date().toISOString(),todayISO=()=>new Date().toISOString().slice(0,10);
 function num(v){if(typeof v==='number')return v;const s=String(v??'').trim().replace(/\s/g,'').replace(',','.');return s===''?NaN:Number(s)}
 function dateFmt(v){return v?new Date(v).toLocaleDateString('sv-SE'):'–'} function fmt(v){return Number.isFinite(v)?v.toLocaleString('sv-SE',{maximumFractionDigits:2}):'–'}
@@ -820,6 +821,19 @@ function deduplicateRows(input){
   });
   return{clean,skipped};
 }
+
+const technicalFormIds=['price','ma200','ma1w','ma1m','ma3m'];
+function setQuarterMode(active){
+  quarterMode=Boolean(active);
+  technicalFormIds.forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    el.readOnly=quarterMode;
+    el.title=quarterMode?'Värdet kommer från sparad marknadsdata':'';
+  });
+  document.getElementById('quarterModeNotice')?.classList.toggle('hidden',!quarterMode);
+}
+
 function save(){
   const r=formRow();
   r.yahooSymbol=r.yahooSymbol||inferYahooSymbol(r.ticker,r.market);
@@ -831,19 +845,32 @@ function save(){
   }
   const n=nowISO();
   if(editing===null){
-    r.createdAt=n;r.updatedAt=n;r.transactions=[];r.history=[snapshot(r,'Första inläggning')];rows.push(r)
+    r.createdAt=n;r.updatedAt=n;r.fundamentalUpdatedAt=n;r.transactions=[];r.history=[snapshot(r,'Första inläggning')];rows.push(r)
   }else{
-    const old=rows[editing],u={...old,...r,createdAt:old.createdAt,updatedAt:n};
-    u.history=[...(old.history||[]),snapshot(u,'Uppdatering')];
+    const old=rows[editing];
+    if(quarterMode){
+      technicalFormIds.forEach(id=>r[id]=old[id]??'');
+      r.ma200Level=old.ma200Level??'';
+      r.rsi14=old.rsi14??'';
+      r.priceHistory=old.priceHistory||[];
+      r.marketHistory=old.marketHistory||[];
+      r.marketUpdatedAt=old.marketUpdatedAt||'';
+      r.technicalSource=old.technicalSource||'';
+      r.technicalSourceDate=old.technicalSourceDate||'';
+    }
+    const u={...old,...r,createdAt:old.createdAt,updatedAt:n,fundamentalUpdatedAt:n};
+    u.history=[...(old.history||[]),snapshot(u,quarterMode?'Nytt kvartal':'Uppdatering')];
     rows[editing]=u
   }
-  persist();clearForm();render();toast('Sparat')
+  persist();clearForm();render();toast(quarterMode?'Nytt kvartal sparat':'Sparat')
 }
-function clearForm(){ids.forEach(k=>document.getElementById(k).value='');document.getElementById('market').value='SE';setCompanyType('regular');editing=null;document.getElementById('newQuarter').classList.add('hidden');renderPreview()}
-function editRow(i){editing=i;const r=rows[i];ids.forEach(k=>document.getElementById(k).value=r[k]??'');setCompanyType(r.companyType);document.getElementById('newQuarter').classList.remove('hidden');renderPreview();showTab('input');scrollTo(0,0)}
+function clearForm(){ids.forEach(k=>document.getElementById(k).value='');document.getElementById('market').value='SE';setCompanyType('regular');setQuarterMode(false);editing=null;document.getElementById('newQuarter').classList.add('hidden');renderPreview()}
+function editRow(i){editing=i;setQuarterMode(false);const r=rows[i];ids.forEach(k=>document.getElementById(k).value=r[k]??'');setCompanyType(r.companyType);document.getElementById('newQuarter').classList.remove('hidden');renderPreview();showTab('input');scrollTo(0,0)}
 function quarter(){
   if(editing===null)return;
   const g=id=>document.getElementById(id);
+  const saved=rows[editing];
+  setQuarterMode(true);
   const investment=g('companyType').value==='investment';
   if(investment){
     g('ekYoy').value='';
@@ -859,8 +886,10 @@ function quarter(){
   g('eps2').value=g('eps3').value;
   g('eps3').value=g('eps4').value;
   g('eps4').value='';
-  ['price','ma200','ma1w','ma1m','ma3m','eps3y','pe','pe3','pe5','roe','debt','fcf'].forEach(id=>g(id).value='');
-  renderPreview()
+  ['eps3y','pe','pe3','pe5','roe','debt','fcf'].forEach(id=>g(id).value='');
+  technicalFormIds.forEach(id=>g(id).value=saved[id]??'');
+  renderPreview();
+  toast('Teknisk data behålls från marknadshistoriken')
 }
 function showTab(id){document.querySelectorAll('.panel,.tab').forEach(e=>e.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelector(`.tab[data-tab="${id}"]`).classList.add('active')}
 const reasons={'Köp':['Hög totalpoäng','Kvalificerad av filter','Stark vinsttrend','Stark omsättningstrend','Stark teknisk trend','Rimlig värdering'],'Öka':['Förbättrad totalpoäng','Förbättrad vinsttrend','Förbättrad omsättningstrend','Starkare teknisk trend','Lägre värdering','Undervikt i portföljen','Återköp efter minskning'],'Minska':['För stor del av portföljen','Försämrad totalpoäng','Försämrad vinsttrend','Försämrad omsättningstrend','Svagare teknisk trend','P/E närmar sig filter','Bättre kandidat finns','Riskminskning','Delvis vinsthemtagning'],'Sälj':['Under MA200','Negativ 3-månaderstrend','P/E-filter brutet','För låg totalpoäng','Bättre kandidat finns','Riskminskning'],'Utdelning':['Ordinarie utdelning','Extrautdelning']};
