@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v19.0</title>
+<title>MomentumScore v19.1</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -185,13 +185,18 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .portfolio-model-white{border-left:4px solid #f3f3f3}
 .portfolio-model-average{border-left:4px solid #9d7cff}
 .portfolio-card{padding:12px;border:1px solid var(--line);border-radius:12px;margin:8px 0;background:rgba(255,255,255,.025)}
+.development-mode-switch{display:flex;gap:8px;flex-wrap:wrap}
+.development-mode-switch button.active{box-shadow:0 0 0 2px rgba(157,124,255,.55) inset}
+.portfolio-row{cursor:pointer}
+.portfolio-row:hover{background:rgba(255,255,255,.045)}
+
 
 
 </style>
 </head>
 <body>
 <header>
-<h1>MomentumScore v19.0 – veckoportföljer</h1>
+<h1>MomentumScore v19.1 – portföljläge i Utveckling</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -323,76 +328,127 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 
 <section id="development" class="panel">
   <div class="card">
-    <div class="searchbar">
-      <div>
-        <label>Sök bolag</label>
-        <input id="developmentSearch" type="search" autocomplete="off" placeholder="Bolagsnamn eller ticker...">
-      </div>
-      <div>
-        <label>Ägande</label>
-        <select id="developmentOwnership">
-          <option value="all">Alla</option>
-          <option value="owned">Ägs nu</option>
-          <option value="notOwned">Ägs inte</option>
-        </select>
-      </div>
-      <div>
-        <label>Grundregler</label>
-        <select id="developmentQualification">
-          <option value="all">Alla</option>
-          <option value="qualified">Kvalificerade</option>
-          <option value="unqualified">Ej kvalificerade</option>
-        </select>
-      </div>
-      <div>
-        <label>Historik</label>
-        <select id="developmentHistoryFilter">
-          <option value="all">Alla</option>
-          <option value="2">Minst 2 datapunkter</option>
-          <option value="7">Minst 7 datapunkter</option>
-          <option value="30">Minst 30 datapunkter</option>
-        </select>
-      </div>
-      <div>
-        <label>Sortering</label>
-        <select id="developmentSort">
-          <option value="scoreAverage" selected>🟣 Snittpoäng</option>
-          <option value="scoreBlue">🔵 Blå poäng</option>
-          <option value="scoreWhite">⚪ Vit poäng</option>
-          <option value="deltaBlue">Δ 🔵 Blå poäng</option>
-          <option value="priceChange">Kursutveckling</option>
-          <option value="maChange">Kurs/MA200-utveckling</option>
-          <option value="rsi">RSI</option>
-          <option value="rsiChange">RSI-förändring</option>
-          <option value="company">Bolag</option>
-          <option value="updated">Senast uppdaterad</option>
-        </select>
-      </div>
+    <div class="development-mode-switch">
+      <button type="button" id="developmentStocksMode" class="secondary active">Aktier</button>
+      <button type="button" id="developmentPortfoliosMode" class="secondary">Veckoportföljer</button>
     </div>
   </div>
 
-  <div id="developmentOverviewSummary" class="summary"></div>
+  <div id="developmentStocksView">
+    <div class="card">
+      <div class="searchbar">
+        <div>
+          <label>Sök bolag</label>
+          <input id="developmentSearch" type="search" autocomplete="off" placeholder="Bolagsnamn eller ticker...">
+        </div>
+        <div>
+          <label>Ägande</label>
+          <select id="developmentOwnership">
+            <option value="all">Alla</option>
+            <option value="owned">Ägs nu</option>
+            <option value="notOwned">Ägs inte</option>
+          </select>
+        </div>
+        <div>
+          <label>Grundregler</label>
+          <select id="developmentQualification">
+            <option value="all">Alla</option>
+            <option value="qualified">Kvalificerade</option>
+            <option value="unqualified">Ej kvalificerade</option>
+          </select>
+        </div>
+        <div>
+          <label>Historik</label>
+          <select id="developmentHistoryFilter">
+            <option value="all">Alla</option>
+            <option value="2">Minst 2 datapunkter</option>
+            <option value="7">Minst 7 datapunkter</option>
+            <option value="30">Minst 30 datapunkter</option>
+          </select>
+        </div>
+        <div>
+          <label>Sortering</label>
+          <select id="developmentSort">
+            <option value="scoreAverage" selected>🟣 Snittpoäng</option>
+            <option value="scoreBlue">🔵 Blå poäng</option>
+            <option value="scoreWhite">⚪ Vit poäng</option>
+            <option value="deltaBlue">Δ 🔵 Blå poäng</option>
+            <option value="priceChange">Kursutveckling</option>
+            <option value="maChange">Kurs/MA200-utveckling</option>
+            <option value="rsi">RSI</option>
+            <option value="rsiChange">RSI-förändring</option>
+            <option value="company">Bolag</option>
+            <option value="updated">Senast uppdaterad</option>
+          </select>
+        </div>
+      </div>
+    </div>
 
-  <div class="card tablewrap">
-    <table id="developmentOverviewTable"></table>
+    <div id="developmentOverviewSummary" class="summary"></div>
+
+    <div class="card tablewrap">
+      <table id="developmentOverviewTable"></table>
+    </div>
+
+    <div id="developmentDetail" class="card hidden">
+      <div class="actions" style="justify-content:space-between;align-items:center">
+        <h2 id="developmentDetailTitle" style="margin:0">Utvecklingsdetaljer</h2>
+        <button class="secondary" id="closeDevelopmentDetail">Stäng</button>
+      </div>
+      <div id="developmentDetailSummary" class="summary"></div>
+      <div class="dev-grid">
+        <div class="chartbox"><h3>Kursutveckling</h3><div id="priceChart"></div></div>
+        <div class="chartbox"><h3>Kurs / MA200-utveckling</h3><div id="ma200Chart"></div></div>
+        <div class="chartbox"><h3>Poängutveckling</h3><div id="scoreChart"></div></div>
+        <div class="chartbox"><h3>RSI 14-utveckling</h3><div id="rsiChart"></div></div>
+      </div>
+      <div class="tablewrap" style="margin-top:12px"><table id="developmentTable"></table></div>
+    </div>
+
+    <p class="note">Översikten visar alla bolag samtidigt. Blå och Vit är två separata modeller. Endast Blå har poängförändring tills Vit har fått egen historik. Sortera på aktuell Blå-, Vit- eller Snittpoäng samt Blås poängförändring via menyn eller kolumnrubrikerna.</p>
   </div>
 
-  <div id="developmentDetail" class="card hidden">
-    <div class="actions" style="justify-content:space-between;align-items:center">
-      <h2 id="developmentDetailTitle" style="margin:0">Utvecklingsdetaljer</h2>
-      <button class="secondary" id="closeDevelopmentDetail">Stäng</button>
+  <div id="developmentPortfoliosView" class="hidden">
+    <div class="card">
+      <div class="searchbar">
+        <div>
+          <label>Modell</label>
+          <select id="devPortfolioModel">
+            <option value="all" selected>Alla tre</option>
+            <option value="blue">🔵 Blå</option>
+            <option value="white">⚪ Vit</option>
+            <option value="average">🟣 Snitt</option>
+          </select>
+        </div>
+        <div>
+          <label>Sortering</label>
+          <select id="devPortfolioSort">
+            <option value="week" selected>Nyaste vecka</option>
+            <option value="return">Högst portföljavkastning</option>
+            <option value="excess">Högst överavkastning</option>
+            <option value="winners">Flest vinnare</option>
+          </select>
+        </div>
+      </div>
     </div>
-    <div id="developmentDetailSummary" class="summary"></div>
-    <div class="dev-grid">
-      <div class="chartbox"><h3>Kursutveckling</h3><div id="priceChart"></div></div>
-      <div class="chartbox"><h3>Kurs / MA200-utveckling</h3><div id="ma200Chart"></div></div>
-      <div class="chartbox"><h3>Poängutveckling</h3><div id="scoreChart"></div></div>
-<div class="chartbox"><h3>RSI 14-utveckling</h3><div id="rsiChart"></div></div>
-    </div>
-    <div class="tablewrap" style="margin-top:12px"><table id="developmentTable"></table></div>
-  </div>
 
-  <p class="note">Översikten visar alla bolag samtidigt. Blå och Vit är två separata modeller. Endast Blå har poängförändring tills Vit har fått egen historik. Sortera på aktuell Blå-, Vit- eller Snittpoäng samt Blås poängförändring via menyn eller kolumnrubrikerna. Status och radfärg följer den poäng som sorteringen använder. Klicka på en rad för diagram och full historik. MA200-trenderna räknas automatiskt när minst 263 handelsdagar finns; annars ligger det manuella värdet kvar.</p>
+    <div id="devPortfolioSummary" class="summary"></div>
+
+    <div class="card tablewrap">
+      <table id="devPortfolioTable"></table>
+    </div>
+
+    <div id="devPortfolioDetail" class="card hidden">
+      <div class="actions" style="justify-content:space-between;align-items:center">
+        <h2 id="devPortfolioDetailTitle" style="margin:0">Portföljdetaljer</h2>
+        <button class="secondary" id="closeDevPortfolioDetail">Stäng</button>
+      </div>
+      <div id="devPortfolioDetailSummary" class="summary"></div>
+      <div class="tablewrap" style="margin-top:12px"><table id="devPortfolioMembersTable"></table></div>
+    </div>
+
+    <p class="note">Varje rad är en fryst Top 10-portfölj från en viss vecka. Klicka på raden för att se de tio aktiernas utveckling, bästa och sämsta innehav samt utfallet mot index.</p>
+  </div>
 </section>
 
 
@@ -1059,7 +1115,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v19.0 – regler och analys</h2>
+<h2>MomentumScore v19.1 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -1097,6 +1153,8 @@ Kursens avstånd till MA200: max 33,33 p · MA50:s avstånd till MA200: max 33,3
 <div class="rowcard"><b>Vit – platåprincip</b><br>
 Full poäng ges i faktorernas historiskt bästa intervall. Utanför intervallet faller poängen mjukt mot noll. Ett extremt högt trendvärde ger därför inte automatiskt högre poäng.</div>
 <div id="whitePlateauRules" class="plateau-grid"></div>
+<div class="rowcard"><b>Portföljläge i Utveckling</b><br>
+Utveckling kan växlas mellan Aktier och Veckoportföljer. Portföljläget visar varje sparad veckas Blå-, Vit- och Snittportfölj, avkastning mot index, antal vinnare samt bästa och sämsta innehav. En klickbar detaljvy visar samtliga tio aktier.</div>
 <div class="rowcard"><b>Veckoportföljer</b><br>
 En gång per kalendervecka sparas tre frysta och likaviktade Top 10-portföljer: Blå, Vit och Snitt. Startkurs, poäng och rank sparas för varje aktie. Portföljerna följs mot valt index, som standard OMXSPI. Veckans snapshot skapas automatiskt efter den första lyckade kursuppdateringen och ingår i säkerhetskopian.</div>
 <div class="rowcard"><b>Två modeller – inte en vald modell</b><br>
@@ -1798,6 +1856,126 @@ function modelHistoryDelta(r,model,current){
   }
   return NaN
 }
+
+let developmentMode='stocks';
+
+function setDevelopmentMode(mode){
+  developmentMode=mode==='portfolios'?'portfolios':'stocks';
+  document.getElementById('developmentStocksView')?.classList.toggle('hidden',developmentMode!=='stocks');
+  document.getElementById('developmentPortfoliosView')?.classList.toggle('hidden',developmentMode!=='portfolios');
+  document.getElementById('developmentStocksMode')?.classList.toggle('active',developmentMode==='stocks');
+  document.getElementById('developmentPortfoliosMode')?.classList.toggle('active',developmentMode==='portfolios');
+  if(developmentMode==='stocks')renderDevelopment();
+  else renderDevelopmentPortfolios()
+}
+function developmentPortfolioRows(){
+  const modelFilter=document.getElementById('devPortfolioModel')?.value||'all';
+  const sort=document.getElementById('devPortfolioSort')?.value||'week';
+  const out=[];
+  for(const snapshot of weeklyPortfolios){
+    const indexReturn=weeklyBenchmarkReturn(snapshot);
+    for(const model of ['blue','white','average']){
+      if(modelFilter!=='all'&&model!==modelFilter)continue;
+      const result=weeklyPortfolioReturn(snapshot,model);
+      const valid=result.memberReturns.filter(x=>Number.isFinite(x.returnPct));
+      const winners=valid.filter(x=>x.returnPct>0).length;
+      const best=valid.slice().sort((a,b)=>b.returnPct-a.returnPct)[0]||null;
+      const worst=valid.slice().sort((a,b)=>a.returnPct-b.returnPct)[0]||null;
+      const excess=Number.isFinite(result.value)&&Number.isFinite(indexReturn)?result.value-indexReturn:NaN;
+      out.push({snapshot,model,result,indexReturn,excess,winners,best,worst})
+    }
+  }
+  out.sort((a,b)=>{
+    if(sort==='return')return (Number.isFinite(b.result.value)?b.result.value:-Infinity)-(Number.isFinite(a.result.value)?a.result.value:-Infinity);
+    if(sort==='excess')return (Number.isFinite(b.excess)?b.excess:-Infinity)-(Number.isFinite(a.excess)?a.excess:-Infinity);
+    if(sort==='winners')return b.winners-a.winners;
+    return String(b.snapshot.savedAt).localeCompare(String(a.snapshot.savedAt))
+  });
+  return out
+}
+function portfolioModelName(model){
+  return model==='blue'?'🔵 Blå':model==='white'?'⚪ Vit':'🟣 Snitt'
+}
+function renderDevelopmentPortfolios(){
+  const table=document.getElementById('devPortfolioTable');
+  if(!table)return;
+  const data=developmentPortfolioRows();
+
+  const allRows=[];
+  for(const snapshot of weeklyPortfolios){
+    for(const model of ['blue','white','average']){
+      const result=weeklyPortfolioReturn(snapshot,model),indexReturn=weeklyBenchmarkReturn(snapshot);
+      allRows.push({
+        model,
+        ret:result.value,
+        excess:Number.isFinite(result.value)&&Number.isFinite(indexReturn)?result.value-indexReturn:NaN
+      })
+    }
+  }
+  const valid=allRows.filter(x=>Number.isFinite(x.ret));
+  const beat=allRows.filter(x=>Number.isFinite(x.excess)&&x.excess>0);
+  const best=valid.slice().sort((a,b)=>b.ret-a.ret)[0];
+
+  document.getElementById('devPortfolioSummary').innerHTML=[
+    ['Sparade veckor',weeklyPortfolios.length],
+    ['Portföljrader',data.length],
+    ['Slår index',allRows.length?`${beat.length}/${allRows.filter(x=>Number.isFinite(x.excess)).length}`:'–'],
+    ['Bästa hittills',best?`${portfolioModelName(best.model)} ${signed(best.ret,' %')}`:'–']
+  ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
+
+  table.innerHTML='<tr><th>Vecka</th><th>Modell</th><th>Start</th><th>Dagar</th><th>Portfölj</th><th>Index</th><th>Över/under</th><th>Vinnare</th><th>Bäst</th><th>Sämst</th></tr>'+
+    data.map((x,i)=>{
+      const days=Math.max(0,Math.floor((Date.now()-new Date(x.snapshot.savedAt).getTime())/86400000));
+      return `<tr class="portfolio-row" data-portfolio-index="${i}">
+        <td><b>${x.snapshot.weekKey}</b></td>
+        <td>${portfolioModelName(x.model)}</td>
+        <td>${dateFmt(x.snapshot.savedAt)}</td>
+        <td>${days}</td>
+        <td class="${portfolioReturnClass(x.result.value)}">${signed(x.result.value,' %')}</td>
+        <td class="${portfolioReturnClass(x.indexReturn)}">${signed(x.indexReturn,' %')}</td>
+        <td class="${portfolioReturnClass(x.excess)}"><b>${signed(x.excess,' p.e.')}</b></td>
+        <td>${x.winners}/${x.result.available}</td>
+        <td>${x.best?`${x.best.ticker} ${signed(x.best.returnPct,' %')}`:'–'}</td>
+        <td>${x.worst?`${x.worst.ticker} ${signed(x.worst.returnPct,' %')}`:'–'}</td>
+      </tr>`
+    }).join('');
+
+  table.querySelectorAll('.portfolio-row').forEach(row=>{
+    row.onclick=()=>openDevelopmentPortfolio(Number(row.dataset.portfolioIndex))
+  });
+}
+function openDevelopmentPortfolio(index){
+  const x=developmentPortfolioRows()[index];
+  if(!x)return;
+  const detail=document.getElementById('devPortfolioDetail');
+  detail.classList.remove('hidden');
+  document.getElementById('devPortfolioDetailTitle').textContent=`${x.snapshot.weekKey} – ${portfolioModelName(x.model)} Top 10`;
+  const medianReturns=x.result.memberReturns.map(m=>m.returnPct).filter(Number.isFinite).sort((a,b)=>a-b);
+  const median=medianReturns.length
+    ?(medianReturns.length%2?medianReturns[(medianReturns.length-1)/2]:(medianReturns[medianReturns.length/2-1]+medianReturns[medianReturns.length/2])/2)
+    :NaN;
+  document.getElementById('devPortfolioDetailSummary').innerHTML=[
+    ['Portfölj',signed(x.result.value,' %')],
+    ['Index',signed(x.indexReturn,' %')],
+    ['Över/under',signed(x.excess,' p.e.')],
+    ['Vinnare',`${x.winners}/${x.result.available}`],
+    ['Medianaktie',signed(median,' %')],
+    ['Startdatum',dateFmt(x.snapshot.savedAt)]
+  ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
+
+  document.getElementById('devPortfolioMembersTable').innerHTML=
+    '<tr><th>Rank</th><th>Ticker</th><th>Bolag</th><th>Startkurs</th><th>Nuvarande</th><th>Avkastning</th><th>Blå</th><th>Vit</th><th>Snitt</th></tr>'+
+    x.result.memberReturns.slice().sort((a,b)=>(Number.isFinite(b.returnPct)?b.returnPct:-Infinity)-(Number.isFinite(a.returnPct)?a.returnPct:-Infinity)).map(m=>`<tr>
+      <td>${m.rank}</td><td><b>${m.ticker}</b></td><td>${m.company}</td>
+      <td>${fmt(m.startPrice)}</td><td>${fmt(m.currentPrice)}</td>
+      <td class="${portfolioReturnClass(m.returnPct)}"><b>${signed(m.returnPct,' %')}</b></td>
+      <td>${modelScoreText(m.blueScore,'blue')}</td>
+      <td>${modelScoreText(m.whiteScore,'white')}</td>
+      <td>${modelScoreText(m.averageScore,'average')}</td>
+    </tr>`).join('');
+  detail.scrollIntoView({behavior:'smooth',block:'start'})
+}
+
 function developmentSortModel(sort){
   if(sort==='scoreBlue'||sort==='deltaBlue')return 'blue';
   if(sort==='scoreWhite')return 'white';
@@ -4651,7 +4829,8 @@ function renderWeeklyPortfolios(){
     ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('')
   }else document.getElementById('weeklySummary').innerHTML='';
 
-  renderWeeklyDetail()
+  renderWeeklyDetail();
+  if(developmentMode==='portfolios')renderDevelopmentPortfolios()
 }
 function renderWeeklyDetail(){
   const id=document.getElementById('weeklySnapshotSelect')?.value;
@@ -4791,7 +4970,12 @@ function refreshAutoYahooSymbol(){document.getElementById('yahooSymbol').value=i
 document.getElementById('ticker').addEventListener('input',refreshAutoYahooSymbol);
 document.getElementById('market').addEventListener('change',refreshAutoYahooSymbol);document.getElementById('save').onclick=save;document.getElementById('clearForm').onclick=clearForm;document.getElementById('newQuarter').onclick=quarter;document.getElementById('searchAll').oninput=render;document.getElementById('ownershipFilter').onchange=render;document.getElementById('modelFilter').onchange=render;document.getElementById('scoreMarketFilter').onchange=render;document.getElementById('sortField').onchange=render;
 document.getElementById('simpleScoreView').onclick=()=>{scoreView='simple';document.getElementById('simpleScoreView').classList.add('active');document.getElementById('analysisScoreView').classList.remove('active');render()};
-document.getElementById('analysisScoreView').onclick=()=>{scoreView='analysis';document.getElementById('analysisScoreView').classList.add('active');document.getElementById('simpleScoreView').classList.remove('active');render()};document.getElementById('topFilter').onchange=renderTop;document.getElementById('topModel').onchange=renderTop;document.getElementById('developmentSearch').oninput=renderDevelopment;
+document.getElementById('analysisScoreView').onclick=()=>{scoreView='analysis';document.getElementById('analysisScoreView').classList.add('active');document.getElementById('simpleScoreView').classList.remove('active');render()};document.getElementById('topFilter').onchange=renderTop;document.getElementById('topModel').onchange=renderTop;document.getElementById('developmentStocksMode').onclick=()=>setDevelopmentMode('stocks');
+document.getElementById('developmentPortfoliosMode').onclick=()=>setDevelopmentMode('portfolios');
+document.getElementById('devPortfolioModel').onchange=renderDevelopmentPortfolios;
+document.getElementById('devPortfolioSort').onchange=renderDevelopmentPortfolios;
+document.getElementById('closeDevPortfolioDetail').onclick=()=>document.getElementById('devPortfolioDetail').classList.add('hidden');
+document.getElementById('developmentSearch').oninput=renderDevelopment;
 document.getElementById('dashboardSearch').oninput=renderDashboard;document.getElementById('dashboardModel').onchange=renderDashboard;
 document.getElementById('dashboardFilter').onchange=renderDashboard;document.getElementById('dashboardMarket').onchange=renderDashboard;
 document.getElementById('dashboardSort').onchange=renderDashboard;
