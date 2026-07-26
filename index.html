@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v18.0</title>
+<title>MomentumScore v18.1</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -179,7 +179,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v18.0 – enhetlig färgkodning</h1>
+<h1>MomentumScore v18.1 – Blå Vit Snitt</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -198,7 +198,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
   <div class="card">
     <div class="searchbar">
       <div><label>Sök bolag</label><input id="dashboardSearch" type="search" autocomplete="off" placeholder="Bolagsnamn eller ticker..."></div>
-      <div><label>Modell</label><select id="dashboardModel"><option value="blue">🔵 Blå</option><option value="white">⚪ Vit</option><option value="both">Båda</option></select></div>
+      <div><label>Poäng och status</label><select id="dashboardModel"><option value="blue">🔵 Blå</option><option value="white">⚪ Vit</option><option value="average" selected>🟣 Snitt</option></select></div>
       <div><label>Visa</label><select id="dashboardFilter"><option value="all">Alla</option><option value="qualified">Kvalificerade</option><option value="owned">Ägs nu</option><option value="strong">80+ poäng</option></select></div>
       <div><label>Börs</label><select id="dashboardMarket"><option value="all">Alla nordiska</option><option value="SE">Stockholm</option><option value="DK">Köpenhamn</option><option value="NO">Oslo</option><option value="FI">Helsingfors</option><option value="IS">Reykjavik</option></select></div>
       <div><label>Sortering</label><select id="dashboardSort"><option value="score">Poäng</option><option value="scoreChange">Poängförändring</option><option value="ma200">Kurs/MA200</option><option value="rsi">RSI</option><option value="company">Bolag</option></select></div>
@@ -285,7 +285,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 <div><label>Ägande</label><select id="ownershipFilter"><option value="all">Alla</option><option value="owned">Ägs nu</option><option value="notOwned">Ägs inte</option><option value="ownedBefore">Har ägts tidigare</option><option value="neverOwned">Aldrig ägts</option></select></div>
 <div><label>Modell</label><select id="modelFilter"><option value="all">Visa alla</option><option value="blue">Kvalificerad Blå</option><option value="white">Kvalificerad Vit</option><option value="both">Kvalificerad i båda</option></select></div>
 <div><label>Börs</label><select id="scoreMarketFilter"><option value="all">Alla nordiska</option><option value="SE">Stockholm</option><option value="DK">Köpenhamn</option><option value="NO">Oslo</option><option value="FI">Helsingfors</option><option value="IS">Reykjavik</option></select></div>
-<div><label>Sortering</label><select id="sortField"><option value="blueScore">Blå poäng</option><option value="whiteScore">Vit poäng</option><option value="total">Blå poäng (äldre val)</option><option value="createdAt">Inlagd</option><option value="updatedAt">Senast uppdaterad</option><option value="ticker">Ticker</option><option value="company">Bolag</option></select></div>
+<div><label>Sortering</label><select id="sortField"><option value="averageScore" selected>Snitt (Blå + Vit) / 2</option><option value="blueScore">Blå poäng</option><option value="whiteScore">Vit poäng</option><option value="createdAt">Inlagd</option><option value="updatedAt">Senast uppdaterad</option><option value="ticker">Ticker</option><option value="company">Bolag</option></select></div>
 </div></div>
 <div class="card tablewrap"><table id="scoreTable"></table></div>
 <div class="actions">
@@ -295,7 +295,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 
 <section id="top" class="panel">
 <div class="card"><div class="searchbar">
-<div><label>Modell</label><select id="topModel"><option value="blue">🔵 Blå</option><option value="white">⚪ Vit</option><option value="both">Båda</option></select></div>
+<div><label>Sortera och visa status efter</label><select id="topModel"><option value="blue">🔵 Blå</option><option value="white">⚪ Vit</option><option value="average" selected>🟣 Snitt</option></select></div>
 <div><label>Visa</label>
 <select id="topFilter">
 <option value="qualified">Endast kvalificerade</option>
@@ -325,7 +325,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
       </div>
       <div>
         <label>Modell</label>
-        <select id="developmentModel"><option value="blue">🔵 Blå</option><option value="white">⚪ Vit</option><option value="both">Båda</option></select>
+        <select id="developmentModel"><option value="blue">🔵 Blå</option><option value="white">⚪ Vit</option><option value="average" selected>🟣 Snitt</option></select>
       </div>
       <div>
         <label>Grundregler</label>
@@ -999,7 +999,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v18.0 – regler och analys</h2>
+<h2>MomentumScore v18.1 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -1037,6 +1037,8 @@ Kursens avstånd till MA200: max 33,33 p · MA50:s avstånd till MA200: max 33,3
 <div class="rowcard"><b>Vit – platåprincip</b><br>
 Full poäng ges i faktorernas historiskt bästa intervall. Utanför intervallet faller poängen mjukt mot noll. Ett extremt högt trendvärde ger därför inte automatiskt högre poäng.</div>
 <div id="whitePlateauRules" class="plateau-grid"></div>
+<div class="rowcard"><b>Blå, Vit och Snitt</b><br>
+Alla huvudtabeller visar kolumnerna i ordningen Blå, Vit och Snitt. Snittet beräknas som (Blå + Vit) / 2 och visas med en decimal. Status och radfärg följer alltid den poäng som valts för sortering/status.</div>
 <div class="rowcard"><b>Gemensam färgkodning för Blå och Vit</b><br>
 Båda modellernas poäng använder samma nivåer och färger: 90–100 grön, 80–89 blå, 70–79 gul, 60–69 orange och under 60 röd. Blå visas som heltal och Vit med en decimal.</div>
 <div class="rowcard"><b>Vit – bedömning och färger</b><br>
@@ -1415,8 +1417,9 @@ function listRows(){
   if(model==='white')l=l.filter(x=>x.w.qualified);
   if(model==='both')l=l.filter(x=>x.c.qualified&&x.w.qualified);
   l.sort((a,b)=>{
+    if(field==='averageScore')return averageScoreFromResults(b.c,b.w)-averageScoreFromResults(a.c,a.w);
     if(field==='whiteScore')return b.w.total-a.w.total;
-    if(field==='blueScore'||field==='total')return b.c.total-a.c.total;
+    if(field==='blueScore')return b.c.total-a.c.total;
     const av=(a.r[field]||'').toString().toLowerCase(),bv=(b.r[field]||'').toString().toLowerCase();
     return av<bv?1:av>bv?-1:0
   });
@@ -1427,7 +1430,7 @@ function listRows(){
 function renderDashboard(){
   const table=document.getElementById('dashboardTable');if(!table)return;
   const q=(document.getElementById('dashboardSearch')?.value||'').toLowerCase();
-  const model=document.getElementById('dashboardModel')?.value||'blue';
+  const model=document.getElementById('dashboardModel')?.value||'average';
   const filter=document.getElementById('dashboardFilter')?.value||'all';
   const market=document.getElementById('dashboardMarket')?.value||'all';
   const sort=document.getElementById('dashboardSort')?.value||'score';
@@ -1437,31 +1440,33 @@ function renderDashboard(){
   if(market!=='all')list=list.filter(x=>(x.r.market||'SE')===market);
   if(filter==='qualified')list=list.filter(x=>x.s.qualified);
   if(filter==='owned')list=list.filter(x=>x.h.shares>0);
-  if(filter==='strong')list=list.filter(x=>x.s.qualified&&x.s.score>=80);
+  if(filter==='strong')list=list.filter(x=>x.s.dataReady&&x.s.score>=80);
 
   list.sort((a,b)=>{
     if(sort==='company')return (a.r.company||'').localeCompare(b.r.company||'','sv');
     if(sort==='ma200')return num(b.r.ma200)-num(a.r.ma200);
     if(sort==='rsi')return num(b.r.rsi14)-num(a.r.rsi14);
     if(sort==='scoreChange')return modelHistoryDelta(b.r,model,b.s.score)-modelHistoryDelta(a.r,model,a.s.score);
-    return b.s.score-a.s.score
+    return (Number.isFinite(b.s.score)?b.s.score:-Infinity)-(Number.isFinite(a.s.score)?a.s.score:-Infinity)
   });
 
-  const settings=loadMarketSettings(),modelName=model==='blue'?'Blå':model==='white'?'Vit':'Båda';
+  const settings=loadMarketSettings(),modelName=model==='blue'?'Blå':model==='white'?'Vit':'Snitt';
   document.getElementById('dashboardSummary').innerHTML=[
     ['Blå kvalificerade',rows.filter(r=>calc(r).qualified).length],
     ['Vit med underlag',rows.filter(r=>whiteCalc(r).dataReady).length],
-    ['Båda',rows.filter(r=>calc(r).qualified&&whiteCalc(r).dataReady).length],
+    ['Snitt med underlag',rows.filter(r=>selectedModelValues(r,'average').dataReady).length],
     [modelName+' underlag saknas',rows.filter(r=>!selectedModelValues(r,model).dataReady).length],
     ['Senaste marknadsdata',settings.lastUpdate?new Date(settings.lastUpdate).toLocaleString('sv-SE'):'Aldrig']
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b style="${typeof b==='string'?'font-size:15px':''}">${b}</b></div>`).join('');
 
   table.innerHTML='<tr>'+[
-    'Ticker','Bolag','Börs','🔵 Blå','⚪ Vit','Status','Kurs','Kurs/MA200','MA200 3m','RSI','Ägs','Marknadsdata'
+    'Ticker','Bolag','Börs','🔵 Blå','⚪ Vit','🟣 Snitt','Status','Kurs','Kurs/MA200','MA200 3m','RSI','Ägs','Marknadsdata'
   ].map(x=>`<th>${x}</th>`).join('')+'</tr>'+
   list.map(x=>`<tr class="dashboard-row ${scoreRowClass(x.s.score,x.s.dataReady)}" data-i="${x.i}">
     <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td><td>${marketLabel(x.r.market||'SE')}</td>
-    <td class="model-blue">${blueScoreHtml(x.s.b.total,true)}</td><td class="model-white">${whiteScoreHtml(x.s.w.total,x.s.w.dataReady,true)}</td>
+    <td class="model-blue">${blueScoreHtml(x.s.b.total,true)}</td>
+    <td class="model-white">${whiteScoreHtml(x.s.w.total,x.s.w.dataReady,true)}</td>
+    <td>${modelScoreHtml(x.s.average,'average',x.s.w.dataReady,true)}</td>
     <td class="${scoreStatusClass(x.s.score,x.s.dataReady)}">${x.s.rating}</td>
     <td>${fmt(num(x.r.price))}</td><td>${signed(num(x.r.ma200),' %')}</td>
     <td class="${classByValue(num(x.r.ma3m))}">${signed(num(x.r.ma3m),' %')}</td>
@@ -1472,33 +1477,53 @@ function renderDashboard(){
 }
 function render(){
   const l=listRows(),table=document.getElementById('scoreTable');
+  const sortField=document.getElementById('sortField')?.value||'averageScore';
+  const statusModel=scoreModelFromSortField(sortField);
+
   if(scoreView==='simple'){
     table.className='compact-table';
-    table.innerHTML='<tr>'+['Ticker','Bolag','Börs','🔵 Blå','Δ Blå','Blå status','⚪ Vit','Δ Vit','Vit status','Kurs','Kurs/MA200','MA200 3m','RSI','Ägs','Marknadsdata','Rapportdata'].map(x=>`<th>${x}</th>`).join('')+'</tr>'+
-      l.map(x=>{const db=latestModelDelta(x.r,'blueScore',x.c.total),dw=latestModelDelta(x.r,'whiteScore',x.w.total);return `<tr class="score-row ${scoreRowClass(x.w.total,x.w.dataReady)}" data-i="${x.i}">
-        <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td><td>${marketLabel(x.r.market||'SE')}</td>
-        <td class="model-blue">${blueScoreHtml(x.c.total,true)}</td><td class="${classByValue(db)}">${signed(db,' p')}</td><td>${x.c.qualified?x.c.rating:'Ej kval.'}</td>
-        <td class="model-white">${whiteScoreHtml(x.w.total,x.w.dataReady,true)}</td><td class="${classByValue(dw)}">${signed(dw,' p')}</td>
-        <td class="${scoreStatusClass(x.w.total,x.w.dataReady)}">${x.w.rating}</td>
-        <td>${fmt(num(x.r.price))}</td><td>${signed(num(x.r.ma200),' %')}</td><td class="${classByValue(num(x.r.ma3m))}">${signed(num(x.r.ma3m),' %')}</td>
-        <td class="${rsiClass(num(x.r.rsi14))}">${fmt(num(x.r.rsi14))}</td><td>${x.h.shares>0?'Ja':'Nej'}</td>
-        <td class="${ageClass(x.r.marketUpdatedAt||x.r.technicalSourceDate)}">${ageText(x.r.marketUpdatedAt||x.r.technicalSourceDate)}</td>
-        <td class="${ageClass(x.r.fundamentalUpdatedAt||x.r.updatedAt)}">${ageText(x.r.fundamentalUpdatedAt||x.r.updatedAt)}</td>
-      </tr>`}).join('');
+    table.innerHTML='<tr>'+[
+      'Ticker','Bolag','Börs','🔵 Blå','⚪ Vit','🟣 Snitt','Status','Kurs','Kurs/MA200','MA200 3m','RSI','Ägs','Marknadsdata','Rapportdata'
+    ].map(x=>`<th>${x}</th>`).join('')+'</tr>'+
+      l.map(x=>{
+        const average=averageScoreFromResults(x.c,x.w);
+        const selected=statusModel==='blue'?x.c.total:statusModel==='white'?x.w.total:average;
+        const ready=statusModel==='white'||statusModel==='average'?x.w.dataReady:true;
+        return `<tr class="score-row ${scoreRowClass(selected,ready)}" data-i="${x.i}">
+          <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td><td>${marketLabel(x.r.market||'SE')}</td>
+          <td class="model-blue">${blueScoreHtml(x.c.total,true)}</td>
+          <td class="model-white">${whiteScoreHtml(x.w.total,x.w.dataReady,true)}</td>
+          <td>${modelScoreHtml(average,'average',x.w.dataReady,true)}</td>
+          <td class="${scoreStatusClass(selected,ready)}">${scoreRating(selected,ready)}</td>
+          <td>${fmt(num(x.r.price))}</td><td>${signed(num(x.r.ma200),' %')}</td>
+          <td class="${classByValue(num(x.r.ma3m))}">${signed(num(x.r.ma3m),' %')}</td>
+          <td class="${rsiClass(num(x.r.rsi14))}">${fmt(num(x.r.rsi14))}</td><td>${x.h.shares>0?'Ja':'Nej'}</td>
+          <td class="${ageClass(x.r.marketUpdatedAt||x.r.technicalSourceDate)}">${ageText(x.r.marketUpdatedAt||x.r.technicalSourceDate)}</td>
+          <td class="${ageClass(x.r.fundamentalUpdatedAt||x.r.updatedAt)}">${ageText(x.r.fundamentalUpdatedAt||x.r.updatedAt)}</td>
+        </tr>`
+      }).join('');
   }else{
     table.className='';
-    table.innerHTML='<tr>'+['Ticker','Bolag','Börs','🔵 Blå','⚪ Vit','Vit status','Kurs/MA200','MA50/MA200','MA200-trend 1m','Ägs','Marknadsdata'].map(x=>`<th>${x}</th>`).join('')+'</tr>'+
-      l.map(x=>`<tr class="score-row ${scoreRowClass(x.w.total,x.w.dataReady)}" data-i="${x.i}">
-        <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td><td>${marketLabel(x.r.market||'SE')}</td>
-        <td class="model-blue">${blueScoreHtml(x.c.total,true)}</td>
-        <td class="model-white">${whiteScoreHtml(x.w.total,x.w.dataReady,true)}</td>
-        <td class="${scoreStatusClass(x.w.total,x.w.dataReady)}">${x.w.rating}</td>
-        <td>${whitePartText(x.w.parts?.distanceMa200)} / 33,3</td>
-        <td>${whitePartText(x.w.parts?.ma50Spread)} / 33,3</td>
-        <td>${whitePartText(x.w.parts?.ma200Slope1m)} / 33,3</td>
-        <td>${x.h.shares>0?'Ja':'Nej'}</td>
-        <td class="${ageClass(x.r.marketUpdatedAt||x.r.technicalSourceDate)}">${ageText(x.r.marketUpdatedAt||x.r.technicalSourceDate)}</td>
-      </tr>`).join('');
+    table.innerHTML='<tr>'+[
+      'Ticker','Bolag','Börs','🔵 Blå','⚪ Vit','🟣 Snitt','Status','Vit Kurs/MA200','Vit MA50/MA200','Vit MA200-trend 1m','Ägs','Marknadsdata'
+    ].map(x=>`<th>${x}</th>`).join('')+'</tr>'+
+      l.map(x=>{
+        const average=averageScoreFromResults(x.c,x.w);
+        const selected=statusModel==='blue'?x.c.total:statusModel==='white'?x.w.total:average;
+        const ready=statusModel==='white'||statusModel==='average'?x.w.dataReady:true;
+        return `<tr class="score-row ${scoreRowClass(selected,ready)}" data-i="${x.i}">
+          <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td><td>${marketLabel(x.r.market||'SE')}</td>
+          <td class="model-blue">${blueScoreHtml(x.c.total,true)}</td>
+          <td class="model-white">${whiteScoreHtml(x.w.total,x.w.dataReady,true)}</td>
+          <td>${modelScoreHtml(average,'average',x.w.dataReady,true)}</td>
+          <td class="${scoreStatusClass(selected,ready)}">${scoreRating(selected,ready)}</td>
+          <td>${whitePartText(x.w.parts?.distanceMa200)} / 33,3</td>
+          <td>${whitePartText(x.w.parts?.ma50Spread)} / 33,3</td>
+          <td>${whitePartText(x.w.parts?.ma200Slope1m)} / 33,3</td>
+          <td>${x.h.shares>0?'Ja':'Nej'}</td>
+          <td class="${ageClass(x.r.marketUpdatedAt||x.r.technicalSourceDate)}">${ageText(x.r.marketUpdatedAt||x.r.technicalSourceDate)}</td>
+        </tr>`
+      }).join('');
   }
   document.querySelectorAll('.score-row').forEach(row=>row.onclick=()=>openDetail(Number(row.dataset.i)));
   renderTop();renderDevelopment();renderDashboard()
@@ -1516,7 +1541,7 @@ function scoreStatusClass(score,dataReady=true){return 'score-status-'+scoreBand
 
 function modelScoreText(score,model){
   if(!Number.isFinite(score))return '–';
-  return model==='white'
+  return model==='white'||model==='average'
     ? score.toFixed(1).replace('.',',')
     : String(Math.round(score))
 }
@@ -1542,21 +1567,49 @@ function whitePartsHtml(w){
   ].map(([name,value,max])=>`<div class="metric"><small>${name}</small><b>${whitePartText(value)} / ${max.toFixed(1).replace('.',',')}</b></div>`).join('')
 }
 
-function selectedModelValues(r,model){
-  const b=calc(r),w=whiteCalc(r);
-  if(model==='white')return{score:w.total,qualified:w.qualified,dataReady:w.dataReady,rating:w.rating,warning:w.warning,b,w};
-  if(model==='both')return{score:Math.round((b.total+w.total)/2),qualified:b.qualified&&w.qualified,dataReady:w.dataReady,rating:b.qualified&&w.qualified?'Godkänd i båda':(!w.dataReady?'Vit underlag saknas':'Ej godkänd i båda'),warning:[b.warning,w.warning].filter(Boolean).join(' · '),b,w};
-  return{score:b.total,qualified:b.qualified,dataReady:true,rating:b.rating,warning:b.warning,b,w}
+function averageScoreFromResults(b,w){
+  return w.dataReady&&Number.isFinite(b.total)&&Number.isFinite(w.total)?(b.total+w.total)/2:NaN
 }
+function scoreRating(score,dataReady=true){
+  if(!dataReady||!Number.isFinite(score))return 'Underlag saknas';
+  if(score>=90)return 'Extremt stark';
+  if(score>=80)return 'Stark';
+  if(score>=70)return 'Intressant';
+  if(score>=60)return 'Neutral';
+  return 'Svag'
+}
+function selectedModelValues(r,model){
+  const b=calc(r),w=whiteCalc(r),average=averageScoreFromResults(b,w);
+  if(model==='white'){
+    return{score:w.total,qualified:w.dataReady,dataReady:w.dataReady,rating:scoreRating(w.total,w.dataReady),warning:w.warning,b,w,average}
+  }
+  if(model==='average'||model==='both'){
+    return{
+      score:average,
+      qualified:b.qualified&&w.dataReady,
+      dataReady:w.dataReady&&Number.isFinite(average),
+      rating:scoreRating(average,w.dataReady),
+      warning:!w.dataReady?'Vit underlag saknas':[b.warning,w.warning].filter(Boolean).join(' · '),
+      b,w,average
+    }
+  }
+  return{score:b.total,qualified:b.qualified,dataReady:true,rating:scoreRating(b.total,true),warning:b.warning,b,w,average}
+}
+function scoreModelFromSortField(field){
+  if(field==='blueScore')return 'blue';
+  if(field==='whiteScore')return 'white';
+  return 'average'
+}
+
 function renderTop(){
-  const model=document.getElementById('topModel')?.value||'blue';
+  const model=document.getElementById('topModel')?.value||'average';
   const mode=document.getElementById('topFilter')?.value||'qualified';
   let l=rows.map((r,i)=>({r,i,h:holdings(r),s:selectedModelValues(r,model)}));
   if(mode==='qualified')l=l.filter(x=>x.s.qualified);
   if(mode==='owned')l=l.filter(x=>x.h.shares>0);
-  l.sort((a,b)=>b.s.score-a.s.score);
+  l.sort((a,b)=>(Number.isFinite(b.s.score)?b.s.score:-Infinity)-(Number.isFinite(a.s.score)?a.s.score:-Infinity));
 
-  const modelName=model==='blue'?'Blå':model==='white'?'Vit':'Båda';
+  const modelName=model==='blue'?'Blå':model==='white'?'Vit':'Snitt';
   document.getElementById('summary').innerHTML=[
     ['Sparade',rows.length],
     [modelName+' med underlag',rows.filter(r=>selectedModelValues(r,model).dataReady).length],
@@ -1564,11 +1617,12 @@ function renderTop(){
     [modelName+' 80+',rows.filter(r=>{const s=selectedModelValues(r,model);return s.dataReady&&s.score>=80}).length]
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
 
-  document.getElementById('topTable').innerHTML='<tr><th>Rank</th><th>Ticker</th><th>Bolag</th><th>🔵 Blå</th><th>⚪ Vit</th><th>Status</th><th>Ägs</th></tr>'+
+  document.getElementById('topTable').innerHTML='<tr><th>Rank</th><th>Ticker</th><th>Bolag</th><th>🔵 Blå</th><th>⚪ Vit</th><th>🟣 Snitt</th><th>Status</th><th>Ägs</th></tr>'+
     l.slice(0,20).map((x,i)=>`<tr class="top-row ${scoreRowClass(x.s.score,x.s.dataReady)}" data-i="${x.i}">
       <td>${i+1}</td><td>${x.r.ticker||''}</td><td>${x.r.company||''}</td>
       <td class="model-blue">${blueScoreHtml(x.s.b.total,true)}</td>
       <td class="model-white">${whiteScoreHtml(x.s.w.total,x.s.w.dataReady,true)}</td>
+      <td>${modelScoreHtml(x.s.average,'average',x.s.w.dataReady,true)}</td>
       <td class="${scoreStatusClass(x.s.score,x.s.dataReady)}">${x.s.rating}</td>
       <td>${x.h.shares>0?'Ja':'Nej'}</td>
     </tr>`).join('');
@@ -1658,9 +1712,16 @@ function developmentMetrics(r){
   };
 }
 function modelHistoryDelta(r,model,current){
-  const key=model==='white'?'whiteScore':'blueScore';
   const hist=(Array.isArray(r.marketHistory)?r.marketHistory:[]).slice().sort((a,b)=>new Date(a.savedAt)-new Date(b.savedAt));
-  for(let i=hist.length-1;i>=0;i--){const v=num(hist[i][key]);if(Number.isFinite(v))return current-v}
+  for(let i=hist.length-1;i>=0;i--){
+    if(model==='average'){
+      const blue=num(hist[i].blueScore),white=num(hist[i].whiteScore);
+      if(Number.isFinite(blue)&&Number.isFinite(white))return current-(blue+white)/2
+    }else{
+      const key=model==='white'?'whiteScore':'blueScore',v=num(hist[i][key]);
+      if(Number.isFinite(v))return current-v
+    }
+  }
   if(model==='blue')return developmentMetrics(r).scoreAll;
   return NaN
 }
@@ -1668,7 +1729,7 @@ function renderDevelopment(){
   const table=document.getElementById('developmentOverviewTable');if(!table)return;
   const q=(document.getElementById('developmentSearch')?.value||'').toLowerCase();
   const own=document.getElementById('developmentOwnership')?.value||'all';
-  const model=document.getElementById('developmentModel')?.value||'blue';
+  const model=document.getElementById('developmentModel')?.value||'average';
   const qual=document.getElementById('developmentQualification')?.value||'all';
   const histMin=Number(document.getElementById('developmentHistoryFilter')?.value||0);
   const sort=document.getElementById('developmentSort')?.value||'scoreChange';
@@ -1687,7 +1748,7 @@ function renderDevelopment(){
   list.sort((a,b)=>{
     if(sort==='company')return (a.r.company||'').localeCompare(b.r.company||'','sv');
     if(sort==='updated')return new Date(b.r.updatedAt)-new Date(a.r.updatedAt);
-    if(sort==='score')return b.s.score-a.s.score;
+    if(sort==='score')return (Number.isFinite(b.s.score)?b.s.score:-Infinity)-(Number.isFinite(a.s.score)?a.s.score:-Infinity);
     if(sort==='scoreChange')return (Number.isFinite(b.scoreDelta)?b.scoreDelta:-Infinity)-(Number.isFinite(a.scoreDelta)?a.scoreDelta:-Infinity);
     const map={priceChange:'priceAll',maChange:'maAll',rsi:'currentRsi',rsiChange:'rsiAll'};
     const key=map[sort]||'priceAll';
@@ -1700,12 +1761,14 @@ function renderDevelopment(){
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
 
   table.innerHTML='<tr>'+[
-    'Ticker','Bolag','🔵 Blå','⚪ Vit','Status','Δ vald poäng','Kurs','1 dag','1 vecka','1 månad','Sedan start',
+    'Ticker','Bolag','🔵 Blå','⚪ Vit','🟣 Snitt','Status','Δ vald poäng','Kurs','1 dag','1 vecka','1 månad','Sedan start',
     'Kurs/MA200','MA200-utv.','RSI 14','Datapunkter','Senast uppdaterad'
   ].map(x=>`<th>${x}</th>`).join('')+'</tr>'+
   list.map(x=>`<tr class="development-row ${scoreRowClass(x.s.score,x.s.dataReady)}" data-i="${x.i}" style="cursor:pointer">
     <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td>
-    <td class="model-blue">${blueScoreHtml(x.s.b.total,true)}</td><td class="model-white">${whiteScoreHtml(x.s.w.total,x.s.w.dataReady,true)}</td>
+    <td class="model-blue">${blueScoreHtml(x.s.b.total,true)}</td>
+    <td class="model-white">${whiteScoreHtml(x.s.w.total,x.s.w.dataReady,true)}</td>
+    <td>${modelScoreHtml(x.s.average,'average',x.s.w.dataReady,true)}</td>
     <td class="${scoreStatusClass(x.s.score,x.s.dataReady)}">${x.s.rating}</td>
     <td class="${classByValue(x.scoreDelta)}"><b>${signed(x.scoreDelta,' p')}</b></td>
     <td>${fmt(x.m.currentPrice)}</td><td class="${classByValue(x.m.price1)}">${signed(x.m.price1,' %')}</td>
@@ -4145,7 +4208,7 @@ function showTab(id){document.querySelectorAll('.panel,.tab').forEach(e=>e.class
 const reasons={'Köp':['Hög totalpoäng','Kvalificerad av filter','Stark vinsttrend','Stark omsättningstrend','Stark teknisk trend','Rimlig värdering'],'Öka':['Förbättrad totalpoäng','Förbättrad vinsttrend','Förbättrad omsättningstrend','Starkare teknisk trend','Lägre värdering','Undervikt i portföljen','Återköp efter minskning'],'Minska':['För stor del av portföljen','Försämrad totalpoäng','Försämrad vinsttrend','Försämrad omsättningstrend','Svagare teknisk trend','P/E närmar sig filter','Bättre kandidat finns','Riskminskning','Delvis vinsthemtagning'],'Sälj':['Under MA200','Negativ 3-månaderstrend','P/E-filter brutet','För låg totalpoäng','Bättre kandidat finns','Riskminskning'],'Utdelning':['Ordinarie utdelning','Extrautdelning']};
 function reasonUI(){const t=document.getElementById('txType').value;document.getElementById('reasonChecks').innerHTML=(reasons[t]||[]).map(x=>`<label class="rowcard"><input type="checkbox" class="reasonBox" value="${x}">${x}</label>`).join('')}
 function openDetail(i){detailIndex=i;const r=rows[i],c=calc(r),h=holdings(r),g=growthLabel(r);document.getElementById('detailTitle').textContent=`${r.ticker||''} ${r.company||''}`.trim();const losses=[['Trend',30-c.trend],['Tillväxt',15-c.rev],['Vinst',20-c.eps],['P/E',20-c.peScore],['ROE',5-c.roe],['Skuld',5-c.debt],['FCF',5-c.fcf]].filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
-document.getElementById('detailCurrent').innerHTML=`<div class="summary"><div class="metric"><small>Blå totalpoäng</small><b>${blueScoreHtml(c.total,true)}</b></div><div class="metric"><small>Blå bedömning</small><b class="${scoreStatusClass(c.total,true)}">${c.rating}</b></div><div class="metric"><small>Börs</small><b style="font-size:15px">${marketLabel(r.market||'SE')}</b></div><div class="metric"><small>Marknadsdata</small><b class="${ageClass(r.marketUpdatedAt||r.technicalSourceDate)}" style="font-size:15px">${ageText(r.marketUpdatedAt||r.technicalSourceDate)}</b></div><div class="metric"><small>Rapportdata</small><b class="${ageClass(r.fundamentalUpdatedAt||r.updatedAt)}" style="font-size:15px">${ageText(r.fundamentalUpdatedAt||r.updatedAt)}</b></div><div class="metric"><small>Inlagd</small><b style="font-size:15px">${dateFmt(r.createdAt)}</b></div></div><div class="status ${c.qualified?'ok':'no'}"><b>🔵 Blå:</b> ${c.qualified?'Alla grundregler är uppfyllda':'Ej kvalificerad: '+c.warning}</div><div class="status ${whiteCalc(r).dataReady?'ok':'no'}"><b>⚪ Vit:</b> ${whiteCalc(r).dataReady?whiteCalc(r).rating:'Underlag saknas'}</div><div class="card"><h3>Nuvarande poäng</h3><div class="summary">${[['Trend',c.trend+'/30'],[g+' momentum',c.revMomentum+'/10'],[g+' historik',c.revHistory+'/5'],[g+' totalt',c.rev+'/15'],['Vinst momentum',c.epsMomentum+'/15'],['Vinst historik',c.epsHistory+'/5'],['Vinst totalt',c.eps+'/20'],['P/E',c.peScore+'/20'],['ROE',c.roe+'/5'],['Skuld',c.debt+'/5'],['FCF',c.fcf+'/5']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('')}</div><h3>Vit platåmodell</h3><div class="summary"><div class="metric"><small>Total Vit</small><b class="${scoreStatusClass(whiteCalc(r).total,whiteCalc(r).dataReady)}">${whiteScoreText(whiteCalc(r).total)} / 100</b></div>${whitePartsHtml(whiteCalc(r))}</div><h3>Poäng som saknas till 100</h3><div class="score-loss">${losses.length?losses.map(([a,b])=>`<div class="loss-item"><small>${a}</small><b>−${b} p</b></div>`).join(''):'<div class="note">Full poäng i samtliga kategorier.</div>'}</div><h3>Historikberäkning</h3><div class="summary"><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt Y-Y':'Median omsättning Q1–Q4'}</small><b>${fmt(c.revMedian)} %</b></div><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt 3 år':'Omsättningstillväxt 3 år'}</small><b>${fmt(num(r.companyType==='investment'?r.ek3y:r.rev3y))} %</b></div><div class="metric"><small>Historikpoäng ${g.toLowerCase()}</small><b>${c.revHistory}/5</b></div><div class="metric"><small>Median vinst Q1–Q4</small><b>${fmt(c.epsMedian)} %</b></div><div class="metric"><small>Vinsttillväxt 3 år</small><b>${fmt(num(r.eps3y))} %</b></div><div class="metric"><small>Historikpoäng vinst</small><b>${c.epsHistory}/5</b></div></div></div>`;document.getElementById('oldPrice').value=r.price||'';document.getElementById('newPrice').value='';document.getElementById('newPe').value='';document.getElementById('peTool').classList.add('hidden');document.getElementById('txDate').value=todayISO();reasonUI();document.getElementById('holdingSummary').innerHTML=[['Antal',fmt(h.shares)],['GAV',fmt(h.avg)],['Realiserat',fmt(h.realized)],['Utdelningar',fmt(h.dividends)],['Courtage',fmt(h.fees)],['Status',h.shares>0?'Ägs':'Ägs inte']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');document.getElementById('historyList').innerHTML=[...(r.history||[])].reverse().map(x=>`<details class="rowcard"><summary><b>${dateFmt(x.savedAt)}</b> · ${x.kind} · ${x.score.total} p</summary><div class="note">${Object.entries(x.raw).map(([k,v])=>`${k}: ${v}`).join(' · ')}</div></details>`).join('')||'Ingen historik';document.getElementById('txList').innerHTML=[...(r.transactions||[])].reverse().map(t=>`<div class="rowcard"><b>${t.date} · ${t.type}</b><br>Antal ${t.qty||'–'} · Pris ${t.price||'–'} · Courtage ${t.fee||'–'} · Utdelning ${t.dividend||'–'}<br><span class="note">${(t.reasons||[]).join(', ')||'–'} · Poäng ${t.scoreAtTransaction?.total??'–'}</span></div>`).join('')||'Inga affärer';document.getElementById('detailModal').classList.add('open')}
+document.getElementById('detailCurrent').innerHTML=`<div class="summary"><div class="metric"><small>Blå</small><b>${blueScoreHtml(c.total,true)}</b></div><div class="metric"><small>Vit</small><b>${whiteScoreHtml(whiteCalc(r).total,whiteCalc(r).dataReady,true)}</b></div><div class="metric"><small>Snitt</small><b>${modelScoreHtml(averageScoreFromResults(c,whiteCalc(r)),'average',whiteCalc(r).dataReady,true)}</b></div><div class="metric"><small>Status snitt</small><b class="${scoreStatusClass(averageScoreFromResults(c,whiteCalc(r)),whiteCalc(r).dataReady)}">${scoreRating(averageScoreFromResults(c,whiteCalc(r)),whiteCalc(r).dataReady)}</b></div><div class="metric"><small>Börs</small><b style="font-size:15px">${marketLabel(r.market||'SE')}</b></div><div class="metric"><small>Marknadsdata</small><b class="${ageClass(r.marketUpdatedAt||r.technicalSourceDate)}" style="font-size:15px">${ageText(r.marketUpdatedAt||r.technicalSourceDate)}</b></div><div class="metric"><small>Rapportdata</small><b class="${ageClass(r.fundamentalUpdatedAt||r.updatedAt)}" style="font-size:15px">${ageText(r.fundamentalUpdatedAt||r.updatedAt)}</b></div><div class="metric"><small>Inlagd</small><b style="font-size:15px">${dateFmt(r.createdAt)}</b></div></div><div class="status ${c.qualified?'ok':'no'}"><b>🔵 Blå:</b> ${c.qualified?'Alla grundregler är uppfyllda':'Ej kvalificerad: '+c.warning}</div><div class="status ${whiteCalc(r).dataReady?'ok':'no'}"><b>⚪ Vit:</b> ${whiteCalc(r).dataReady?whiteCalc(r).rating:'Underlag saknas'}</div><div class="card"><h3>Nuvarande poäng</h3><div class="summary">${[['Trend',c.trend+'/30'],[g+' momentum',c.revMomentum+'/10'],[g+' historik',c.revHistory+'/5'],[g+' totalt',c.rev+'/15'],['Vinst momentum',c.epsMomentum+'/15'],['Vinst historik',c.epsHistory+'/5'],['Vinst totalt',c.eps+'/20'],['P/E',c.peScore+'/20'],['ROE',c.roe+'/5'],['Skuld',c.debt+'/5'],['FCF',c.fcf+'/5']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('')}</div><h3>Vit platåmodell</h3><div class="summary"><div class="metric"><small>Total Vit</small><b class="${scoreStatusClass(whiteCalc(r).total,whiteCalc(r).dataReady)}">${whiteScoreText(whiteCalc(r).total)} / 100</b></div>${whitePartsHtml(whiteCalc(r))}</div><h3>Poäng som saknas till 100</h3><div class="score-loss">${losses.length?losses.map(([a,b])=>`<div class="loss-item"><small>${a}</small><b>−${b} p</b></div>`).join(''):'<div class="note">Full poäng i samtliga kategorier.</div>'}</div><h3>Historikberäkning</h3><div class="summary"><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt Y-Y':'Median omsättning Q1–Q4'}</small><b>${fmt(c.revMedian)} %</b></div><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt 3 år':'Omsättningstillväxt 3 år'}</small><b>${fmt(num(r.companyType==='investment'?r.ek3y:r.rev3y))} %</b></div><div class="metric"><small>Historikpoäng ${g.toLowerCase()}</small><b>${c.revHistory}/5</b></div><div class="metric"><small>Median vinst Q1–Q4</small><b>${fmt(c.epsMedian)} %</b></div><div class="metric"><small>Vinsttillväxt 3 år</small><b>${fmt(num(r.eps3y))} %</b></div><div class="metric"><small>Historikpoäng vinst</small><b>${c.epsHistory}/5</b></div></div></div>`;document.getElementById('oldPrice').value=r.price||'';document.getElementById('newPrice').value='';document.getElementById('newPe').value='';document.getElementById('peTool').classList.add('hidden');document.getElementById('txDate').value=todayISO();reasonUI();document.getElementById('holdingSummary').innerHTML=[['Antal',fmt(h.shares)],['GAV',fmt(h.avg)],['Realiserat',fmt(h.realized)],['Utdelningar',fmt(h.dividends)],['Courtage',fmt(h.fees)],['Status',h.shares>0?'Ägs':'Ägs inte']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');document.getElementById('historyList').innerHTML=[...(r.history||[])].reverse().map(x=>`<details class="rowcard"><summary><b>${dateFmt(x.savedAt)}</b> · ${x.kind} · ${x.score.total} p</summary><div class="note">${Object.entries(x.raw).map(([k,v])=>`${k}: ${v}`).join(' · ')}</div></details>`).join('')||'Ingen historik';document.getElementById('txList').innerHTML=[...(r.transactions||[])].reverse().map(t=>`<div class="rowcard"><b>${t.date} · ${t.type}</b><br>Antal ${t.qty||'–'} · Pris ${t.price||'–'} · Courtage ${t.fee||'–'} · Utdelning ${t.dividend||'–'}<br><span class="note">${(t.reasons||[]).join(', ')||'–'} · Poäng ${t.scoreAtTransaction?.total??'–'}</span></div>`).join('')||'Inga affärer';document.getElementById('detailModal').classList.add('open')}
 function saveTx(){const r=rows[detailIndex],t={type:document.getElementById('txType').value,date:document.getElementById('txDate').value||todayISO(),qty:document.getElementById('txQty').value,price:document.getElementById('txPrice').value,fee:document.getElementById('txFee').value,dividend:document.getElementById('txDividend').value,reasons:[...document.querySelectorAll('.reasonBox:checked')].map(x=>x.value),scoreAtTransaction:calc(r),savedAt:nowISO()};r.transactions=[...(r.transactions||[]),t];r.updatedAt=nowISO();persist();render();openDetail(detailIndex)}
 function pePreview(){const r=rows[detailIndex],op=num(r.price),ope=num(r.pe),np=num(document.getElementById('newPrice').value),npe=op>0&&Number.isFinite(ope)&&Number.isFinite(np)?ope*np/op:NaN;document.getElementById('newPe').value=Number.isFinite(npe)?npe.toFixed(2):''}
 function savePe(){const r=rows[detailIndex],np=num(document.getElementById('newPrice').value),npe=num(document.getElementById('newPe').value);if(!Number.isFinite(np)||!Number.isFinite(npe))return alert('Fyll i giltig kurs');const u={...r,price:String(np),pe:String(npe),updatedAt:nowISO(),fundamentalUpdatedAt:nowISO()};u.history=[...(r.history||[]),snapshot(u,'Kursjusterad P/E')];rows[detailIndex]=u;persist();render();openDetail(detailIndex)}
