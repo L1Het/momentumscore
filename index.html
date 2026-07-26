@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v6.12.5</title>
+<title>MomentumScore v7.0</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -82,11 +82,22 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .toast{position:fixed;right:18px;bottom:18px;z-index:100;background:var(--card);border:1px solid var(--green);border-radius:12px;padding:12px 16px;box-shadow:0 8px 30px rgba(0,0,0,.35);display:none}
 .toast.show{display:block}
 .source-auto{color:var(--green)}.source-manual{color:var(--yellow)}
+.view-switch{display:flex;gap:8px;flex-wrap:wrap}
+.view-switch button.active{background:var(--blue);color:#06111c}
+.score-row{cursor:pointer}.score-row:hover{background:rgba(76,166,255,.08)}
+.compact-table{min-width:950px}
+.age-fresh{color:var(--green)}.age-warn{color:var(--yellow)}.age-old{color:var(--red)}
+.score-loss{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+@media(min-width:900px){.score-loss{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.loss-item{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:9px}
+.loss-item small{display:block;color:var(--muted)}.loss-item b{font-size:18px}
+.toolbar-inline{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
+
 </style>
 </head>
 <body>
 <header>
-<h1>MomentumScore v6.12.5 – lagringsfix</h1>
+<h1>MomentumScore v7.0 – nordisk aktieöversikt</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -105,11 +116,12 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
     <div class="searchbar">
       <div><label>Sök bolag</label><input id="dashboardSearch" type="search" autocomplete="off" placeholder="Bolagsnamn eller ticker..."></div>
       <div><label>Visa</label><select id="dashboardFilter"><option value="all">Alla</option><option value="qualified">Kvalificerade</option><option value="owned">Ägs nu</option><option value="strong">80+ poäng</option></select></div>
+      <div><label>Börs</label><select id="dashboardMarket"><option value="all">Alla nordiska</option><option value="SE">Stockholm</option><option value="DK">Köpenhamn</option><option value="NO">Oslo</option><option value="FI">Helsingfors</option><option value="IS">Reykjavik</option></select></div>
       <div><label>Sortering</label><select id="dashboardSort"><option value="score">Poäng</option><option value="scoreChange">Poängförändring</option><option value="ma200">Kurs/MA200</option><option value="rsi">RSI</option><option value="company">Bolag</option></select></div>
     </div>
   </div>
   <div class="card tablewrap"><table id="dashboardTable" class="dashboard-table"></table></div>
-  <p class="note">Detta är den förenklade dagliga vyn. Klicka på ett bolag för full analys, historik och transaktioner.</p>
+  <p class="note">Detta är den förenklade dagliga vyn. Stockholm är standard för nya bolag. Klicka på ett bolag för full analys, poängförklaring, historik och transaktioner.</p>
 </section>
 
 <section id="input" class="panel">
@@ -125,7 +137,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 <div><label>Ticker</label><input id="ticker"></div>
 <div><label>Bolag</label><input id="company"></div>
 <div><label>Börs</label><select id="market">
-<option value="SE">Sverige – Stockholm (.ST)</option>
+<option value="SE" selected>Sverige – Stockholm (.ST)</option>
 <option value="DK">Danmark – Köpenhamn (.CO)</option>
 <option value="NO">Norge – Oslo (.OL)</option>
 <option value="FI">Finland – Helsingfors (.HE)</option>
@@ -176,9 +188,15 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 <label class="file-label">Importera säkerhetskopia<input type="file" id="importFile" accept=".json" hidden></label>
 </div>
 </div>
+<div class="card">
+<div class="toolbar-inline">
+  <div><label>Vy</label><div class="view-switch"><button type="button" id="simpleScoreView" class="secondary active">Enkel vy</button><button type="button" id="analysisScoreView" class="secondary">Analysvy</button></div></div>
+</div>
+</div>
 <div class="card"><div class="searchbar">
 <div><label>Sök aktie</label><input id="searchAll" type="search" autocomplete="off" placeholder="Skriv bolagsnamn eller ticker..."></div>
 <div><label>Ägande</label><select id="ownershipFilter"><option value="all">Alla</option><option value="owned">Ägs nu</option><option value="notOwned">Ägs inte</option><option value="ownedBefore">Har ägts tidigare</option><option value="neverOwned">Aldrig ägts</option></select></div>
+<div><label>Börs</label><select id="scoreMarketFilter"><option value="all">Alla nordiska</option><option value="SE">Stockholm</option><option value="DK">Köpenhamn</option><option value="NO">Oslo</option><option value="FI">Helsingfors</option><option value="IS">Reykjavik</option></select></div>
 <div><label>Sortering</label><select id="sortField"><option value="total">Poäng</option><option value="createdAt">Inlagd</option><option value="updatedAt">Senast uppdaterad</option><option value="ticker">Ticker</option><option value="company">Bolag</option></select></div>
 </div></div>
 <div class="card tablewrap"><table id="scoreTable"></table></div>
@@ -274,7 +292,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v6.12.5 – samtliga regler</h2>
+<h2>MomentumScore v7.0 – samtliga regler</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -345,10 +363,14 @@ Under 1,0 = 5 p · 1,0–2,0 = 4 p · över 2,0 till 3,0 = 2 p · över 3,0 = 0 
 const ids=['companyType','ticker','company','market','yahooSymbol','price','ma200','ma1w','ma1m','ma3m','rev1','rev2','rev3','rev4','rev3y','ekYoy','ek3y','eps1','eps2','eps3','eps4','eps3y','pe','pe3','pe5','roe','debt','fcf'];
 const numericIds=['price','ma200','ma1w','ma1m','ma3m','rev1','rev2','rev3','rev4','rev3y','ekYoy','ek3y','eps1','eps2','eps3','eps4','eps3y','pe','pe3','pe5','roe','debt','fcf'], storageKey='momentumScore_v4_rows', backupKey='momentumScore_v4_rows_backup_before_update', oldKeys=['momentumScore_v3_rows','momentumRows'];
 const settingsKey='momentumScore_market_settings', dbVersionKey='momentumScore_db_version', appDbVersion=12;
-let editing=null,detailIndex=null,rows=loadAndMigrate();
+let editing=null,detailIndex=null,scoreView='simple',rows=loadAndMigrate();
 const nowISO=()=>new Date().toISOString(),todayISO=()=>new Date().toISOString().slice(0,10);
 function num(v){if(typeof v==='number')return v;const s=String(v??'').trim().replace(/\s/g,'').replace(',','.');return s===''?NaN:Number(s)}
 function dateFmt(v){return v?new Date(v).toLocaleDateString('sv-SE'):'–'} function fmt(v){return Number.isFinite(v)?v.toLocaleString('sv-SE',{maximumFractionDigits:2}):'–'}
+function marketLabel(code){return({SE:'Stockholm',DK:'Köpenhamn',NO:'Oslo',FI:'Helsingfors',IS:'Reykjavik'}[code]||'Stockholm')}
+function ageDays(value){if(!value)return NaN;return Math.floor((Date.now()-new Date(value).getTime())/86400000)}
+function ageText(value){const d=ageDays(value);return Number.isFinite(d)?(d===0?'Idag':d===1?'Igår':d+' dagar'):'–'}
+function ageClass(value){const d=ageDays(value);return !Number.isFinite(d)?'age-old':d<=3?'age-fresh':d<=100?'age-warn':'age-old'}
 function toast(message){const el=document.getElementById('toast');if(!el)return;el.textContent=message;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),2200)}
 function step(a,b){if(!Number.isFinite(a)||!Number.isFinite(b))return'missing';if(b>a)return'improve';if(b===a)return'neutral';if(a>0&&b>=a*.9)return'neutral';return'break'}
 function momentumCount(v){let c=0;for(let i=v.length-1;i>0;i--){const s=step(v[i-1],v[i]);if(s==='break'||s==='missing')break;if(s==='improve')c++}return c}
@@ -477,10 +499,11 @@ function databaseHealth(){
   const marketPoints=rows.reduce((s,r)=>s+(r.marketHistory?.length||0),0);
   const transactions=rows.reduce((s,r)=>s+(r.transactions?.length||0),0);
   const priceDays=rows.reduce((s,r)=>s+(r.priceHistory?.length||0),0);
+  const storageBytes=new Blob([JSON.stringify(rows)]).size;
   const missingSymbols=rows.filter(r=>!String(r.yahooSymbol||'').trim()).map(r=>r.ticker||r.company);
   const shortHistory=rows.filter(r=>(r.priceHistory?.length||0)<263).map(r=>r.ticker||r.company);
   const missingRsi=rows.filter(r=>!Number.isFinite(num(r.rsi14))).map(r=>r.ticker||r.company);
-  return{companies,histories,marketPoints,transactions,priceDays,missingSymbols,shortHistory,missingRsi};
+  return{companies,histories,marketPoints,transactions,priceDays,storageBytes,missingSymbols,shortHistory,missingRsi};
 }
 function renderDatabaseHealth(){
   const h=databaseHealth();
@@ -490,7 +513,7 @@ function renderDatabaseHealth(){
     line(true,`${h.histories} fundamentala historikposter`),
     line(true,`${h.marketPoints} marknadshistorikpunkter`),
     line(true,`${h.priceDays} sparade handelsdagar`),
-    line(true,`${h.transactions} transaktioner`),
+    line(true,`${h.transactions} transaktioner`),line(h.storageBytes<4200000,`Databasstorlek ${(h.storageBytes/1024/1024).toFixed(2)} MB`),
     line(!h.missingSymbols.length,h.missingSymbols.length?`${h.missingSymbols.length} bolag saknar Yahoo-symbol: ${h.missingSymbols.join(', ')}`:'Alla bolag har Yahoo-symbol'),
     line(!h.shortHistory.length,h.shortHistory.length?`${h.shortHistory.length} bolag har ännu inte 263 handelsdagar`:'Alla bolag har tillräcklig historik för MA200-trend'),
     line(!h.missingRsi.length,h.missingRsi.length?`${h.missingRsi.length} bolag saknar RSI`:'Alla bolag har RSI')
@@ -522,15 +545,17 @@ document.querySelectorAll('.type-choice').forEach(b=>b.classList.toggle('active'
 }
 function renderPreview(){const r=formRow(),c=calc(r),q=document.getElementById('qualification'),g=growthLabel(r);q.className='status '+(c.qualified?'ok':'no');q.textContent=c.qualified?'Godkänd av hårda filter':'Ej godkänd: '+(c.warning||'Ofullständig inmatning');document.getElementById('livePreview').innerHTML=[['Trend',c.trend],[g+' mom',c.revMomentum],[g+' hist',c.revHistory],['Vinst mom',c.epsMomentum],['Vinst hist',c.epsHistory],['P/E',c.peScore],['ROE',c.roe],['Skuld',c.debt],['FCF',c.fcf],['Total',c.total]].map(([a,b])=>`<div class="metric"><small>${a}</small><b class="${a==='Total'?cls(b):''}">${b}</b></div>`).join('')}
 function searchable(r){const c=calc(r);return[r.ticker,r.company,r.createdAt,r.updatedAt,c.rating,c.warning,...(r.transactions||[]).flatMap(t=>[t.type,t.date,...(t.reasons||[])])].join(' ').toLowerCase()}
-function listRows(){const q=document.getElementById('searchAll').value.toLowerCase(),own=document.getElementById('ownershipFilter').value,field=document.getElementById('sortField').value;let l=rows.map((r,i)=>({r,c:calc(r),h:holdings(r),i}));if(q)l=l.filter(x=>searchable(x.r).includes(q));l=l.filter(x=>own==='owned'?x.h.shares>0:own==='notOwned'?x.h.shares<=0:own==='ownedBefore'?x.h.shares<=0&&x.h.ever:own==='neverOwned'?!x.h.ever:true);l.sort((a,b)=>{let av=field==='total'?a.c.total:(a.r[field]||'').toString().toLowerCase(),bv=field==='total'?b.c.total:(b.r[field]||'').toString().toLowerCase();return av<bv?1:av>bv?-1:0});return l}
+function listRows(){const q=document.getElementById('searchAll').value.toLowerCase(),own=document.getElementById('ownershipFilter').value,market=document.getElementById('scoreMarketFilter')?.value||'all',field=document.getElementById('sortField').value;let l=rows.map((r,i)=>({r,c:calc(r),h:holdings(r),i}));if(q)l=l.filter(x=>searchable(x.r).includes(q));if(market!=='all')l=l.filter(x=>(x.r.market||'SE')===market);l=l.filter(x=>own==='owned'?x.h.shares>0:own==='notOwned'?x.h.shares<=0:own==='ownedBefore'?x.h.shares<=0&&x.h.ever:own==='neverOwned'?!x.h.ever:true);l.sort((a,b)=>{let av=field==='total'?a.c.total:(a.r[field]||'').toString().toLowerCase(),bv=field==='total'?b.c.total:(b.r[field]||'').toString().toLowerCase();return av<bv?1:av>bv?-1:0});return l}
 
 function renderDashboard(){
   const table=document.getElementById('dashboardTable');if(!table)return;
   const q=(document.getElementById('dashboardSearch')?.value||'').toLowerCase();
   const filter=document.getElementById('dashboardFilter')?.value||'all';
+  const market=document.getElementById('dashboardMarket')?.value||'all';
   const sort=document.getElementById('dashboardSort')?.value||'score';
   let list=rows.map((r,i)=>({r,i,c:calc(r),h:holdings(r),m:developmentMetrics(r)}));
   if(q)list=list.filter(x=>`${x.r.ticker||''} ${x.r.company||''}`.toLowerCase().includes(q));
+  if(market!=='all')list=list.filter(x=>(x.r.market||'SE')===market);
   if(filter==='qualified')list=list.filter(x=>x.c.qualified);
   if(filter==='owned')list=list.filter(x=>x.h.shares>0);
   if(filter==='strong')list=list.filter(x=>x.c.qualified&&x.c.total>=80);
@@ -549,19 +574,40 @@ function renderDashboard(){
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b style="${typeof b==='string'?'font-size:15px':''}">${b}</b></div>`).join('');
   table.innerHTML='<tr><th>Ticker</th><th>Bolag</th><th>Poäng</th><th>Δ poäng</th><th>Kurs</th><th>Kurs/MA200</th><th>MA200-trend 3m</th><th>RSI</th><th>Ägs</th><th>Status</th><th>Teknisk källa</th></tr>'+
     list.map(x=>`<tr class="dashboard-row" data-i="${x.i}">
-      <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td>
+      <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td><td>${marketLabel(x.r.market||'SE')}</td>
       <td class="${cls(x.c.total)}"><b>${x.c.total}</b></td>
       <td class="${classByValue(x.m.scoreAll)}">${signed(x.m.scoreAll,' p')}</td>
       <td>${fmt(num(x.r.price))}</td><td>${signed(num(x.r.ma200),' %')}</td>
       <td class="${classByValue(num(x.r.ma3m))}">${signed(num(x.r.ma3m),' %')}</td>
       <td class="${rsiClass(num(x.r.rsi14))}">${fmt(num(x.r.rsi14))}</td>
       <td>${x.h.shares>0?'Ja':'Nej'}</td><td>${x.c.rating}</td>
-      <td class="${String(x.r.technicalSource||'').includes('Yahoo')||String(x.r.technicalSource||'').includes('Börsdata')?'source-auto':'source-manual'}">${x.r.technicalSource||'Manuell'}</td>
+      <td class="${ageClass(x.r.marketUpdatedAt||x.r.technicalSourceDate)}">${ageText(x.r.marketUpdatedAt||x.r.technicalSourceDate)}</td>
     </tr>`).join('');
   document.querySelectorAll('.dashboard-row').forEach(tr=>tr.onclick=()=>openDetail(Number(tr.dataset.i)));
 }
 
-function render(){const l=listRows();document.getElementById('scoreTable').innerHTML='<tr>'+['Uppdatera','Ticker','Bolag','Typ','Poäng','Ägs','Grundregler','Orsak om ej godkänd','Trend','Tillväxt mom','Tillväxt hist','Tillväxt totalt','Vinst mom','Vinst hist','Vinst totalt','P/E','ROE','Skuld','FCF','Total','Bedömning','Inlagd','Uppdaterad'].map(x=>`<th>${x}</th>`).join('')+'</tr>'+l.map(x=>`<tr><td><button class="secondary detail" data-i="${x.i}">Uppdatera</button></td><td>${x.r.ticker||''}</td><td>${x.r.company||''}</td><td>${x.r.companyType==='investment'?'Investment':'Vanligt'}</td><td class="${cls(x.c.total)}"><b>${x.c.total}</b></td><td>${x.h.shares>0?'<span class="badge owned">Ja</span>':'Nej'}</td><td>${x.c.qualified?'<span class="badge owned">Godkänd</span>':'<span class="badge" style="background:rgba(255,107,107,.15);color:var(--red)">Ej kvalificerad</span>'}</td><td style="white-space:normal;min-width:260px;text-align:left">${x.c.warning||'–'}</td><td>${x.c.trend}/30</td><td>${x.c.revMomentum}/10</td><td>${x.c.revHistory}/5</td><td><b>${x.c.rev}/15</b></td><td>${x.c.epsMomentum}/15</td><td>${x.c.epsHistory}/5</td><td><b>${x.c.eps}/20</b></td><td>${x.c.peScore}/20</td><td>${x.c.roe}/5</td><td>${x.c.debt}/5</td><td>${x.c.fcf}/5</td><td class="${cls(x.c.total)}"><b>${x.c.total}</b></td><td>${x.c.rating}</td><td>${dateFmt(x.r.createdAt)}</td><td>${dateFmt(x.r.updatedAt)}</td></tr>`).join('');document.querySelectorAll('.detail').forEach(b=>b.onclick=()=>openDetail(+b.dataset.i));renderTop();renderDevelopment();renderDashboard()}
+function render(){
+  const l=listRows(),table=document.getElementById('scoreTable');
+  if(scoreView==='simple'){
+    table.className='compact-table';
+    table.innerHTML='<tr>'+['Ticker','Bolag','Börs','Poäng','Δ poäng','Kurs','Kurs/MA200','MA200 3m','RSI','Ägs','Grundregler','Bedömning','Marknadsdata','Rapportdata'].map(x=>`<th>${x}</th>`).join('')+'</tr>'+
+      l.map(x=>{const m=developmentMetrics(x.r);return `<tr class="score-row" data-i="${x.i}">
+        <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td><td>${marketLabel(x.r.market||'SE')}</td>
+        <td class="${cls(x.c.total)}"><b>${x.c.total}</b></td><td class="${classByValue(m.scoreAll)}">${signed(m.scoreAll,' p')}</td>
+        <td>${fmt(num(x.r.price))}</td><td>${signed(num(x.r.ma200),' %')}</td><td class="${classByValue(num(x.r.ma3m))}">${signed(num(x.r.ma3m),' %')}</td>
+        <td class="${rsiClass(num(x.r.rsi14))}">${fmt(num(x.r.rsi14))}</td><td>${x.h.shares>0?'Ja':'Nej'}</td>
+        <td>${x.c.qualified?'<span class="badge owned">Godkänd</span>':'<span class="badge" style="background:rgba(255,107,107,.15);color:var(--red)">Ej kvalificerad</span>'}</td>
+        <td>${x.c.rating}</td><td class="${ageClass(x.r.marketUpdatedAt||x.r.technicalSourceDate)}">${ageText(x.r.marketUpdatedAt||x.r.technicalSourceDate)}</td>
+        <td class="${ageClass(x.r.fundamentalUpdatedAt||x.r.updatedAt)}">${ageText(x.r.fundamentalUpdatedAt||x.r.updatedAt)}</td>
+      </tr>`}).join('');
+  }else{
+    table.className='';
+    table.innerHTML='<tr>'+['Ticker','Bolag','Börs','Typ','Poäng','Ägs','Grundregler','Orsak om ej godkänd','Trend','Tillväxt mom','Tillväxt hist','Tillväxt totalt','Vinst mom','Vinst hist','Vinst totalt','P/E','ROE','Skuld','FCF','Bedömning','Rapportdata'].map(x=>`<th>${x}</th>`).join('')+'</tr>'+
+      l.map(x=>`<tr class="score-row" data-i="${x.i}"><td>${x.r.ticker||''}</td><td>${x.r.company||''}</td><td>${marketLabel(x.r.market||'SE')}</td><td>${x.r.companyType==='investment'?'Investment':'Vanligt'}</td><td class="${cls(x.c.total)}"><b>${x.c.total}</b></td><td>${x.h.shares>0?'Ja':'Nej'}</td><td>${x.c.qualified?'Godkänd':'Ej kvalificerad'}</td><td style="white-space:normal;min-width:260px;text-align:left">${x.c.warning||'–'}</td><td>${x.c.trend}/30</td><td>${x.c.revMomentum}/10</td><td>${x.c.revHistory}/5</td><td><b>${x.c.rev}/15</b></td><td>${x.c.epsMomentum}/15</td><td>${x.c.epsHistory}/5</td><td><b>${x.c.eps}/20</b></td><td>${x.c.peScore}/20</td><td>${x.c.roe}/5</td><td>${x.c.debt}/5</td><td>${x.c.fcf}/5</td><td>${x.c.rating}</td><td class="${ageClass(x.r.fundamentalUpdatedAt||x.r.updatedAt)}">${ageText(x.r.fundamentalUpdatedAt||x.r.updatedAt)}</td></tr>`).join('');
+  }
+  document.querySelectorAll('.score-row').forEach(row=>row.onclick=()=>openDetail(Number(row.dataset.i)));
+  renderTop();renderDevelopment();renderDashboard()
+}
 function renderTop(){let l=rows.map((r,i)=>({r,c:calc(r),h:holdings(r),i})).sort((a,b)=>b.c.total-a.c.total),m=document.getElementById('topFilter').value;if(m==='qualified')l=l.filter(x=>x.c.qualified);if(m==='owned')l=l.filter(x=>x.h.shares>0);document.getElementById('summary').innerHTML=[['Sparade',rows.length],['Kvalificerade',rows.filter(r=>calc(r).qualified).length],['Ägs nu',rows.filter(r=>holdings(r).shares>0).length],['80+ poäng',rows.filter(r=>calc(r).qualified&&calc(r).total>=80).length]].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');document.getElementById('topTable').innerHTML='<tr><th>Rank</th><th>Ticker</th><th>Bolag</th><th>Ägs</th><th>Grundregler</th><th>Orsak om ej godkänd</th><th>Total</th><th>Bedömning</th><th>Uppdaterad</th></tr>'+l.slice(0,20).map((x,i)=>`<tr><td>${i+1}</td><td>${x.r.ticker||''}</td><td>${x.r.company||''}</td><td>${x.h.shares>0?'Ja':'Nej'}</td><td>${x.c.qualified?'Godkänd':'Ej kvalificerad'}</td><td style="white-space:normal;min-width:260px;text-align:left">${x.c.warning||'–'}</td><td class="${cls(x.c.total)}"><b>${x.c.total}</b></td><td>${x.c.rating}</td><td>${dateFmt(x.r.updatedAt)}</td></tr>`).join('')}
 
 
@@ -793,7 +839,7 @@ function save(){
   }
   persist();clearForm();render();toast('Sparat')
 }
-function clearForm(){ids.forEach(k=>document.getElementById(k).value='');setCompanyType('regular');editing=null;document.getElementById('newQuarter').classList.add('hidden');renderPreview()}
+function clearForm(){ids.forEach(k=>document.getElementById(k).value='');document.getElementById('market').value='SE';setCompanyType('regular');editing=null;document.getElementById('newQuarter').classList.add('hidden');renderPreview()}
 function editRow(i){editing=i;const r=rows[i];ids.forEach(k=>document.getElementById(k).value=r[k]??'');setCompanyType(r.companyType);document.getElementById('newQuarter').classList.remove('hidden');renderPreview();showTab('input');scrollTo(0,0)}
 function quarter(){
   if(editing===null)return;
@@ -819,7 +865,8 @@ function quarter(){
 function showTab(id){document.querySelectorAll('.panel,.tab').forEach(e=>e.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelector(`.tab[data-tab="${id}"]`).classList.add('active')}
 const reasons={'Köp':['Hög totalpoäng','Kvalificerad av filter','Stark vinsttrend','Stark omsättningstrend','Stark teknisk trend','Rimlig värdering'],'Öka':['Förbättrad totalpoäng','Förbättrad vinsttrend','Förbättrad omsättningstrend','Starkare teknisk trend','Lägre värdering','Undervikt i portföljen','Återköp efter minskning'],'Minska':['För stor del av portföljen','Försämrad totalpoäng','Försämrad vinsttrend','Försämrad omsättningstrend','Svagare teknisk trend','P/E närmar sig filter','Bättre kandidat finns','Riskminskning','Delvis vinsthemtagning'],'Sälj':['Under MA200','Negativ 3-månaderstrend','P/E-filter brutet','För låg totalpoäng','Bättre kandidat finns','Riskminskning'],'Utdelning':['Ordinarie utdelning','Extrautdelning']};
 function reasonUI(){const t=document.getElementById('txType').value;document.getElementById('reasonChecks').innerHTML=(reasons[t]||[]).map(x=>`<label class="rowcard"><input type="checkbox" class="reasonBox" value="${x}">${x}</label>`).join('')}
-function openDetail(i){detailIndex=i;const r=rows[i],c=calc(r),h=holdings(r),g=growthLabel(r);document.getElementById('detailTitle').textContent=`${r.ticker||''} ${r.company||''}`.trim();document.getElementById('detailCurrent').innerHTML=`<div class="summary"><div class="metric"><small>Totalpoäng</small><b class="${cls(c.total)}">${c.total}</b></div><div class="metric"><small>Bedömning</small><b>${c.rating}</b></div><div class="metric"><small>Inlagd</small><b style="font-size:15px">${dateFmt(r.createdAt)}</b></div><div class="metric"><small>Uppdaterad</small><b style="font-size:15px">${dateFmt(r.updatedAt)}</b></div></div><div class="status ${c.qualified?'ok':'no'}">${c.qualified?'Alla grundregler är uppfyllda':'Ej kvalificerad: '+c.warning}</div><div class="card"><h3>Nuvarande poäng</h3><div class="summary">${[['Trend',c.trend+'/30'],[g+' momentum',c.revMomentum+'/10'],[g+' historik',c.revHistory+'/5'],[g+' totalt',c.rev+'/15'],['Vinst momentum',c.epsMomentum+'/15'],['Vinst historik',c.epsHistory+'/5'],['Vinst totalt',c.eps+'/20'],['P/E',c.peScore+'/20'],['ROE',c.roe+'/5'],['Skuld',c.debt+'/5'],['FCF',c.fcf+'/5']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('')}</div><h3>Historikberäkning</h3><div class="summary"><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt Y-Y':'Median omsättning Q1–Q4'}</small><b>${fmt(c.revMedian)} %</b></div><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt 3 år':'Omsättningstillväxt 3 år'}</small><b>${fmt(num(r.companyType==='investment'?r.ek3y:r.rev3y))} %</b></div><div class="metric"><small>Historikpoäng ${g.toLowerCase()}</small><b>${c.revHistory}/5</b></div><div class="metric"><small>Median vinst Q1–Q4</small><b>${fmt(c.epsMedian)} %</b></div><div class="metric"><small>Vinsttillväxt 3 år</small><b>${fmt(num(r.eps3y))} %</b></div><div class="metric"><small>Historikpoäng vinst</small><b>${c.epsHistory}/5</b></div></div></div>`;document.getElementById('oldPrice').value=r.price||'';document.getElementById('newPrice').value='';document.getElementById('newPe').value='';document.getElementById('peTool').classList.add('hidden');document.getElementById('txDate').value=todayISO();reasonUI();document.getElementById('holdingSummary').innerHTML=[['Antal',fmt(h.shares)],['GAV',fmt(h.avg)],['Realiserat',fmt(h.realized)],['Utdelningar',fmt(h.dividends)],['Courtage',fmt(h.fees)],['Status',h.shares>0?'Ägs':'Ägs inte']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');document.getElementById('historyList').innerHTML=[...(r.history||[])].reverse().map(x=>`<details class="rowcard"><summary><b>${dateFmt(x.savedAt)}</b> · ${x.kind} · ${x.score.total} p</summary><div class="note">${Object.entries(x.raw).map(([k,v])=>`${k}: ${v}`).join(' · ')}</div></details>`).join('')||'Ingen historik';document.getElementById('txList').innerHTML=[...(r.transactions||[])].reverse().map(t=>`<div class="rowcard"><b>${t.date} · ${t.type}</b><br>Antal ${t.qty||'–'} · Pris ${t.price||'–'} · Courtage ${t.fee||'–'} · Utdelning ${t.dividend||'–'}<br><span class="note">${(t.reasons||[]).join(', ')||'–'} · Poäng ${t.scoreAtTransaction?.total??'–'}</span></div>`).join('')||'Inga affärer';document.getElementById('detailModal').classList.add('open')}
+function openDetail(i){detailIndex=i;const r=rows[i],c=calc(r),h=holdings(r),g=growthLabel(r);document.getElementById('detailTitle').textContent=`${r.ticker||''} ${r.company||''}`.trim();const losses=[['Trend',30-c.trend],['Tillväxt',15-c.rev],['Vinst',20-c.eps],['P/E',20-c.peScore],['ROE',5-c.roe],['Skuld',5-c.debt],['FCF',5-c.fcf]].filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
+document.getElementById('detailCurrent').innerHTML=`<div class="summary"><div class="metric"><small>Totalpoäng</small><b class="${cls(c.total)}">${c.total}</b></div><div class="metric"><small>Bedömning</small><b>${c.rating}</b></div><div class="metric"><small>Börs</small><b style="font-size:15px">${marketLabel(r.market||'SE')}</b></div><div class="metric"><small>Marknadsdata</small><b class="${ageClass(r.marketUpdatedAt||r.technicalSourceDate)}" style="font-size:15px">${ageText(r.marketUpdatedAt||r.technicalSourceDate)}</b></div><div class="metric"><small>Rapportdata</small><b class="${ageClass(r.fundamentalUpdatedAt||r.updatedAt)}" style="font-size:15px">${ageText(r.fundamentalUpdatedAt||r.updatedAt)}</b></div><div class="metric"><small>Inlagd</small><b style="font-size:15px">${dateFmt(r.createdAt)}</b></div></div><div class="status ${c.qualified?'ok':'no'}">${c.qualified?'Alla grundregler är uppfyllda':'Ej kvalificerad: '+c.warning}</div><div class="card"><h3>Nuvarande poäng</h3><div class="summary">${[['Trend',c.trend+'/30'],[g+' momentum',c.revMomentum+'/10'],[g+' historik',c.revHistory+'/5'],[g+' totalt',c.rev+'/15'],['Vinst momentum',c.epsMomentum+'/15'],['Vinst historik',c.epsHistory+'/5'],['Vinst totalt',c.eps+'/20'],['P/E',c.peScore+'/20'],['ROE',c.roe+'/5'],['Skuld',c.debt+'/5'],['FCF',c.fcf+'/5']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('')}</div><h3>Poäng som saknas till 100</h3><div class="score-loss">${losses.length?losses.map(([a,b])=>`<div class="loss-item"><small>${a}</small><b>−${b} p</b></div>`).join(''):'<div class="note">Full poäng i samtliga kategorier.</div>'}</div><h3>Historikberäkning</h3><div class="summary"><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt Y-Y':'Median omsättning Q1–Q4'}</small><b>${fmt(c.revMedian)} %</b></div><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt 3 år':'Omsättningstillväxt 3 år'}</small><b>${fmt(num(r.companyType==='investment'?r.ek3y:r.rev3y))} %</b></div><div class="metric"><small>Historikpoäng ${g.toLowerCase()}</small><b>${c.revHistory}/5</b></div><div class="metric"><small>Median vinst Q1–Q4</small><b>${fmt(c.epsMedian)} %</b></div><div class="metric"><small>Vinsttillväxt 3 år</small><b>${fmt(num(r.eps3y))} %</b></div><div class="metric"><small>Historikpoäng vinst</small><b>${c.epsHistory}/5</b></div></div></div>`;document.getElementById('oldPrice').value=r.price||'';document.getElementById('newPrice').value='';document.getElementById('newPe').value='';document.getElementById('peTool').classList.add('hidden');document.getElementById('txDate').value=todayISO();reasonUI();document.getElementById('holdingSummary').innerHTML=[['Antal',fmt(h.shares)],['GAV',fmt(h.avg)],['Realiserat',fmt(h.realized)],['Utdelningar',fmt(h.dividends)],['Courtage',fmt(h.fees)],['Status',h.shares>0?'Ägs':'Ägs inte']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');document.getElementById('historyList').innerHTML=[...(r.history||[])].reverse().map(x=>`<details class="rowcard"><summary><b>${dateFmt(x.savedAt)}</b> · ${x.kind} · ${x.score.total} p</summary><div class="note">${Object.entries(x.raw).map(([k,v])=>`${k}: ${v}`).join(' · ')}</div></details>`).join('')||'Ingen historik';document.getElementById('txList').innerHTML=[...(r.transactions||[])].reverse().map(t=>`<div class="rowcard"><b>${t.date} · ${t.type}</b><br>Antal ${t.qty||'–'} · Pris ${t.price||'–'} · Courtage ${t.fee||'–'} · Utdelning ${t.dividend||'–'}<br><span class="note">${(t.reasons||[]).join(', ')||'–'} · Poäng ${t.scoreAtTransaction?.total??'–'}</span></div>`).join('')||'Inga affärer';document.getElementById('detailModal').classList.add('open')}
 function saveTx(){const r=rows[detailIndex],t={type:document.getElementById('txType').value,date:document.getElementById('txDate').value||todayISO(),qty:document.getElementById('txQty').value,price:document.getElementById('txPrice').value,fee:document.getElementById('txFee').value,dividend:document.getElementById('txDividend').value,reasons:[...document.querySelectorAll('.reasonBox:checked')].map(x=>x.value),scoreAtTransaction:calc(r),savedAt:nowISO()};r.transactions=[...(r.transactions||[]),t];r.updatedAt=nowISO();persist();render();openDetail(detailIndex)}
 function pePreview(){const r=rows[detailIndex],op=num(r.price),ope=num(r.pe),np=num(document.getElementById('newPrice').value),npe=op>0&&Number.isFinite(ope)&&Number.isFinite(np)?ope*np/op:NaN;document.getElementById('newPe').value=Number.isFinite(npe)?npe.toFixed(2):''}
 function savePe(){const r=rows[detailIndex],np=num(document.getElementById('newPrice').value),npe=num(document.getElementById('newPe').value);if(!Number.isFinite(np)||!Number.isFinite(npe))return alert('Fyll i giltig kurs');const u={...r,price:String(np),pe:String(npe),updatedAt:nowISO(),fundamentalUpdatedAt:nowISO()};u.history=[...(r.history||[]),snapshot(u,'Kursjusterad P/E')];rows[detailIndex]=u;persist();render();openDetail(detailIndex)}
@@ -1037,9 +1084,11 @@ setCompanyType(document.getElementById('companyType').value||'regular');
 document.querySelectorAll('.tab[data-tab]').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));ids.forEach(k=>document.getElementById(k).addEventListener('input',renderPreview));
 function refreshAutoYahooSymbol(){document.getElementById('yahooSymbol').value=inferYahooSymbol(document.getElementById('ticker').value,document.getElementById('market').value)}
 document.getElementById('ticker').addEventListener('input',refreshAutoYahooSymbol);
-document.getElementById('market').addEventListener('change',refreshAutoYahooSymbol);document.getElementById('save').onclick=save;document.getElementById('clearForm').onclick=clearForm;document.getElementById('newQuarter').onclick=quarter;document.getElementById('searchAll').oninput=render;document.getElementById('ownershipFilter').onchange=render;document.getElementById('sortField').onchange=render;document.getElementById('topFilter').onchange=renderTop;document.getElementById('developmentSearch').oninput=renderDevelopment;
+document.getElementById('market').addEventListener('change',refreshAutoYahooSymbol);document.getElementById('save').onclick=save;document.getElementById('clearForm').onclick=clearForm;document.getElementById('newQuarter').onclick=quarter;document.getElementById('searchAll').oninput=render;document.getElementById('ownershipFilter').onchange=render;document.getElementById('scoreMarketFilter').onchange=render;document.getElementById('sortField').onchange=render;
+document.getElementById('simpleScoreView').onclick=()=>{scoreView='simple';document.getElementById('simpleScoreView').classList.add('active');document.getElementById('analysisScoreView').classList.remove('active');render()};
+document.getElementById('analysisScoreView').onclick=()=>{scoreView='analysis';document.getElementById('analysisScoreView').classList.add('active');document.getElementById('simpleScoreView').classList.remove('active');render()};document.getElementById('topFilter').onchange=renderTop;document.getElementById('developmentSearch').oninput=renderDevelopment;
 document.getElementById('dashboardSearch').oninput=renderDashboard;
-document.getElementById('dashboardFilter').onchange=renderDashboard;
+document.getElementById('dashboardFilter').onchange=renderDashboard;document.getElementById('dashboardMarket').onchange=renderDashboard;
 document.getElementById('dashboardSort').onchange=renderDashboard;
 document.getElementById('input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&e.target.tagName==='INPUT'){e.preventDefault();save()}});
 
