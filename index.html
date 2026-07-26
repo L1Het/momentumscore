@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v17.0</title>
+<title>MomentumScore v17.1</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -136,6 +136,15 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .plateau-card{padding:12px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.025)}
 .plateau-bar{position:relative;height:16px;border-radius:999px;background:linear-gradient(90deg,rgba(255,138,138,.35),rgba(255,209,102,.4),rgba(72,214,151,.6),rgba(255,209,102,.4),rgba(255,138,138,.35));margin:10px 0}
 .plateau-marker{position:absolute;top:-5px;width:3px;height:26px;background:#fff;border-radius:3px;box-shadow:0 0 6px rgba(255,255,255,.75)}
+.white-score{font-weight:800}
+.white-score-extreme{color:#48d697}
+.white-score-strong{color:#8fd3ff}
+.white-score-interesting{color:#ffd166}
+.white-score-neutral{color:#ffb36b}
+.white-score-weak{color:#ff8a8a}
+.white-score-missing{color:var(--muted)}
+.white-score-chip{display:inline-block;min-width:48px;text-align:center;padding:3px 8px;border-radius:999px;border:1px solid currentColor;background:rgba(255,255,255,.035)}
+
 
 
 
@@ -157,7 +166,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v17.0 – Vit platåmodell</h1>
+<h1>MomentumScore v17.1 – Vit färgskala</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -977,7 +986,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v17.0 – regler och analys</h2>
+<h2>MomentumScore v17.1 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -1015,8 +1024,8 @@ Kursens avstånd till MA200: max 33,33 p · MA50:s avstånd till MA200: max 33,3
 <div class="rowcard"><b>Vit – platåprincip</b><br>
 Full poäng ges i faktorernas historiskt bästa intervall. Utanför intervallet faller poängen mjukt mot noll. Ett extremt högt trendvärde ger därför inte automatiskt högre poäng.</div>
 <div id="whitePlateauRules" class="plateau-grid"></div>
-<div class="rowcard"><b>Vit – bedömning</b><br>
-90–100 = Extremt stark · 80–89,99 = Stark · 70–79,99 = Intressant · 60–69,99 = Neutral · under 60 = Svag. Saknas någon av de tre faktorerna visas Underlag saknas.</div>
+<div class="rowcard"><b>Vit – bedömning och färger</b><br>
+90–100 = Extremt stark (grön) · 80–89,9 = Stark (blå) · 70–79,9 = Intressant (gul) · 60–69,9 = Neutral (orange) · under 60 = Svag (röd). Vit-poängen visas med en decimal. Saknas någon av de tre faktorerna visas Underlag saknas i grått.</div>
 <div class="rowcard"><b>Vit – uppdatering av platåerna</b><br>
 Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gränser kan uppdateras från Intervalloptimeraren. Detta ändrar inte vilka faktorer som används.</div>
 <div class="rowcard"><b>Import och versionskompatibilitet</b><br>Säkerhetskopior från version 6 och 7 kan importeras. Importförlopp och eventuella fel visas direkt bredvid filväljaren. Saknade fält för börs, Yahoo-symbol, teknisk historik och modeller fylls i automatiskt utan att äldre history, marketHistory eller transaktioner tas bort.</div>
@@ -1201,7 +1210,7 @@ function whiteCalc(r){
   const qualified=dataReady;
   const rating=!dataReady?'Underlag saknas':total>=90?'Extremt stark':total>=80?'Stark':total>=70?'Intressant':total>=60?'Neutral':'Svag';
   const warning=missing.length?'Saknar '+missing.join(', '):
-    `Kurs/MA200 ${parts.distanceMa200.toFixed(1)} p · MA50/MA200 ${parts.ma50Spread.toFixed(1)} p · MA200-trend ${parts.ma200Slope1m.toFixed(1)} p`;
+    `Kurs/MA200 ${whitePartText(parts.distanceMa200)} p · MA50/MA200 ${whitePartText(parts.ma50Spread)} p · MA200-trend ${whitePartText(parts.ma200Slope1m)} p`;
   return{
     trend:total,relative:0,fundamental:0,quality:0,valuation:0,total,qualified,dataReady,rating,
     warning,failReasons:missing,parts,technicalValues:t,plateaus:cfg,
@@ -1209,6 +1218,26 @@ function whiteCalc(r){
     ma50:t.ma50,ma200Level:t.ma200Level,golden:Number.isFinite(t.ma50Spread)&&t.ma50Spread>0?3:0
   }
 }
+
+function whiteScoreClass(score,dataReady=true){
+  if(!dataReady||!Number.isFinite(score))return 'white-score-missing';
+  if(score>=90)return 'white-score-extreme';
+  if(score>=80)return 'white-score-strong';
+  if(score>=70)return 'white-score-interesting';
+  if(score>=60)return 'white-score-neutral';
+  return 'white-score-weak'
+}
+function whiteScoreText(score){
+  return Number.isFinite(score)?score.toFixed(1).replace('.',','):'–'
+}
+function whiteScoreHtml(score,dataReady=true,chip=false){
+  const cls=whiteScoreClass(score,dataReady);
+  return `<span class="white-score ${cls}${chip?' white-score-chip':''}">${whiteScoreText(score)}</span>`
+}
+function whitePartText(value){
+  return Number.isFinite(value)?value.toFixed(1).replace('.',','):'–'
+}
+
 function updateWhitePlateausFromIntervals(){
   if(!lastIntervalReport?.results?.length)return alert('Kör Intervalloptimeraren först, eller behåll standardplatåerna.');
   const cfg=loadWhitePlateaus();
