@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v8.1</title>
+<title>MomentumScore v9.0</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -105,6 +105,11 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .autolab-progress>div{height:100%;width:0%;background:linear-gradient(90deg,#4ca6ff,#48d697);transition:width .2s}
 .autolab-grade{font-weight:800}
 .autolab-a{color:#48d697}.autolab-b{color:#8fd3ff}.autolab-c{color:#ffd166}.autolab-d{color:#ff8a8a}
+.optimizer-progress{height:14px;background:rgba(255,255,255,.07);border-radius:999px;overflow:hidden;border:1px solid var(--line)}
+.optimizer-progress>div{height:100%;width:0%;background:linear-gradient(90deg,#9d7cff,#4ca6ff,#48d697);transition:width .15s}
+.optimizer-winner{outline:2px solid rgba(157,124,255,.65);background:rgba(157,124,255,.08)}
+.weight-pill{display:inline-block;padding:3px 7px;border:1px solid var(--line);border-radius:999px;margin:2px;font-size:12px}
+
 
 
 .lab-table td.wrap{white-space:normal;min-width:240px;text-align:left}
@@ -115,7 +120,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v8.1 – AutoLab</h1>
+<h1>MomentumScore v9.0 – Modelloptimerare</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -496,6 +501,84 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
     <div class="tablewrap"><table id="autoLabComboTable" class="lab-table"></table></div>
   </div>
 
+  <div class="card">
+    <h2>Vit Optimizer – hitta bästa faktorkombinationen</h2>
+    <p class="note">Optimeraren testar alla faktorurval med 2–5 faktorer och flera objektiva viktkombinationer. Varje modell väljer historiskt de 20 procent starkaste observationerna och jämför dem med hela universumet. Resultatet ändrar inte Vit automatiskt.</p>
+    <div class="lab-grid">
+      <div>
+        <label>Faktorer får ingå om robusthet är</label>
+        <select id="optimizerMinGrade">
+          <option value="A">Endast A</option>
+          <option value="B" selected>A eller B</option>
+          <option value="C">A, B eller C</option>
+        </select>
+      </div>
+      <div>
+        <label>Minsta antal faktorer</label>
+        <select id="optimizerMinFactors">
+          <option value="2" selected>2</option>
+          <option value="3">3</option>
+        </select>
+      </div>
+      <div>
+        <label>Högsta antal faktorer</label>
+        <select id="optimizerMaxFactors">
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5" selected>5</option>
+        </select>
+      </div>
+      <div>
+        <label>Urval av observationer</label>
+        <select id="optimizerTopShare">
+          <option value="0.10">Topp 10 %</option>
+          <option value="0.20" selected>Topp 20 %</option>
+          <option value="0.30">Topp 30 %</option>
+        </select>
+      </div>
+      <div>
+        <label>Minsta observationer i vald grupp</label>
+        <select id="optimizerMinSelectedObs">
+          <option value="25">25</option>
+          <option value="40" selected>40</option>
+          <option value="60">60</option>
+        </select>
+      </div>
+      <div>
+        <label>Max vikt per faktor</label>
+        <select id="optimizerMaxWeight">
+          <option value="1">Alla lika</option>
+          <option value="2" selected>1–2</option>
+          <option value="3">1–3</option>
+        </select>
+      </div>
+    </div>
+    <div class="actions" style="margin-top:12px">
+      <button id="runOptimizer">Optimera Vit</button>
+      <button class="secondary" id="exportOptimizerJson">Exportera optimering JSON</button>
+      <button class="secondary" id="applyOptimizerDraft">Skapa regelutkast för Vit</button>
+    </div>
+    <div class="optimizer-progress" style="margin-top:12px"><div id="optimizerProgressBar"></div></div>
+    <div id="optimizerStatus" class="note" style="margin-top:8px">Kör AutoLab först. Därefter kan Vit optimeras.</div>
+  </div>
+
+  <div id="optimizerSummary" class="summary"></div>
+
+  <div class="card">
+    <h3>Bästa modeller</h3>
+    <div class="tablewrap"><table id="optimizerTable" class="lab-table"></table></div>
+  </div>
+
+  <div class="card">
+    <h3>Vinnande modell – detalj</h3>
+    <div id="optimizerWinnerDetail" class="note">Ingen optimering körd.</div>
+  </div>
+
+  <div class="card">
+    <h3>Regelutkast för Vit</h3>
+    <div id="optimizerDraft" class="note">När optimeringen är klar kan ett regelutkast skapas. Inga regler ändras automatiskt.</div>
+  </div>
+
   <div id="labSummary" class="summary"></div>
 
   <div class="card">
@@ -548,7 +631,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v8.1 – regler och analys</h2>
+<h2>MomentumScore v9.0 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -593,6 +676,7 @@ Dessutom krävs minst 263 handelsdagar för både aktien och jämförelseindex.<
 <div class="rowcard"><b>Vit – Värdering, max 10 p</b><br>Mot vart och ett av 3- och 5-årssnitten: vid eller under snittet 5 p · högst 10 % över 4 p · högst 20 % över 2 p · högst 35 % över 1 p · mer än 35 % över 0 p.</div>
 <div class="rowcard"><b>Vit – poäng innan indexdata finns</b><br>Vit består av 75 poäng från aktie- och rapportdata samt 25 poäng relativ styrka. Om jämförelseindex saknas visas därför en preliminär poäng med en asterisk, exempelvis 67*. Bolaget markeras då som Underlag saknas – inte Ej kvalificerat. Efter kursuppdatering eller import av en komplett v7.6-säkerhetskopia räknas hela 100-poängsmodellen.</div>
 <div class="rowcard"><b>Vit – Bedömning</b><br>90–100 = Mycket stark · 80–89 = Stark · 70–79 = Bevakning · under 70 = Avstå. Ett brutet grundkrav ger alltid Ej kvalificerad.</div>
+<div class="rowcard"><b>Vit Optimizer</b><br>Optimeraren testar alla faktorurval med 2–5 faktorer och objektiva heltalsvikter. Den rangordnar historiska observationer, väljer de starkaste 10–30 procenten och bedömer medianavkastning, överavkastning, träffsäkerhet, nedgångsrisk och bolagskoncentration. Den ändrar inte Vit automatiskt och resultatet måste granskas för överanpassning.</div>
 <div class="rowcard"><b>AutoLab</b><br>AutoLab kör samtliga tekniska faktorer automatiskt för både absolut avkastning och överavkastning mot index. Robusthetsbetyget väger observationer, antal bolag, förbättring mot basnivån, träffsäkerhet, nedgångsrisk och stöd i angränsande deciler. AutoLab ändrar aldrig Blå eller Vit automatiskt.</div>
 <div class="rowcard"><b>Analyslaboratoriet</b><br>Laboratoriet beräknar historiska tekniska faktorer utan framtidsläcka och jämför dem med avkastning 1, 3, 6 eller 12 månader senare. Standardläget använder deciler, alltså tio lika stora observationsgrupper, och visar även hur ofta varje grupp slog index. Resultaten är beslutsunderlag och ändrar inte Blå eller Vit automatiskt. Fundamentala faktorer kan inte backtestas korrekt förrän rapportdata finns sparad med historiska publiceringsdatum.</div>
 <div class="rowcard"><b>Import och versionskompatibilitet</b><br>Säkerhetskopior från version 6 och 7 kan importeras. Importförlopp och eventuella fel visas direkt bredvid filväljaren. Saknade fält för börs, Yahoo-symbol, teknisk historik och modeller fylls i automatiskt utan att äldre history, marketHistory eller transaktioner tas bort.</div>
@@ -1286,6 +1370,7 @@ function quarter(){
 let lastLaboratoryResult=null;
 let lastAutoLabReport=null;
 let lastCombinationResult=null;
+let lastOptimizerReport=null;
 
 function labMedian(values){
   const a=values.filter(Number.isFinite).slice().sort((x,y)=>x-y);
@@ -1910,6 +1995,258 @@ function exportAutoLabCsv(){
   downloadTextFile(csv,`MomentumScore_AutoLab_summary_${todayISO()}.csv`,'text/csv;charset=utf-8')
 }
 
+
+function optimizerGradeAllowed(grade,minGrade){
+  const rank={A:3,B:2,C:1,D:0};
+  return (rank[grade]??0)>=(rank[minGrade]??0)
+}
+function combinations(arr,k){
+  const out=[];
+  function rec(start,pick){
+    if(pick.length===k){out.push(pick.slice());return}
+    for(let i=start;i<=arr.length-(k-pick.length);i++){
+      pick.push(arr[i]);rec(i+1,pick);pick.pop()
+    }
+  }
+  rec(0,[]);
+  return out
+}
+function weightVectors(k,maxWeight){
+  const out=[],v=Array(k).fill(1);
+  function rec(i){
+    if(i===k){
+      const min=Math.min(...v);
+      if(min===1)out.push(v.slice()); // remove scale-duplicates like [2,2]
+      return
+    }
+    for(let w=1;w<=maxWeight;w++){v[i]=w;rec(i+1)}
+  }
+  rec(0);
+  return out
+}
+function optimizerFactorReports(){
+  if(!lastAutoLabReport)return [];
+  const minGrade=document.getElementById('optimizerMinGrade').value;
+  return lastAutoLabReport.reports
+    .filter(r=>r.target==='absolute'&&r.best&&optimizerGradeAllowed(r.robustness.grade,minGrade))
+    .sort((a,b)=>b.robustness.score-a.robustness.score)
+}
+function buildOptimizerDataset(factorReports){
+  const factorData={};
+  for(const report of factorReports){
+    const factor=report.factor;
+    const data=withLabSettings({
+      labFactor:factor,
+      labHorizon:lastAutoLabReport.settings.horizon,
+      labSample:lastAutoLabReport.settings.step,
+      labTarget:'absolute',
+      labUniverse:'all',
+      labMinObs:lastAutoLabReport.settings.minObs,
+      labGrouping:'deciles'
+    },()=>buildLaboratoryObservations());
+    factorData[factor]=data;
+  }
+
+  const map=new Map();
+  for(const [factor,data] of Object.entries(factorData)){
+    for(const o of data.obs){
+      const key=comboObservationKey(o);
+      if(!map.has(key))map.set(key,{
+        ticker:o.ticker,company:o.company,date:o.date,
+        futureReturn:o.futureReturn,relativeReturn:o.relativeReturn,maxDrawdown:o.maxDrawdown,
+        values:{}
+      });
+      map.get(key).values[factor]=o.factorValue;
+    }
+  }
+  const factors=factorReports.map(r=>r.factor);
+  const rowsAll=[...map.values()].filter(o=>factors.every(f=>Number.isFinite(o.values[f])));
+  return{factors,rows:rowsAll}
+}
+function factorSignal(value,report){
+  const groups=report.groups.filter(g=>g.eligible&&Number.isFinite(g.median));
+  if(!groups.length)return 0;
+  const sorted=groups.slice().sort((a,b)=>a.median-b.median);
+  const found=groups.find(g=>value>=g.lo&&value<=g.hi);
+  if(!found)return 0;
+  const idx=sorted.indexOf(found);
+  return sorted.length<=1?1:idx/(sorted.length-1);
+}
+function evaluateOptimizerModel(dataset,reportsByFactor,subset,weights,topShare,minSelectedObs){
+  const scored=dataset.rows.map(o=>{
+    let score=0,totalW=0;
+    subset.forEach((f,i)=>{
+      const w=weights[i],sig=factorSignal(o.values[f],reportsByFactor[f]);
+      score+=sig*w;totalW+=w
+    });
+    return{...o,modelScore:totalW?score/totalW:0}
+  }).sort((a,b)=>b.modelScore-a.modelScore);
+
+  const selectedCount=Math.max(minSelectedObs,Math.floor(scored.length*topShare));
+  if(scored.length<selectedCount||selectedCount<minSelectedObs)return null;
+  const selected=scored.slice(0,selectedCount);
+  const returns=selected.map(o=>o.futureReturn),drawdowns=selected.map(o=>o.maxDrawdown);
+  const rel=selected.filter(o=>Number.isFinite(o.relativeReturn));
+  const allReturns=scored.map(o=>o.futureReturn);
+  const baselineMedian=labMedian(allReturns);
+  const median=labMedian(returns),mean=labMean(returns);
+  const beatIndex=rel.length?rel.filter(o=>o.relativeReturn>0).length/rel.length*100:NaN;
+  const positive=selected.length?selected.filter(o=>o.futureReturn>0).length/selected.length*100:NaN;
+  const medianDrawdown=labMedian(drawdowns);
+  const companies=new Set(selected.map(o=>o.ticker)).size;
+  const improvement=median-baselineMedian;
+  const concentration=selected.length?Math.max(...Object.values(selected.reduce((acc,o)=>(acc[o.ticker]=(acc[o.ticker]||0)+1,acc),{})))/selected.length*100:100;
+
+  // Objective: reward median improvement and hit rate; penalize drawdown and concentration.
+  const objective=
+    improvement*2.4 +
+    (Number.isFinite(beatIndex)?beatIndex-50:0)*0.45 +
+    (positive-50)*0.20 +
+    Math.max(-20,medianDrawdown)*0.25 -
+    Math.max(0,concentration-15)*0.5;
+
+  return{
+    subset,weights,selectedCount,totalObs:scored.length,companies,median,mean,baselineMedian,
+    improvement,beatIndex,positive,medianDrawdown,
+    worstDrawdown:selected.length?Math.min(...drawdowns.filter(Number.isFinite)):NaN,
+    concentration,objective,
+    topObservations:selected.slice(0,30).map(o=>({
+      ticker:o.ticker,company:o.company,date:o.date,modelScore:o.modelScore,
+      futureReturn:o.futureReturn,relativeReturn:o.relativeReturn,maxDrawdown:o.maxDrawdown
+    }))
+  }
+}
+async function runOptimizer(){
+  if(!lastAutoLabReport)return alert('Kör AutoLab först.');
+  const button=document.getElementById('runOptimizer'),status=document.getElementById('optimizerStatus'),bar=document.getElementById('optimizerProgressBar');
+  const reports=optimizerFactorReports();
+  const minF=Number(document.getElementById('optimizerMinFactors').value);
+  const maxF=Math.min(Number(document.getElementById('optimizerMaxFactors').value),reports.length);
+  const topShare=Number(document.getElementById('optimizerTopShare').value);
+  const minSelectedObs=Number(document.getElementById('optimizerMinSelectedObs').value);
+  const maxWeight=Number(document.getElementById('optimizerMaxWeight').value);
+
+  if(reports.length<minF)return alert(`För få faktorer med vald robusthet. Tillgängliga: ${reports.length}.`);
+  button.disabled=true;button.textContent='Optimerar…';bar.style.width='0%';
+
+  try{
+    status.textContent='Bygger gemensamt historiskt dataset…';
+    await new Promise(r=>setTimeout(r,20));
+    const dataset=buildOptimizerDataset(reports);
+    const reportsByFactor=Object.fromEntries(reports.map(r=>[r.factor,r]));
+
+    const jobs=[];
+    for(let k=minF;k<=maxF;k++){
+      for(const subset of combinations(reports.map(r=>r.factor),k)){
+        for(const weights of weightVectors(k,maxWeight))jobs.push({subset,weights})
+      }
+    }
+    if(!jobs.length)throw new Error('Inga modellkombinationer skapades.');
+
+    const results=[];
+    for(let i=0;i<jobs.length;i++){
+      const job=jobs[i];
+      const result=evaluateOptimizerModel(dataset,reportsByFactor,job.subset,job.weights,topShare,minSelectedObs);
+      if(result)results.push(result);
+      if(i%25===0){
+        bar.style.width=`${(i+1)/jobs.length*100}%`;
+        status.textContent=`Testar modell ${i+1} av ${jobs.length}…`;
+        await new Promise(r=>setTimeout(r,0))
+      }
+    }
+    results.sort((a,b)=>b.objective-a.objective);
+    lastOptimizerReport={
+      format:'MomentumScoreOptimizer',
+      version:'9.0',
+      createdAt:new Date().toISOString(),
+      settings:{
+        minGrade:document.getElementById('optimizerMinGrade').value,minF,maxF,topShare,minSelectedObs,maxWeight,
+        horizon:lastAutoLabReport.settings.horizon,step:lastAutoLabReport.settings.step
+      },
+      availableFactors:reports.map(r=>({
+        factor:r.factor,grade:r.robustness.grade,robustness:r.robustness.score,best:r.best
+      })),
+      testedModels:jobs.length,
+      validModels:results.length,
+      winners:results.slice(0,50)
+    };
+    renderOptimizer(lastOptimizerReport);
+    bar.style.width='100%';
+    status.textContent=`Optimering klar. ${jobs.length} modeller testades; ${results.length} hade tillräckligt underlag.`;
+  }catch(e){
+    console.error(e);status.textContent='Optimeringen misslyckades: '+e.message
+  }finally{
+    button.disabled=false;button.textContent='Optimera Vit'
+  }
+}
+function renderOptimizer(report){
+  const winner=report.winners[0];
+  document.getElementById('optimizerSummary').innerHTML=[
+    ['Testade modeller',report.testedModels],['Giltiga modeller',report.validModels],
+    ['Vinnande faktorer',winner?.subset.length||0],
+    ['Median 6 mån',winner?signed(winner.median,' %'):'–'],
+    ['Förbättring mot bas',winner?signed(winner.improvement,' p.e.'):'–'],
+    ['Slår index',winner&&Number.isFinite(winner.beatIndex)?fmt(winner.beatIndex)+' %':'–']
+  ].map(([a,b])=>`<div class="metric"><small>${a}</small><b style="${String(b).length>16?'font-size:14px':''}">${b}</b></div>`).join('');
+
+  document.getElementById('optimizerTable').innerHTML='<tr><th>Rank</th><th>Faktorer och vikter</th><th>Valda obs.</th><th>Bolag</th><th>Median</th><th>Basmedian</th><th>Förbättring</th><th>Slår index</th><th>Positiva</th><th>Median nedgång</th><th>Koncentration</th><th>Optimeringsvärde</th></tr>'+
+    report.winners.slice(0,25).map((r,i)=>`<tr class="${i===0?'optimizer-winner':''}">
+      <td>${i+1}</td>
+      <td class="wrap">${r.subset.map((f,j)=>`<span class="weight-pill">${autoLabFactorLabel(f)} ×${r.weights[j]}</span>`).join('')}</td>
+      <td>${r.selectedCount}/${r.totalObs}</td><td>${r.companies}</td>
+      <td><b>${signed(r.median,' %')}</b></td><td>${signed(r.baselineMedian,' %')}</td>
+      <td class="${classByValue(r.improvement)}"><b>${signed(r.improvement,' p.e.')}</b></td>
+      <td>${Number.isFinite(r.beatIndex)?fmt(r.beatIndex)+' %':'–'}</td><td>${fmt(r.positive)} %</td>
+      <td>${signed(r.medianDrawdown,' %')}</td><td>${fmt(r.concentration)} %</td><td>${fmt(r.objective)}</td>
+    </tr>`).join('');
+
+  if(winner){
+    document.getElementById('optimizerWinnerDetail').innerHTML=`
+      <div class="summary">
+        <div class="metric"><small>Faktorer</small><b>${winner.subset.length}</b></div>
+        <div class="metric"><small>Valda observationer</small><b>${winner.selectedCount}</b></div>
+        <div class="metric"><small>Unika bolag</small><b>${winner.companies}</b></div>
+        <div class="metric"><small>Medianavkastning</small><b>${signed(winner.median,' %')}</b></div>
+        <div class="metric"><small>Träff mot index</small><b>${fmt(winner.beatIndex)} %</b></div>
+        <div class="metric"><small>Median max nedgång</small><b>${signed(winner.medianDrawdown,' %')}</b></div>
+      </div>
+      <div class="rowcard"><b>Vikter</b><br>${winner.subset.map((f,i)=>`${autoLabFactorLabel(f)}: ${winner.weights[i]}`).join(' · ')}</div>
+      <div class="rowcard"><b>Tolkning</b><br>Modellen rangordnar varje historisk observation efter var den låg i faktorernas historiskt bästa och sämsta deciler. De högst rankade ${Math.round(report.settings.topShare*100)} procenten jämförs sedan med hela universumet.</div>`;
+  }
+}
+function exportOptimizerJson(){
+  if(!lastOptimizerReport)return alert('Kör optimeringen först.');
+  downloadTextFile(JSON.stringify(lastOptimizerReport,null,2),`MomentumScore_Optimizer_${todayISO()}.json`,'application/json;charset=utf-8')
+}
+function buildOptimizerDraft(){
+  if(!lastOptimizerReport?.winners?.length)return alert('Kör optimeringen först.');
+  const w=lastOptimizerReport.winners[0];
+  const totalWeight=w.weights.reduce((a,b)=>a+b,0);
+  const points=w.weights.map(x=>Math.round(x/totalWeight*50));
+  // Correct rounding to exactly 50 technical points.
+  let diff=50-points.reduce((a,b)=>a+b,0);
+  if(diff!==0)points[0]+=diff;
+
+  const lines=w.subset.map((f,i)=>{
+    const report=lastAutoLabReport.reports.find(r=>r.target==='absolute'&&r.factor===f);
+    return `<tr><td><b>${autoLabFactorLabel(f)}</b></td><td>${points[i]} p</td><td>${report?.best?.rangeLabel||'Datadriven decilskala'}</td><td>Vikt ${w.weights[i]}</td></tr>`
+  }).join('');
+
+  document.getElementById('optimizerDraft').innerHTML=`
+    <div class="status ok"><b>Utkast – teknisk del av Vit: 50 poäng</b></div>
+    <div class="tablewrap"><table><tr><th>Faktor</th><th>Maxpoäng</th><th>Högsta poängzon</th><th>Optimeringsvikt</th></tr>${lines}</table></div>
+    <div class="rowcard"><b>Föreslagen struktur för hela Vit</b><br>
+      Teknisk/marknadsbaserad del: 50 p enligt tabellen.<br>
+      Fundamental utveckling: 25 p.<br>
+      Kvalitet: 15 p.<br>
+      Värdering: 10 p.
+    </div>
+    <div class="rowcard"><b>Grundkrav</b><br>
+      Behåll tills vidare kurs över MA200 och positiv MA200-trend som riskfilter endast om en separat filteranalys visar att de förbättrar utfallet. Relativ styrka och positiv fundamental utveckling ska inte vara hårda krav utan testas som poängfaktorer.
+    </div>
+    <div class="note">Detta är endast ett regelutkast. Det skriver inte om Vit-modellens kod.</div>`;
+}
+
 function toggleLaboratoryMode(){
   const combo=document.getElementById('labMode').value==='combo';
   document.getElementById('labSingleFactorControl').classList.toggle('hidden',combo);
@@ -2393,6 +2730,9 @@ document.getElementById('importFile').addEventListener('change',async e=>{
     input.value='';
   }
 });
+document.getElementById('runOptimizer').onclick=runOptimizer;
+document.getElementById('exportOptimizerJson').onclick=exportOptimizerJson;
+document.getElementById('applyOptimizerDraft').onclick=buildOptimizerDraft;
 document.getElementById('runAutoLab').onclick=runAutoLab;
 document.getElementById('exportAutoLabJson').onclick=exportAutoLabJson;
 document.getElementById('exportAutoLabCsv').onclick=exportAutoLabCsv;
