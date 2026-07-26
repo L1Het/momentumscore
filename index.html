@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v19.1</title>
+<title>MomentumScore v19.2</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -196,7 +196,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v19.1 – portföljläge i Utveckling</h1>
+<h1>MomentumScore v19.2 – daglig översikt</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -219,11 +219,19 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
       <div><label>Poäng och status</label><select id="dashboardModel"><option value="blue">🔵 Blå</option><option value="white">⚪ Vit</option><option value="average" selected>🟣 Snitt</option></select></div>
       <div><label>Visa</label><select id="dashboardFilter"><option value="all">Alla</option><option value="qualified">Kvalificerade</option><option value="owned">Ägs nu</option><option value="strong">80+ poäng</option></select></div>
       <div><label>Börs</label><select id="dashboardMarket"><option value="all">Alla nordiska</option><option value="SE">Stockholm</option><option value="DK">Köpenhamn</option><option value="NO">Oslo</option><option value="FI">Helsingfors</option><option value="IS">Reykjavik</option></select></div>
-      <div><label>Sortering</label><select id="dashboardSort"><option value="score">Poäng</option><option value="scoreChange">Poängförändring</option><option value="ma200">Kurs/MA200</option><option value="rsi">RSI</option><option value="company">Bolag</option></select></div>
+      <div><label>Sortering</label><select id="dashboardSort">
+        <option value="score">Vald poäng</option>
+        <option value="deltaBlue">Δ Blå dag</option>
+        <option value="deltaWhite">Δ Vit dag</option>
+        <option value="deltaAverage">Δ Snitt dag</option>
+        <option value="price1">Kurs 1 dag</option>
+        <option value="rsi">RSI</option>
+        <option value="company">Bolag</option>
+      </select></div>
     </div>
   </div>
   <div class="card tablewrap"><table id="dashboardTable" class="dashboard-table"></table></div>
-  <p class="note">Detta är den förenklade dagliga vyn. Stockholm är standard för nya bolag. Klicka på ett bolag för full analys, poängförklaring, historik och transaktioner.</p>
+  <p class="note">Den dagliga översikten visar aktuell Blå-, Vit- och Snittpoäng, förändringen mot föregående sparade handelsdag samt kursutvecklingen senaste handelsdagen. Positiva förändringar visas grönt, negativa rött och exakt noll neutralt.</p>
 </section>
 
 <section id="input" class="panel">
@@ -1115,7 +1123,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v19.1 – regler och analys</h2>
+<h2>MomentumScore v19.2 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -1153,6 +1161,8 @@ Kursens avstånd till MA200: max 33,33 p · MA50:s avstånd till MA200: max 33,3
 <div class="rowcard"><b>Vit – platåprincip</b><br>
 Full poäng ges i faktorernas historiskt bästa intervall. Utanför intervallet faller poängen mjukt mot noll. Ett extremt högt trendvärde ger därför inte automatiskt högre poäng.</div>
 <div id="whitePlateauRules" class="plateau-grid"></div>
+<div class="rowcard"><b>Daglig översikt</b><br>
+Översikten visar Blå, Vit och Snitt tillsammans med respektive poängförändring mot föregående sparade handelsdag. Kursutvecklingen senaste handelsdagen visas i procent. Själva siffran är grön över noll, röd under noll och neutral vid exakt noll. Kurs/MA200 och MA200-trend 3 månader visas inte längre i översikten.</div>
 <div class="rowcard"><b>Portföljläge i Utveckling</b><br>
 Utveckling kan växlas mellan Aktier och Veckoportföljer. Portföljläget visar varje sparad veckas Blå-, Vit- och Snittportfölj, avkastning mot index, antal vinnare samt bästa och sämsta innehav. En klickbar detaljvy visar samtliga tio aktier.</div>
 <div class="rowcard"><b>Veckoportföljer</b><br>
@@ -1553,6 +1563,42 @@ function listRows(){
 }
 
 
+
+function previousDistinctMarketDayPoint(r){
+  const hist=(Array.isArray(r.marketHistory)?r.marketHistory:[])
+    .filter(p=>p&&p.savedAt)
+    .slice()
+    .sort((a,b)=>new Date(a.savedAt)-new Date(b.savedAt));
+  if(!hist.length)return null;
+  const latestDate=String(hist[hist.length-1].savedAt).slice(0,10);
+  for(let i=hist.length-1;i>=0;i--){
+    if(String(hist[i].savedAt).slice(0,10)<latestDate)return hist[i]
+  }
+  return null
+}
+function dailyScoreDeltas(r,blue,white,average){
+  const prev=previousDistinctMarketDayPoint(r);
+  if(!prev)return{blue:NaN,white:NaN,average:NaN};
+  const prevBlue=num(prev.blueScore??prev.score);
+  const prevWhite=num(prev.whiteScore);
+  const prevAverage=Number.isFinite(prevBlue)&&Number.isFinite(prevWhite)?(prevBlue+prevWhite)/2:NaN;
+  return{
+    blue:Number.isFinite(prevBlue)&&Number.isFinite(blue.total)?blue.total-prevBlue:NaN,
+    white:Number.isFinite(prevWhite)&&white.dataReady&&Number.isFinite(white.total)?white.total-prevWhite:NaN,
+    average:Number.isFinite(prevAverage)&&Number.isFinite(average)?average-prevAverage:NaN
+  }
+}
+function dailyDeltaText(v){
+  if(!Number.isFinite(v))return '–';
+  if(Math.abs(v)<0.0000001)return '0,0';
+  return `${v>0?'+':''}${v.toFixed(1).replace('.',',')}`
+}
+function dailyPriceText(v){
+  if(!Number.isFinite(v))return '–';
+  if(Math.abs(v)<0.0000001)return '0,00 %';
+  return `${v>0?'+':''}${v.toFixed(2).replace('.',',')} %`
+}
+
 function renderDashboard(){
   const table=document.getElementById('dashboardTable');if(!table)return;
   const q=(document.getElementById('dashboardSearch')?.value||'').toLowerCase();
@@ -1561,7 +1607,12 @@ function renderDashboard(){
   const market=document.getElementById('dashboardMarket')?.value||'all';
   const sort=document.getElementById('dashboardSort')?.value||'score';
 
-  let list=rows.map((r,i)=>({r,i,s:selectedModelValues(r,model),h:holdings(r),m:developmentMetrics(r)}));
+  let list=rows.map((r,i)=>{
+    const blue=calc(r),white=whiteCalc(r),average=averageScoreFromResults(blue,white);
+    const s=selectedModelValues(r,model),m=developmentMetrics(r);
+    return{r,i,s,h:holdings(r),m,blue,white,average,deltas:dailyScoreDeltas(r,blue,white,average)}
+  });
+
   if(q)list=list.filter(x=>`${x.r.ticker||''} ${x.r.company||''}`.toLowerCase().includes(q));
   if(market!=='all')list=list.filter(x=>(x.r.market||'SE')===market);
   if(filter==='qualified')list=list.filter(x=>x.s.qualified);
@@ -1569,11 +1620,14 @@ function renderDashboard(){
   if(filter==='strong')list=list.filter(x=>x.s.dataReady&&x.s.score>=80);
 
   list.sort((a,b)=>{
+    const descending=(bv,av)=>(Number.isFinite(bv)?bv:-Infinity)-(Number.isFinite(av)?av:-Infinity);
     if(sort==='company')return (a.r.company||'').localeCompare(b.r.company||'','sv');
-    if(sort==='ma200')return num(b.r.ma200)-num(a.r.ma200);
-    if(sort==='rsi')return num(b.r.rsi14)-num(a.r.rsi14);
-    if(sort==='scoreChange')return modelHistoryDelta(b.r,model,b.s.score)-modelHistoryDelta(a.r,model,a.s.score);
-    return (Number.isFinite(b.s.score)?b.s.score:-Infinity)-(Number.isFinite(a.s.score)?a.s.score:-Infinity)
+    if(sort==='rsi')return descending(num(b.r.rsi14),num(a.r.rsi14));
+    if(sort==='deltaBlue')return descending(b.deltas.blue,a.deltas.blue);
+    if(sort==='deltaWhite')return descending(b.deltas.white,a.deltas.white);
+    if(sort==='deltaAverage')return descending(b.deltas.average,a.deltas.average);
+    if(sort==='price1')return descending(b.m.price1,a.m.price1);
+    return descending(b.s.score,a.s.score)
   });
 
   const settings=loadMarketSettings(),modelName=model==='blue'?'Blå':model==='white'?'Vit':'Snitt';
@@ -1586,21 +1640,34 @@ function renderDashboard(){
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b style="${typeof b==='string'?'font-size:15px':''}">${b}</b></div>`).join('');
 
   table.innerHTML='<tr>'+[
-    'Ticker','Bolag','Börs','🔵 Blå','⚪ Vit','🟣 Snitt','Status','Kurs','1 dag','Kurs/MA200','MA200 3m','RSI','Ägs','Marknadsdata'
+    'Ticker','Bolag','Börs',
+    '🔵 Blå','Δ🔵 dag',
+    '⚪ Vit','Δ⚪ dag',
+    '🟣 Snitt','Δ🟣 dag',
+    'Status','Kurs','1 dag %','RSI','Ägs','Marknadsdata'
   ].map(x=>`<th>${x}</th>`).join('')+'</tr>'+
   list.map(x=>`<tr class="dashboard-row ${scoreRowClass(x.s.score,x.s.dataReady)}" data-i="${x.i}">
-    <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td><td>${marketLabel(x.r.market||'SE')}</td>
-    <td class="model-blue">${blueScoreHtml(x.s.b.total,true)}</td>
-    <td class="model-white">${whiteScoreHtml(x.s.w.total,x.s.w.dataReady,true)}</td>
-    <td>${modelScoreHtml(x.s.average,'average',x.s.w.dataReady,true)}</td>
+    <td>${x.r.ticker||''}</td>
+    <td>${x.r.company||''}</td>
+    <td>${marketLabel(x.r.market||'SE')}</td>
+
+    <td class="model-blue">${blueScoreHtml(x.blue.total,true)}</td>
+    <td class="${classByValue(x.deltas.blue)}"><b>${dailyDeltaText(x.deltas.blue)}</b></td>
+
+    <td class="model-white">${whiteScoreHtml(x.white.total,x.white.dataReady,true)}</td>
+    <td class="${classByValue(x.deltas.white)}"><b>${dailyDeltaText(x.deltas.white)}</b></td>
+
+    <td>${modelScoreHtml(x.average,'average',x.white.dataReady,true)}</td>
+    <td class="${classByValue(x.deltas.average)}"><b>${dailyDeltaText(x.deltas.average)}</b></td>
+
     <td class="${scoreStatusClass(x.s.score,x.s.dataReady)}">${x.s.rating}</td>
     <td>${fmt(num(x.r.price))}</td>
-    <td class="${classByValue(x.m.price1)}"><b>${signed(x.m.price1,' %')}</b></td>
-    <td>${signed(num(x.r.ma200),' %')}</td>
-    <td class="${classByValue(num(x.r.ma3m))}">${signed(num(x.r.ma3m),' %')}</td>
-    <td class="${rsiClass(num(x.r.rsi14))}">${fmt(num(x.r.rsi14))}</td><td>${x.h.shares>0?'Ja':'Nej'}</td>
+    <td class="${classByValue(x.m.price1)}"><b>${dailyPriceText(x.m.price1)}</b></td>
+    <td class="${rsiClass(num(x.r.rsi14))}">${fmt(num(x.r.rsi14))}</td>
+    <td>${x.h.shares>0?'Ja':'Nej'}</td>
     <td class="${ageClass(x.r.marketUpdatedAt||x.r.technicalSourceDate)}">${ageText(x.r.marketUpdatedAt||x.r.technicalSourceDate)}</td>
   </tr>`).join('');
+
   document.querySelectorAll('.dashboard-row').forEach(tr=>tr.onclick=()=>openDetail(Number(tr.dataset.i)));
 }
 function render(){
