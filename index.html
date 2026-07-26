@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v6.12.4</title>
+<title>MomentumScore v6.12.3</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -86,7 +86,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v6.12.4 – snabb dagsuppdatering</h1>
+<h1>MomentumScore v6.12.3 – smart kurshistorik</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -274,7 +274,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v6.12.4 – samtliga regler</h2>
+<h2>MomentumScore v6.12.3 – samtliga regler</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -323,7 +323,7 @@ Under 1,0 = 5 p · 1,0–2,0 = 4 p · över 2,0 till 3,0 = 2 p · över 3,0 = 0 
   <div id="databaseHealth" class="note" style="margin-top:10px">Ingen kontroll har körts.</div>
 </div>
 <p class="note"><b>Uppdateras:</b> aktiekurs, MA200-nivå, avstånd till MA200, MA200-trend 1 vecka, 1 månad och 3 månader samt RSI 14. Trenderna räknas från verkliga dagliga stängningskurser. P/E och rapportdata ändras inte. Kurs, Kurs/MA200, RSI 14 och totalpoäng sparas i historiken vid varje lyckad uppdatering. Innan varje massuppdatering skapas dessutom en lokal säkerhetskopia. Versionsmigrering lägger bara till saknade fält och bevarar befintliga listor, och uppdateringen avbryts automatiskt om någon äldre historik skulle saknas. Automatisk uppdatering sker endast när sidan är öppen eller öppnas – en lokal HTML-fil kan inte arbeta i bakgrunden när den är stängd.</p>
-<p class="note">Sverige är standard. Välj Danmark, Norge, Finland eller Island när du matar in ett nordiskt bolag. Yahoo-symbolen får då rätt suffix automatiskt, exempelvis NOVO B → NOVO-B.CO, EQNR → EQNR.OL och NOKIA → NOKIA.HE. När ett bolag saknar minst 263 handelsdagar hämtar Yahoo två års grundhistorik. Därefter begär appen ett mycket litet femdagarsfönster men sparar bara den senaste tillgängliga kursen och slår ihop den med den lokala historiken. Appen lagrar de senaste 400 handelsdagarna och räknar själv MA200 och MA200-trenderna. Om Yahoos sista dagscandle är null används meta.regularMarketPrice som den senaste avslutade handelsdagens kurs och läggs till i samma serie. Om ett bolag inte kan hämtas visas det i statusrutan och övriga bolag fortsätter uppdateras.</p>
+<p class="note">Sverige är standard. Välj Danmark, Norge, Finland eller Island när du matar in ett nordiskt bolag. Yahoo-symbolen får då rätt suffix automatiskt, exempelvis NOVO B → NOVO-B.CO, EQNR → EQNR.OL och NOKIA → NOKIA.HE. När ett bolag saknar minst 263 handelsdagar hämtar Yahoo två års grundhistorik. Därefter hämtas bara den senaste månaden och slås ihop med den lokala historiken. Appen lagrar de senaste 400 handelsdagarna och räknar själv MA200 och MA200-trenderna. Om Yahoos sista dagscandle är null används meta.regularMarketPrice som den senaste avslutade handelsdagens kurs och läggs till i samma serie. Om ett bolag inte kan hämtas visas det i statusrutan och övriga bolag fortsätter uppdateras.</p>
 </div>
 </section>
 
@@ -907,7 +907,7 @@ function technicalFromPriceHistory(history){
 }
 async function fetchYahooHistory(symbol,existingHistory=[]){
   const hasEnough=Array.isArray(existingHistory)&&existingHistory.length>=263;
-  const range=hasEnough?'5d':'2y';
+  const range=hasEnough?'1mo':'2y';
   const url='https://momentumscore-yahoo.e-latth.workers.dev/?symbol='+encodeURIComponent(symbol)+'&range='+range;
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),18000);
@@ -925,7 +925,7 @@ async function fetchYahooHistory(symbol,existingHistory=[]){
   const result=data?.chart?.result?.[0];
   if(!result)throw new Error(data?.chart?.error?.description||'Ingen kursdata');
   const timestamps=result.timestamp||[],rawClose=result.indicators?.quote?.[0]?.close||[];
-  let incoming=[];
+  const incoming=[];
   for(let i=0;i<rawClose.length;i++){
     if(Number.isFinite(rawClose[i])&&timestamps[i]){
       incoming.push({date:new Date(timestamps[i]*1000).toISOString().slice(0,10),close:rawClose[i]});
@@ -935,11 +935,9 @@ async function fetchYahooHistory(symbol,existingHistory=[]){
   if(Number.isFinite(metaPrice)&&metaTime){
     incoming.push({date:new Date(metaTime*1000).toISOString().slice(0,10),close:metaPrice});
   }
-  incoming=mergeDailyPrices([],incoming);
-  if(hasEnough&&incoming.length)incoming=[incoming[incoming.length-1]];
   const priceHistory=mergeDailyPrices(existingHistory,incoming);
   const technical=technicalFromPriceHistory(priceHistory);
-  return{...technical,priceHistory,fetchMode:hasEnough?'Endast senaste kurs':'Två års grundhistorik'};
+  return{...technical,priceHistory,fetchMode:hasEnough?'Senaste månaden':'Två års grundhistorik'};
 }
 function cloneJson(value){return JSON.parse(JSON.stringify(value))}
 function preserveStoredArrays(original,updated){
@@ -1002,7 +1000,7 @@ async function updateAllPrices(silent=false){
     const settings=loadMarketSettings();
     if(ok>0){settings.lastUpdate=nowISO();localStorage.setItem(settingsKey,JSON.stringify(settings))}
     renderMarketSettings();
-    status.innerHTML='<b>'+ok+' bolag uppdaterades.</b><br>Bolag med minst 263 sparade handelsdagar hämtade endast den senaste tillgängliga kursen. Övriga hämtade två års grundhistorik.'+(failed.length?'<br>Misslyckades: '+failed.join(' · '):'');
+    status.innerHTML='<b>'+ok+' bolag uppdaterades.</b><br>Bolag med minst 263 sparade handelsdagar hämtade endast senaste månaden. Övriga hämtade två års grundhistorik.'+(failed.length?'<br>Misslyckades: '+failed.join(' · '):'');
     if(!silent&&failed.length===rows.length)alert('Ingen kurs kunde hämtas. Kontrollera internetanslutning och Yahoo-symboler.');
   }catch(e){
     rows=beforeAll;
