@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v15.0</title>
+<title>MomentumScore v16.0</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -129,6 +129,10 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .engine-log{max-height:240px;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:12px;white-space:pre-wrap}
 .search-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
 .search-chip{padding:8px;border:1px solid var(--line);border-radius:999px;text-align:center;background:rgba(255,255,255,.03)}
+.ensemble-card{border:2px solid rgba(157,124,255,.55);background:rgba(157,124,255,.05)}
+.ensemble-model{padding:10px;border:1px solid var(--line);border-radius:10px;margin:8px 0}
+.ensemble-badge{display:inline-block;padding:3px 8px;border-radius:999px;border:1px solid rgba(157,124,255,.55);margin:2px}
+
 
 
 
@@ -148,7 +152,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v15.0 – Självsökande modell</h1>
+<h1>MomentumScore v16.0 – Ensemblemotor</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -515,6 +519,14 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
   </div>
 
   <div id="pipelineSummary" class="summary"></div>
+
+
+  <div class="card ensemble-card">
+    <h3>Tre bästa modeller och ensemble</h3>
+    <p class="note">Motorn väljer tre starka men så olika modeller som möjligt. Därefter testas hur de ska vägas ihop. Ensemblen används bara om den förbättrar resultatet jämfört med bästa enskilda modell.</p>
+    <div class="tablewrap"><table id="ensembleModelsTable" class="lab-table"></table></div>
+    <div id="ensembleDecision" class="note" style="margin-top:10px">Ingen ensemble har skapats.</div>
+  </div>
 
   <div class="card">
     <h3>Färdig Vit-modell</h3>
@@ -950,7 +962,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v15.0 – regler och analys</h2>
+<h2>MomentumScore v16.0 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -995,6 +1007,7 @@ Dessutom krävs minst 263 handelsdagar för både aktien och jämförelseindex.<
 <div class="rowcard"><b>Vit – Värdering, max 10 p</b><br>Mot vart och ett av 3- och 5-årssnitten: vid eller under snittet 5 p · högst 10 % över 4 p · högst 20 % över 2 p · högst 35 % över 1 p · mer än 35 % över 0 p.</div>
 <div class="rowcard"><b>Vit – poäng innan indexdata finns</b><br>Vit består av 75 poäng från aktie- och rapportdata samt 25 poäng relativ styrka. Om jämförelseindex saknas visas därför en preliminär poäng med en asterisk, exempelvis 67*. Bolaget markeras då som Underlag saknas – inte Ej kvalificerat. Efter kursuppdatering eller import av en komplett v7.6-säkerhetskopia räknas hela 100-poängsmodellen.</div>
 <div class="rowcard"><b>Vit – Bedömning</b><br>90–100 = Mycket stark · 80–89 = Stark · 70–79 = Bevakning · under 70 = Avstå. Ett brutet grundkrav ger alltid Ej kvalificerad.</div>
+<div class="rowcard"><b>Ensemblelagret</b><br>Motorn väljer tre starka men olika modeller, optimerar deras procentvikter och använder ensemblen endast när den förbättrar resultatet tydligt jämfört med bästa enskilda modell. Annars behålls den enklare modellen.</div>
 <div class="rowcard"><b>Självsökande modellurval</b><br>Alla tillgängliga tekniska faktorer får delta. Motorn testar enskilda faktorer och kombinationer utan att först filtrera bort dem med robusthetsbetyg. Endast modeller som saknar tillräckligt historiskt underlag tas bort.</div>
 <div class="rowcard"><b>Enmotorn</b><br>Knappen Optimera Vit kör hela analyskedjan utan manuella delsteg. Motorn väljer faktorer, sweet spots, kurvor, 100-poängsvikter och eventuella grundkrav och skapar därefter ett färdigt regelutkast. Mellanresultat sparas automatiskt.</div>
 <div class="rowcard"><b>Helautomatisk optimering</b><br>Den fullständiga kedjan kör AutoLab, modellurval, intervalloptimering, poängkurvor och Vit 3.0 i rätt ordning. Delresultat cachas lokalt och återanvänds när samma inställningar används. En komplett analysfil kan exporteras i ett enda steg.</div>
@@ -1701,6 +1714,7 @@ let lastCurveReport=null;
 let lastVit3Report=null;
 let lastPipelineBundle=null;
 let oneEngineRunning=false;
+let lastEnsembleReport=null;
 
 function labMedian(values){
   const a=values.filter(Number.isFinite).slice().sort((x,y)=>x-y);
@@ -3234,12 +3248,14 @@ function engineRestore(bundle){
   if(!bundle)return false;
   lastAutoLabReport=bundle.autoLab||null;
   lastOptimizerReport=bundle.optimizer||null;
+  lastEnsembleReport=bundle.ensemble||null;
   lastIntervalReport=bundle.intervals||null;
   lastCurveReport=bundle.curves||null;
   lastVit3Report=bundle.vit3||null;
   lastPipelineBundle=bundle;
   if(lastAutoLabReport)renderAutoLab(lastAutoLabReport);
   if(lastOptimizerReport)renderOptimizer(lastOptimizerReport);
+  if(lastEnsembleReport)renderEnsemble();
   if(lastIntervalReport)renderIntervalOptimizer(lastIntervalReport);
   if(lastCurveReport)renderCurveOptimizer(lastCurveReport);
   if(lastVit3Report)renderVit3(lastVit3Report);
@@ -3248,7 +3264,7 @@ function engineRestore(bundle){
 function engineSave(settings){
   const bundle={
     format:'MomentumScoreOneEngine',version:'14.0',createdAt:new Date().toISOString(),settings,
-    autoLab:lastAutoLabReport,optimizer:lastOptimizerReport,intervals:lastIntervalReport,
+    autoLab:lastAutoLabReport,optimizer:lastOptimizerReport,ensemble:lastEnsembleReport,intervals:lastIntervalReport,
     curves:lastCurveReport,vit3:lastVit3Report
   };
   localStorage.setItem(ONE_ENGINE_CACHE_KEY,JSON.stringify(bundle));
@@ -3280,7 +3296,7 @@ function engineRenderFinal(){
   buildVit3Draft(true);
   document.getElementById('pipelineSummary').innerHTML=[
     ['Status','Klar'],['Faktorer',lastVit3Report.factors.length],
-    ['Faktormodeller testade',lastOptimizerReport?.testedModels||0],
+    ['Faktormodeller testade',lastOptimizerReport?.testedModels||0],['Ensemble',lastEnsembleReport?.useEnsemble?'Ja':'Nej'],
     ['Vikt/filtertester',lastVit3Report?.tested||0],
     ['Median',signed(b.median,' %')],['Slår index',fmt(b.beatIndex)+' %']
   ].map(([a,v])=>`<div class="metric"><small>${a}</small><b>${v}</b></div>`).join('')
@@ -3416,6 +3432,171 @@ async function runExhaustiveOptimizer(settings){
   return lastOptimizerReport
 }
 
+
+function modelJaccard(a,b){
+  const A=new Set(a),B=new Set(b);
+  const inter=[...A].filter(x=>B.has(x)).length;
+  const union=new Set([...A,...B]).size;
+  return union?inter/union:0
+}
+function chooseDiverseModels(winners,maxModels=3,maxUnionFactors=5){
+  if(!winners?.length)return [];
+  const chosen=[winners[0]];
+  for(const candidate of winners.slice(1)){
+    if(chosen.length>=maxModels)break;
+    const union=new Set(chosen.flatMap(m=>m.subset).concat(candidate.subset));
+    if(union.size>maxUnionFactors)continue;
+    const similarity=Math.max(...chosen.map(m=>modelJaccard(m.subset,candidate.subset)));
+    if(similarity<=0.75)chosen.push(candidate)
+  }
+  // If diversity rule is too strict, fill remaining slots while respecting factor cap.
+  for(const candidate of winners.slice(1)){
+    if(chosen.length>=maxModels)break;
+    if(chosen.includes(candidate))continue;
+    const union=new Set(chosen.flatMap(m=>m.subset).concat(candidate.subset));
+    if(union.size<=maxUnionFactors)chosen.push(candidate)
+  }
+  return chosen
+}
+function scoreExhaustiveModelRow(row,model,reportsByFactor){
+  let sum=0;
+  for(const f of model.subset){
+    if(!Number.isFinite(row.values[f]))return NaN;
+    sum+=exhaustiveSignal(row.values[f],reportsByFactor[f])
+  }
+  return sum/model.subset.length
+}
+function evaluateEnsemble(rows,models,reportsByFactor,weights,topShare,minObs){
+  const union=[...new Set(models.flatMap(m=>m.subset))];
+  const complete=rows.filter(o=>union.every(f=>Number.isFinite(o.values[f])));
+  const n=Math.max(minObs,Math.floor(complete.length*topShare));
+  if(complete.length<n||n<minObs)return null;
+
+  const scored=complete.map(o=>{
+    let total=0,wSum=0;
+    models.forEach((m,i)=>{
+      const s=scoreExhaustiveModelRow(o,m,reportsByFactor);
+      if(Number.isFinite(s)){total+=s*weights[i];wSum+=weights[i]}
+    });
+    return{...o,score:wSum?total/wSum:NaN}
+  }).filter(o=>Number.isFinite(o.score)).sort((a,b)=>b.score-a.score);
+
+  if(scored.length<n)return null;
+  const selected=scored.slice(0,n),ret=selected.map(o=>o.futureReturn),dd=selected.map(o=>o.maxDrawdown);
+  const rel=selected.filter(o=>Number.isFinite(o.relativeReturn));
+  const baseline=labMedian(scored.map(o=>o.futureReturn));
+  const median=labMedian(ret),mean=labMean(ret);
+  const positive=selected.filter(o=>o.futureReturn>0).length/selected.length*100;
+  const beatIndex=rel.length?rel.filter(o=>o.relativeReturn>0).length/rel.length*100:NaN;
+  const medianDrawdown=labMedian(dd);
+  const companies=new Set(selected.map(o=>o.ticker)).size;
+  const counts=selected.reduce((a,o)=>(a[o.ticker]=(a[o.ticker]||0)+1,a),{});
+  const concentration=Math.max(...Object.values(counts))/selected.length*100;
+  const improvement=median-baseline;
+  const objective=
+    improvement*2.5 +
+    (Number.isFinite(beatIndex)?beatIndex-50:0)*0.45 +
+    (positive-50)*0.18 +
+    Math.max(-20,medianDrawdown)*0.20 -
+    Math.max(0,concentration-15)*0.5;
+
+  return{
+    models:models.map(m=>({subset:m.subset,objective:m.objective,median:m.median,beatIndex:m.beatIndex})),
+    weights,unionFactors:union,selectedCount:selected.length,totalObs:scored.length,companies,
+    median,mean,baselineMedian:baseline,improvement,beatIndex,positive,medianDrawdown,
+    worstDrawdown:Math.min(...dd.filter(Number.isFinite)),concentration,objective
+  }
+}
+function ensembleWeightVectors(n){
+  if(n===1)return [[100]];
+  const out=[];
+  const step=10,min=10;
+  function rec(i,remaining,arr){
+    if(i===n-1){
+      if(remaining>=min&&remaining%step===0)out.push(arr.concat(remaining));
+      return
+    }
+    for(let w=min;w<=remaining-min*(n-i-1);w+=step)rec(i+1,remaining-w,arr.concat(w))
+  }
+  rec(0,100,[]);
+  return out
+}
+async function buildEnsembleFromWinners(settings){
+  const reports=exhaustiveAbsoluteReports();
+  const reportsByFactor=Object.fromEntries(reports.map(r=>[r.factor,r]));
+  const rows=exhaustiveBuildDataset(reports);
+  const chosen=chooseDiverseModels(lastOptimizerReport.winners,3,5);
+  if(!chosen.length)throw new Error('Inga modeller fanns för ensemble.');
+
+  const candidates=[];
+  for(const weights of ensembleWeightVectors(chosen.length)){
+    const r=evaluateEnsemble(rows,chosen,reportsByFactor,weights,0.20,settings.minObs);
+    if(r)candidates.push(r)
+  }
+  candidates.sort((a,b)=>b.objective-a.objective);
+  const bestEnsemble=candidates[0]||null;
+  const bestSingle=chosen[0];
+  const useEnsemble=!!bestEnsemble && bestEnsemble.objective>bestSingle.objective+1;
+
+  lastEnsembleReport={
+    format:'MomentumScoreEnsemble',
+    version:'16.0',
+    createdAt:new Date().toISOString(),
+    chosenModels:chosen,
+    testedWeights:candidates.length,
+    bestEnsemble,
+    bestSingle,
+    useEnsemble,
+    decisionReason:useEnsemble
+      ?`Ensemblen förbättrade optimeringsvärdet med ${(bestEnsemble.objective-bestSingle.objective).toFixed(2)}.`
+      :`Bästa enskilda modell var lika bra eller bättre än ensemblen.`
+  };
+
+  // Downstream interval/curve optimizer needs one factor set.
+  // Use ensemble union only when ensemble genuinely improves; otherwise use best single.
+  if(useEnsemble){
+    const synthetic={
+      ...bestSingle,
+      subset:bestEnsemble.unionFactors,
+      weights:Array(bestEnsemble.unionFactors.length).fill(1),
+      median:bestEnsemble.median,
+      mean:bestEnsemble.mean,
+      baselineMedian:bestEnsemble.baselineMedian,
+      improvement:bestEnsemble.improvement,
+      beatIndex:bestEnsemble.beatIndex,
+      positive:bestEnsemble.positive,
+      medianDrawdown:bestEnsemble.medianDrawdown,
+      worstDrawdown:bestEnsemble.worstDrawdown,
+      concentration:bestEnsemble.concentration,
+      objective:bestEnsemble.objective,
+      ensemble:true
+    };
+    lastOptimizerReport.winners=[synthetic,...lastOptimizerReport.winners.filter(x=>x!==bestSingle)];
+  }
+  renderEnsemble();
+  return lastEnsembleReport
+}
+function renderEnsemble(){
+  const table=document.getElementById('ensembleModelsTable');
+  const decision=document.getElementById('ensembleDecision');
+  if(!table||!lastEnsembleReport)return;
+  const e=lastEnsembleReport;
+  table.innerHTML='<tr><th>Modell</th><th>Faktorer</th><th>Median</th><th>Slår index</th><th>Median nedgång</th><th>Optimeringsvärde</th><th>Ensemblevikt</th></tr>'+
+    e.chosenModels.map((m,i)=>`<tr>
+      <td><b>Modell ${i+1}</b></td>
+      <td class="wrap">${m.subset.map(f=>`<span class="ensemble-badge">${autoLabFactorLabel(f)}</span>`).join('')}</td>
+      <td>${signed(m.median,' %')}</td><td>${fmt(m.beatIndex)} %</td>
+      <td>${signed(m.medianDrawdown,' %')}</td><td>${fmt(m.objective)}</td>
+      <td>${e.bestEnsemble?e.bestEnsemble.weights[i]+' %':'–'}</td>
+    </tr>`).join('')+
+    (e.bestEnsemble?`<tr class="vit3-winner"><td><b>Ensemble</b></td>
+      <td>${e.bestEnsemble.unionFactors.length} unika faktorer</td>
+      <td><b>${signed(e.bestEnsemble.median,' %')}</b></td><td>${fmt(e.bestEnsemble.beatIndex)} %</td>
+      <td>${signed(e.bestEnsemble.medianDrawdown,' %')}</td><td><b>${fmt(e.bestEnsemble.objective)}</b></td><td>100 %</td></tr>`:'');
+  decision.innerHTML=`<div class="status ${e.useEnsemble?'ok':'warn'}"><b>${e.useEnsemble?'Ensemblen används':'Bästa enskilda modell används'}</b></div>
+    ${e.decisionReason}`;
+}
+
 async function runOneEngine(){
   if(oneEngineRunning)return;
   oneEngineRunning=true;
@@ -3449,7 +3630,13 @@ async function runOneEngine(){
     engineSave(settings);
     engineLog(`Full sökning klar: ${lastOptimizerReport.testedModels} modeller testade, ${lastOptimizerReport.validModels} giltiga.`);
 
-    engineStatus('Söker exakta sweet spots…',45);
+    engineStatus('Bygger och testar ensemble…',42);
+    engineLog('Tre starka och olika modeller väljs ut och vägs ihop.');
+    await buildEnsembleFromWinners(settings);
+    engineSave(settings);
+    engineLog(lastEnsembleReport.useEnsemble?'Ensemblen förbättrade resultatet och används vidare.':'Bästa enskilda modell används vidare.');
+
+    engineStatus('Söker exakta sweet spots…',48);
     engineLog('Intervalloptimering startar.');
     await runIntervalOptimizer();
     if(!lastIntervalReport?.results?.length)throw new Error('Inga giltiga faktorintervall hittades.');
@@ -3492,7 +3679,7 @@ function resetOneEngine(){
   if(!confirm('Rensa endast sparade optimeringsresultat och börja om? Din aktiedata påverkas inte.'))return;
   localStorage.removeItem(ONE_ENGINE_CACHE_KEY);
   localStorage.removeItem(PIPELINE_CACHE_KEY);
-  lastAutoLabReport=lastOptimizerReport=lastIntervalReport=lastCurveReport=lastVit3Report=lastPipelineBundle=null;
+  lastAutoLabReport=lastOptimizerReport=lastEnsembleReport=lastIntervalReport=lastCurveReport=lastVit3Report=lastPipelineBundle=null;
   document.getElementById('oneEngineStatus').textContent='Sparade optimeringsresultat har rensats.';
   document.getElementById('oneEngineProgress').style.width='0%';
   document.getElementById('oneEngineLog').textContent='Väntar på start.';
