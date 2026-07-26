@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v7.9</title>
+<title>MomentumScore v8.0</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -96,6 +96,12 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .lab-best{outline:2px solid rgba(72,214,151,.55)}
 .lab-warning{color:var(--yellow)}
 .lab-table td,.lab-table th{white-space:nowrap}
+.factor-checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:8px}
+.factor-checks label{display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.02)}
+.factor-checks input{width:auto}
+.combo-good{background:rgba(72,214,151,.08)}
+.combo-best{outline:2px solid rgba(72,214,151,.55)}
+
 .lab-table td.wrap{white-space:normal;min-width:240px;text-align:left}
 
 .toolbar-inline{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
@@ -104,7 +110,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v7.9 – fungerande laboratorium</h1>
+<h1>MomentumScore v8.0 – kombinationstest</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -313,9 +319,16 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 <section id="laboratory" class="panel">
   <div class="card">
     <h2>Analyslaboratorium</h2>
-    <p class="note">Testar historiskt vilka tekniska lägen som följts av bäst utveckling sex månader senare. Standardläget delar observationerna i tio lika stora grupper, så att datan själv bestämmer gränserna. Resultaten ändrar inte Blå eller Vit automatiskt.</p>
+    <p class="note">Testar historiskt vilka tekniska lägen som följts av bäst utveckling sex månader senare. Standardläget delar observationerna i tio lika stora grupper, så att datan själv bestämmer gränserna. Resultaten ändrar inte Blå eller Vit automatiskt. I kombinationsläget kan samma aktie få träff i flera optimala faktorintervall samtidigt.</p>
     <div class="lab-grid">
       <div>
+        <label>Analystyp</label>
+        <select id="labMode">
+          <option value="single" selected>En faktor</option>
+          <option value="combo">Kombination av flera faktorer</option>
+        </select>
+      </div>
+      <div id="labSingleFactorControl">
         <label>Faktor</label>
         <select id="labFactor">
           <option value="distanceMa200">Kurs över MA200</option>
@@ -326,6 +339,38 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
           <option value="rsi14">RSI 14</option>
           <option value="momentum6m">Kursutveckling föregående 6 månader</option>
         </select>
+      </div>
+      <div id="labComboOptions" class="card hidden" style="grid-column:1/-1">
+        <h3 style="margin-top:0">Faktorer i kombinationstestet</h3>
+        <div class="factor-checks">
+          <label><input type="checkbox" class="labComboFactor" value="distanceMa200" checked> Kurs över MA200</label>
+          <label><input type="checkbox" class="labComboFactor" value="ma200Slope1m" checked> MA200-trend 1 månad</label>
+          <label><input type="checkbox" class="labComboFactor" value="ma200Slope3m" checked> MA200-trend 3 månader</label>
+          <label><input type="checkbox" class="labComboFactor" value="ma50Spread"> MA50 mot MA200</label>
+          <label><input type="checkbox" class="labComboFactor" value="distanceHigh52" checked> Avstånd till 52-veckors högsta</label>
+          <label><input type="checkbox" class="labComboFactor" value="rsi14" checked> RSI 14</label>
+          <label><input type="checkbox" class="labComboFactor" value="momentum6m" checked> Föregående 6 mån momentum</label>
+        </div>
+        <div class="lab-grid" style="margin-top:12px">
+          <div>
+            <label>Optimala deciler per faktor</label>
+            <select id="labOptimalDeciles">
+              <option value="1" selected>Bästa decilen</option>
+              <option value="2">Två bästa decilerna</option>
+              <option value="3">Tre bästa decilerna</option>
+            </select>
+          </div>
+          <div>
+            <label>Minsta antal samtidiga träffar</label>
+            <select id="labMinMatches">
+              <option value="0">Visa alla</option>
+              <option value="2">Minst 2</option>
+              <option value="3" selected>Minst 3</option>
+              <option value="4">Minst 4</option>
+              <option value="5">Minst 5</option>
+            </select>
+          </div>
+        </div>
       </div>
       <div>
         <label>Framtida period</label>
@@ -397,6 +442,22 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
     <div class="tablewrap"><table id="labRecommendation" class="lab-table"></table></div>
   </div>
 
+  <div id="labComboSection" class="hidden">
+    <div class="card">
+      <h3>Kombinationsresultat</h3>
+      <p class="note">Varje historisk observation får en träff för varje faktor som låg i en av faktorens bästa deciler. Tabellen visar hur framtida avkastning förändrades när flera optimala lägen sammanföll samtidigt.</p>
+      <div class="tablewrap"><table id="labComboResults" class="lab-table"></table></div>
+    </div>
+    <div class="card">
+      <h3>Optimala intervall som användes</h3>
+      <div class="tablewrap"><table id="labComboIntervals" class="lab-table"></table></div>
+    </div>
+    <div class="card">
+      <h3>Aktier som just nu ligger i flest optimala intervall</h3>
+      <div class="tablewrap"><table id="labCurrentMatches" class="lab-table"></table></div>
+    </div>
+  </div>
+
   <div class="card">
     <h3>Toppobservationer</h3>
     <div class="tablewrap"><table id="labTopObservations" class="lab-table"></table></div>
@@ -420,7 +481,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v7.9 – regler och analys</h2>
+<h2>MomentumScore v8.0 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -1441,6 +1502,153 @@ function renderLaboratory(result){
   document.getElementById('labStatus').textContent=
     `Klart. ${result.obs.length} observationer från ${uniqueCompanies} bolag. ${result.grouping==='deciles'?'Varje decil innehåller ungefär lika många observationer.':'Fasta intervall används.'}`;
 }
+
+function selectedComboFactors(){
+  return [...document.querySelectorAll('.labComboFactor:checked')].map(x=>x.value)
+}
+function comboObservationKey(o){
+  return `${o.ticker}|${o.date}`
+}
+function factorObservationsForCombo(factor,horizon,step,target,universe){
+  const originalFactor=document.getElementById('labFactor').value;
+  document.getElementById('labFactor').value=factor;
+  const data=buildLaboratoryObservations();
+  document.getElementById('labFactor').value=originalFactor;
+  return data
+}
+function topDecileIntervalsForFactor(data,count){
+  const minObs=Number(document.getElementById('labMinObs').value);
+  const groups=labDecileGroups(data,minObs);
+  const ranked=labCompositeRank(groups);
+  return ranked.slice(0,count).map(g=>({
+    factor:data.factor,
+    label:g.label,
+    rangeLabel:g.rangeLabel,
+    lo:g.lo,
+    hi:g.hi,
+    median:g.median,
+    beatIndex:g.beatIndex,
+    positive:g.positive,
+    n:g.n
+  }))
+}
+function valueInOptimalIntervals(value,intervals){
+  return intervals.some(x=>value>=x.lo&&value<=x.hi)
+}
+function buildCombinationResult(){
+  const factors=selectedComboFactors();
+  if(factors.length<2)throw new Error('Välj minst två faktorer för ett kombinationstest.');
+  const horizon=Number(document.getElementById('labHorizon').value);
+  const step=Number(document.getElementById('labSample').value);
+  const target=document.getElementById('labTarget').value;
+  const universe=document.getElementById('labUniverse').value;
+  const topCount=Number(document.getElementById('labOptimalDeciles').value);
+  const minMatches=Number(document.getElementById('labMinMatches').value);
+
+  const byFactor={},optimalByFactor={},allKeys=new Set();
+  for(const factor of factors){
+    const data=factorObservationsForCombo(factor,horizon,step,target,universe);
+    byFactor[factor]=data;
+    optimalByFactor[factor]=topDecileIntervalsForFactor(data,topCount);
+    data.obs.forEach(o=>allKeys.add(comboObservationKey(o)))
+  }
+
+  const obsMap=new Map();
+  for(const factor of factors){
+    for(const o of byFactor[factor].obs){
+      const key=comboObservationKey(o);
+      if(!obsMap.has(key))obsMap.set(key,{
+        ticker:o.ticker,company:o.company,market:o.market,date:o.date,
+        futureReturn:o.futureReturn,indexReturn:o.indexReturn,relativeReturn:o.relativeReturn,
+        targetReturn:o.targetReturn,maxDrawdown:o.maxDrawdown,values:{},matches:[]
+      });
+      const row=obsMap.get(key);
+      row.values[factor]=o.factorValue;
+      if(valueInOptimalIntervals(o.factorValue,optimalByFactor[factor]))row.matches.push(factor)
+    }
+  }
+
+  const complete=[...obsMap.values()].filter(o=>factors.every(f=>Number.isFinite(o.values[f])));
+  const groups=[];
+  for(let m=0;m<=factors.length;m++){
+    const items=complete.filter(o=>o.matches.length===m);
+    const returns=items.map(o=>o.targetReturn),drawdowns=items.map(o=>o.maxDrawdown);
+    const hitIndex=items.filter(o=>Number.isFinite(o.relativeReturn));
+    groups.push({
+      matches:m,items,n:items.length,companies:new Set(items.map(o=>o.ticker)).size,
+      mean:labMean(returns),median:labMedian(returns),positive:items.length?items.filter(o=>o.targetReturn>0).length/items.length*100:NaN,
+      beatIndex:hitIndex.length?hitIndex.filter(o=>o.relativeReturn>0).length/hitIndex.length*100:NaN,
+      medianDrawdown:labMedian(drawdowns),worstDrawdown:items.length?Math.min(...drawdowns.filter(Number.isFinite)):NaN,
+      std:labStd(returns)
+    })
+  }
+  const visible=groups.filter(g=>g.matches>=minMatches&&g.n>0);
+  return{factors,horizon,step,target,universe,topCount,minMatches,optimalByFactor,complete,groups,visible}
+}
+function currentFactorValue(r,factor){
+  const h=(Array.isArray(r.priceHistory)?r.priceHistory:[]).filter(p=>p&&p.date&&Number.isFinite(num(p.close))).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  if(!h.length)return NaN;
+  const closes=h.map(p=>num(p.close));
+  return labHistoricalFactor(factor,closes,closes.length-1)
+}
+function renderCombinationResult(result){
+  document.getElementById('labComboSection').classList.remove('hidden');
+  const best=result.visible.slice().sort((a,b)=>b.median-a.median)[0]||null;
+
+  document.getElementById('labComboResults').innerHTML='<tr><th>Antal optimala träffar</th><th>Observationer</th><th>Bolag</th><th>Genomsnitt</th><th>Median</th><th>Andel positiva</th><th>Slår index</th><th>Median max nedgång</th><th>Värsta nedgång</th><th>Std.avvikelse</th></tr>'+
+    result.visible.map(g=>`<tr class="${best===g?'combo-best combo-good':''}">
+      <td><b>${g.matches} av ${result.factors.length}</b></td><td>${g.n}</td><td>${g.companies}</td>
+      <td class="${classByValue(g.mean)}">${signed(g.mean,' %')}</td>
+      <td class="${classByValue(g.median)}"><b>${signed(g.median,' %')}</b></td>
+      <td>${fmt(g.positive)} %</td><td>${Number.isFinite(g.beatIndex)?fmt(g.beatIndex)+' %':'–'}</td>
+      <td>${signed(g.medianDrawdown,' %')}</td><td>${signed(g.worstDrawdown,' %')}</td><td>${fmt(g.std)} %</td>
+    </tr>`).join('');
+
+  const intervalRows=[];
+  for(const factor of result.factors){
+    const def=labFactorDefinition(factor);
+    result.optimalByFactor[factor].forEach((x,i)=>intervalRows.push([
+      def.name,i+1,x.label,x.rangeLabel,x.median,x.beatIndex,x.positive,x.n
+    ]))
+  }
+  document.getElementById('labComboIntervals').innerHTML='<tr><th>Faktor</th><th>Rang</th><th>Decil</th><th>Optimalt intervall</th><th>Median framtida avkastning</th><th>Slår index</th><th>Andel positiva</th><th>Observationer</th></tr>'+
+    intervalRows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td><b>${r[3]}</b></td><td>${signed(r[4],' %')}</td><td>${fmt(r[5])} %</td><td>${fmt(r[6])} %</td><td>${r[7]}</td></tr>`).join('');
+
+  const current=rows.map(r=>{
+    const matches=[],values={};
+    for(const factor of result.factors){
+      const v=currentFactorValue(r,factor);values[factor]=v;
+      if(Number.isFinite(v)&&valueInOptimalIntervals(v,result.optimalByFactor[factor]))matches.push(factor)
+    }
+    return{r,matches,values}
+  }).sort((a,b)=>b.matches.length-a.matches.length);
+
+  document.getElementById('labCurrentMatches').innerHTML='<tr><th>Ticker</th><th>Bolag</th><th>Optimala träffar</th><th>Träffade faktorer</th><th>Blå</th><th>Vit</th></tr>'+
+    current.slice(0,30).map(x=>`<tr>
+      <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td><td><b>${x.matches.length} av ${result.factors.length}</b></td>
+      <td class="wrap">${x.matches.map(f=>labFactorDefinition(f).name).join(', ')||'Inga'}</td>
+      <td class="model-blue">${calc(x.r).total}</td><td class="model-white">${whiteCalc(x.r).total}</td>
+    </tr>`).join('');
+
+  const total=result.complete.length;
+  document.getElementById('labSummary').innerHTML=[
+    ['Observationer',total],['Faktorer',result.factors.length],['Optimala deciler/faktor',result.topCount],
+    ['Bästa antal träffar',best?best.matches+' av '+result.factors.length:'–'],
+    ['Bästa median',best?signed(best.median,' %'):'–'],
+    ['Bästa träff mot index',best&&Number.isFinite(best.beatIndex)?fmt(best.beatIndex)+' %':'–']
+  ].map(([a,b])=>`<div class="metric"><small>${a}</small><b style="${String(b).length>18?'font-size:14px':''}">${b}</b></div>`).join('');
+
+  document.getElementById('labStatus').textContent=`Kombinationstest klart. ${total} kompletta observationer analyserades över ${result.factors.length} faktorer.`;
+}
+function toggleLaboratoryMode(){
+  const combo=document.getElementById('labMode').value==='combo';
+  document.getElementById('labSingleFactorControl').classList.toggle('hidden',combo);
+  document.getElementById('labComboOptions').classList.toggle('hidden',!combo);
+  document.getElementById('labComboSection').classList.toggle('hidden',!combo);
+  document.getElementById('labResults').closest('.card').classList.toggle('hidden',combo);
+  document.getElementById('labRecommendation').closest('.card').classList.toggle('hidden',combo);
+}
+
 async function runLaboratory(){
   const status=document.getElementById('labStatus');
   const button=document.getElementById('runLaboratory');
@@ -1449,6 +1657,13 @@ async function runLaboratory(){
   button.textContent='Analyserar…';
   await new Promise(resolve=>setTimeout(resolve,20));
   try{
+    if(document.getElementById('labMode').value==='combo'){
+      const comboResult=buildCombinationResult();
+      renderCombinationResult(comboResult);
+      lastLaboratoryResult=null;
+      return;
+    }
+    document.getElementById('labComboSection').classList.add('hidden');
     const data=buildLaboratoryObservations();
     if(!data.obs.length){
       status.textContent='Inga observationer kunde skapas. Välj kortare framtidsperiod, kontrollera kurshistoriken eller uppdatera jämförelseindex.';
@@ -1874,6 +2089,7 @@ document.getElementById('importFile').addEventListener('change',async e=>{
     input.value='';
   }
 });
+document.getElementById('labMode').onchange=toggleLaboratoryMode;
 document.getElementById('runLaboratory').onclick=runLaboratory;
 document.getElementById('exportLaboratoryCsv').onclick=exportLaboratoryCsv;
 document.getElementById('saveSettings').onclick=saveMarketSettings;document.getElementById('checkDatabase').onclick=renderDatabaseHealth;document.getElementById('restoreLocalBackup').onclick=restoreLocalBackup;document.getElementById('updatePrices').onclick=()=>updateAllPrices(false);for(const [name,fn] of [
@@ -1886,6 +2102,7 @@ document.getElementById('saveSettings').onclick=saveMarketSettings;document.getE
   try{fn()}catch(e){console.error('Startfel i '+name,e)}
 }
 try{
+  toggleLaboratoryMode();
   const labButton=document.getElementById('runLaboratory');
   if(labButton){
     labButton.dataset.ready='true';
