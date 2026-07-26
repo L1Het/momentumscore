@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v11.0</title>
+<title>MomentumScore v12.0</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -115,6 +115,11 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .curve-progress{height:14px;background:rgba(255,255,255,.07);border-radius:999px;overflow:hidden;border:1px solid var(--line)}
 .curve-progress>div{height:100%;width:0%;background:linear-gradient(90deg,#48d697,#4ca6ff,#9d7cff);transition:width .15s}
 .curve-winner{outline:2px solid rgba(72,214,151,.65);background:rgba(72,214,151,.08)}
+.vit3-progress{height:14px;background:rgba(255,255,255,.07);border-radius:999px;overflow:hidden;border:1px solid var(--line)}
+.vit3-progress>div{height:100%;width:0%;background:linear-gradient(90deg,#ffffff,#4ca6ff,#48d697);transition:width .15s}
+.vit3-winner{outline:2px solid rgba(255,255,255,.7);background:rgba(255,255,255,.06)}
+.filter-pass{color:#48d697;font-weight:800}.filter-fail{color:#ff8a8a;font-weight:800}
+
 .curve-preview{display:flex;align-items:flex-end;gap:3px;height:110px;padding:8px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.02)}
 .curve-preview span{flex:1;min-width:2px;background:rgba(76,166,255,.75);border-radius:3px 3px 0 0}
 
@@ -130,7 +135,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v11.0 – Poängkurvor</h1>
+<h1>MomentumScore v12.0 – Vit 3.0</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -750,6 +755,83 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
     <div id="curveDraft" class="note">Ingen kurvoptimering körd.</div>
   </div>
 
+  <div class="card">
+    <h2>Vit 3.0 – optimera vikter och grundkrav</h2>
+    <p class="note">Utgår från de optimerade poängkurvorna. Programmet testar faktorvikter och möjliga hårda riskfilter separat, så att ett filter bara införs om det historiskt förbättrade resultatet efter hänsyn till urvalsstorlek, bolagsbredd och nedgångsrisk.</p>
+    <div class="lab-grid">
+      <div>
+        <label>Viktprecision</label>
+        <select id="vit3WeightStep">
+          <option value="10">10-poängssteg</option>
+          <option value="5" selected>5-poängssteg</option>
+          <option value="2">2-poängssteg, långsammare</option>
+        </select>
+      </div>
+      <div>
+        <label>Minsta vikt per faktor</label>
+        <select id="vit3MinWeight">
+          <option value="0">0 poäng</option>
+          <option value="5" selected>5 poäng</option>
+          <option value="10">10 poäng</option>
+        </select>
+      </div>
+      <div>
+        <label>Urval för utvärdering</label>
+        <select id="vit3TopShare">
+          <option value="0.10">Topp 10 %</option>
+          <option value="0.20" selected>Topp 20 %</option>
+          <option value="0.30">Topp 30 %</option>
+        </select>
+      </div>
+      <div>
+        <label>Minsta observationer efter filter</label>
+        <select id="vit3MinObs">
+          <option value="30">30</option>
+          <option value="40" selected>40</option>
+          <option value="60">60</option>
+        </select>
+      </div>
+      <div>
+        <label>Grundkrav som får testas</label>
+        <select id="vit3FilterMode">
+          <option value="risk" selected>Tekniska riskfilter</option>
+          <option value="none">Inga hårda krav</option>
+        </select>
+      </div>
+      <div>
+        <label>Framtida period</label>
+        <select id="vit3Horizon">
+          <option value="63">3 månader</option>
+          <option value="126" selected>6 månader</option>
+        </select>
+      </div>
+    </div>
+    <div class="actions" style="margin-top:12px">
+      <button id="runVit3Optimizer">Optimera Vit 3.0</button>
+      <button class="secondary" id="exportVit3Json">Exportera Vit 3.0 JSON</button>
+      <button class="secondary" id="buildVit3Draft">Skapa slutligt regelutkast</button>
+    </div>
+    <div class="vit3-progress" style="margin-top:12px"><div id="vit3ProgressBar"></div></div>
+    <div id="vit3Status" class="note" style="margin-top:8px">Kör Poängkurveoptimeraren först.</div>
+  </div>
+
+  <div id="vit3Summary" class="summary"></div>
+
+  <div class="card">
+    <h3>Optimerade faktorvikter</h3>
+    <div class="tablewrap"><table id="vit3WeightsTable" class="lab-table"></table></div>
+  </div>
+
+  <div class="card">
+    <h3>Test av grundkrav</h3>
+    <div class="tablewrap"><table id="vit3FiltersTable" class="lab-table"></table></div>
+  </div>
+
+  <div class="card">
+    <h3>Vit 3.0 – slutligt regelutkast</h3>
+    <div id="vit3Draft" class="note">Ingen Vit 3.0-optimering körd.</div>
+  </div>
+
   <div id="labSummary" class="summary"></div>
 
   <div class="card">
@@ -802,7 +884,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v11.0 – regler och analys</h2>
+<h2>MomentumScore v12.0 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -847,6 +929,7 @@ Dessutom krävs minst 263 handelsdagar för både aktien och jämförelseindex.<
 <div class="rowcard"><b>Vit – Värdering, max 10 p</b><br>Mot vart och ett av 3- och 5-årssnitten: vid eller under snittet 5 p · högst 10 % över 4 p · högst 20 % över 2 p · högst 35 % över 1 p · mer än 35 % över 0 p.</div>
 <div class="rowcard"><b>Vit – poäng innan indexdata finns</b><br>Vit består av 75 poäng från aktie- och rapportdata samt 25 poäng relativ styrka. Om jämförelseindex saknas visas därför en preliminär poäng med en asterisk, exempelvis 67*. Bolaget markeras då som Underlag saknas – inte Ej kvalificerat. Efter kursuppdatering eller import av en komplett v7.6-säkerhetskopia räknas hela 100-poängsmodellen.</div>
 <div class="rowcard"><b>Vit – Bedömning</b><br>90–100 = Mycket stark · 80–89 = Stark · 70–79 = Bevakning · under 70 = Avstå. Ett brutet grundkrav ger alltid Ej kvalificerad.</div>
+<div class="rowcard"><b>Vit 3.0-optimeraren</b><br>Vit 3.0 testar poängvikter som summerar till 100 och möjliga hårda tekniska riskfilter. Ett grundkrav rekommenderas bara om det förbättrar det sammanvägda resultatet tillräckligt jämfört med samma modell utan filter. Vit-poängen är huvudresultatet; historisk träffsäkerhet, medianavkastning och nedgång visas som stödfakta.</div>
 <div class="rowcard"><b>Poängkurveoptimeraren</b><br>Poängkurveoptimeraren testar asymmetrisk Gauss, asymmetrisk triangel och platåkurvor. Den optimerar centrum samt vänster- och högerbredd för varje faktor och jämför därefter kombinerade faktorvikter. Kurvorna ger mjuka poängövergångar utan godtyckliga trappsteg.</div>
 <div class="rowcard"><b>Intervalloptimeraren</b><br>Intervalloptimeraren söker konkreta sammanhängande sweet spots utifrån kvantilgränser. Den belönar medianförbättring, träff mot index och andel positiva utfall samt straffar nedgångsrisk och bolagskoncentration. Resultaten är in-sample och ska valideras på längre eller annan historik innan de används skarpt.</div>
 <div class="rowcard"><b>Vit Optimizer</b><br>Optimeraren testar alla faktorurval med 2–5 faktorer och objektiva heltalsvikter. Den rangordnar historiska observationer, väljer de starkaste 10–30 procenten och bedömer medianavkastning, överavkastning, träffsäkerhet, nedgångsrisk och bolagskoncentration. Den ändrar inte Vit automatiskt och resultatet måste granskas för överanpassning.</div>
@@ -1546,6 +1629,7 @@ let lastCombinationResult=null;
 let lastOptimizerReport=null;
 let lastIntervalReport=null;
 let lastCurveReport=null;
+let lastVit3Report=null;
 
 function labMedian(values){
   const a=values.filter(Number.isFinite).slice().sort((x,y)=>x-y);
@@ -2803,6 +2887,213 @@ function buildCurveDraft(){
     <div class="note">Utkastet ändrar inte Vit-koden automatiskt.</div>`;
 }
 
+
+function vit3FactorResults(){
+  if(!lastCurveReport?.factorResults?.length)return [];
+  return lastCurveReport.factorResults.filter(r=>r.best)
+}
+function integerCompositions(total,n,minValue,step){
+  const out=[],arr=Array(n).fill(minValue);
+  function rec(i,remaining){
+    if(i===n-1){
+      if(remaining>=minValue&&remaining%step===0){
+        arr[i]=remaining;out.push(arr.slice())
+      }
+      return
+    }
+    for(let v=minValue;v<=remaining-minValue*(n-i-1);v+=step){
+      arr[i]=v;rec(i+1,remaining-v)
+    }
+  }
+  rec(0,total);
+  return out
+}
+function vit3BuildDataset(factorResults,horizon){
+  const map=new Map();
+  for(const fr of factorResults){
+    const data=curveFactorDataset(fr.factor,horizon);
+    for(const o of data.obs){
+      const key=comboObservationKey(o);
+      if(!map.has(key))map.set(key,{
+        ticker:o.ticker,company:o.company,date:o.date,
+        futureReturn:o.futureReturn,relativeReturn:o.relativeReturn,maxDrawdown:o.maxDrawdown,
+        values:{},raw:o
+      });
+      map.get(key).values[fr.factor]=o.factorValue
+    }
+  }
+  const factors=factorResults.map(r=>r.factor);
+  return [...map.values()].filter(o=>factors.every(f=>Number.isFinite(o.values[f])))
+}
+function vit3FilterDefinitions(){
+  return [
+    {id:'none',name:'Inget hårt krav',test:o=>true},
+    {id:'priceAboveMa200',name:'Kurs över MA200',test:o=>Number.isFinite(o.values.distanceMa200)&&o.values.distanceMa200>0},
+    {id:'ma50AboveMa200',name:'MA50 över MA200',test:o=>Number.isFinite(o.values.ma50Spread)&&o.values.ma50Spread>0},
+    {id:'ma200SlopePositive',name:'MA200-trend 1 månad positiv',test:o=>Number.isFinite(o.values.ma200Slope1m)&&o.values.ma200Slope1m>0},
+    {id:'priceAndSlope',name:'Kurs över MA200 + positiv MA200-trend',test:o=>
+      Number.isFinite(o.values.distanceMa200)&&o.values.distanceMa200>0&&
+      Number.isFinite(o.values.ma200Slope1m)&&o.values.ma200Slope1m>0},
+    {id:'allThreePositive',name:'Alla tre tekniska villkor positiva',test:o=>
+      Number.isFinite(o.values.distanceMa200)&&o.values.distanceMa200>0&&
+      Number.isFinite(o.values.ma50Spread)&&o.values.ma50Spread>0&&
+      Number.isFinite(o.values.ma200Slope1m)&&o.values.ma200Slope1m>0}
+  ]
+}
+function vit3Evaluate(rows,factorResults,weights,topShare,minObs,filterDef){
+  const filtered=rows.filter(filterDef.test);
+  const n=Math.max(minObs,Math.floor(filtered.length*topShare));
+  if(filtered.length<n||n<minObs)return null;
+  const scored=filtered.map(o=>{
+    let score=0;
+    factorResults.forEach((fr,i)=>score+=curveScoreValue(o.values[fr.factor],fr.best)*weights[i]);
+    return{...o,score}
+  }).sort((a,b)=>b.score-a.score);
+  const selected=scored.slice(0,n),ret=selected.map(o=>o.futureReturn),dd=selected.map(o=>o.maxDrawdown);
+  const rel=selected.filter(o=>Number.isFinite(o.relativeReturn));
+  const baseline=labMedian(filtered.map(o=>o.futureReturn));
+  const median=labMedian(ret),mean=labMean(ret),positive=selected.filter(o=>o.futureReturn>0).length/selected.length*100;
+  const beatIndex=rel.length?rel.filter(o=>o.relativeReturn>0).length/rel.length*100:NaN;
+  const medianDrawdown=labMedian(dd),companies=new Set(selected.map(o=>o.ticker)).size;
+  const concentration=Math.max(...Object.values(selected.reduce((a,o)=>(a[o.ticker]=(a[o.ticker]||0)+1,a),{})))/selected.length*100;
+  const improvement=median-baseline;
+  const coverage=filtered.length/rows.length*100;
+  const objective=
+    improvement*2.5 +
+    (beatIndex-50)*.45 +
+    (positive-50)*.18 +
+    Math.max(-20,medianDrawdown)*.20 -
+    Math.max(0,concentration-15)*.5 -
+    Math.max(0,25-coverage)*.12;
+  return{
+    filterId:filterDef.id,filterName:filterDef.name,weights,
+    eligibleObs:filtered.length,selectedObs:selected.length,totalObs:rows.length,coverage,
+    companies,median,mean,baseline,improvement,positive,beatIndex,medianDrawdown,
+    worstDrawdown:Math.min(...dd.filter(Number.isFinite)),concentration,objective
+  }
+}
+async function runVit3Optimizer(){
+  if(!lastCurveReport?.factorResults?.length)return alert('Kör Poängkurveoptimeraren först.');
+  const factorResults=vit3FactorResults();
+  const step=Number(document.getElementById('vit3WeightStep').value);
+  const minWeight=Number(document.getElementById('vit3MinWeight').value);
+  const topShare=Number(document.getElementById('vit3TopShare').value);
+  const minObs=Number(document.getElementById('vit3MinObs').value);
+  const horizon=Number(document.getElementById('vit3Horizon').value);
+  const filterMode=document.getElementById('vit3FilterMode').value;
+  const button=document.getElementById('runVit3Optimizer'),status=document.getElementById('vit3Status'),bar=document.getElementById('vit3ProgressBar');
+
+  if(minWeight*factorResults.length>100)return alert('Minsta vikt är för hög för antalet faktorer.');
+  const weightsList=integerCompositions(100,factorResults.length,minWeight,step);
+  const filters=filterMode==='none'?vit3FilterDefinitions().filter(f=>f.id==='none'):vit3FilterDefinitions();
+
+  button.disabled=true;button.textContent='Optimerar Vit 3.0…';bar.style.width='0%';
+  try{
+    status.textContent='Bygger historiskt dataset…';await new Promise(r=>setTimeout(r,20));
+    const rows=vit3BuildDataset(factorResults,horizon);
+    const results=[],total=weightsList.length*filters.length;let done=0;
+    for(const filter of filters){
+      for(const weights of weightsList){
+        const r=vit3Evaluate(rows,factorResults,weights,topShare,minObs,filter);
+        if(r)results.push(r);
+        done++;
+        if(done%50===0){
+          bar.style.width=`${done/total*100}%`;
+          status.textContent=`Testar kombination ${done} av ${total}…`;
+          await new Promise(r=>setTimeout(r,0))
+        }
+      }
+    }
+    results.sort((a,b)=>b.objective-a.objective);
+    const bestByFilter={};
+    for(const r of results)if(!bestByFilter[r.filterId])bestByFilter[r.filterId]=r;
+    const noFilter=bestByFilter.none||null;
+    const best=results[0]||null;
+
+    lastVit3Report={
+      format:'MomentumScoreVit3Optimizer',version:'12.0',createdAt:new Date().toISOString(),
+      settings:{step,minWeight,topShare,minObs,horizon,filterMode},
+      factors:factorResults.map(fr=>({factor:fr.factor,curve:fr.best})),
+      tested:total,valid:results.length,
+      best,
+      bestByFilter:Object.values(bestByFilter).sort((a,b)=>b.objective-a.objective),
+      topModels:results.slice(0,50),
+      filterDecision:best&&noFilter?{
+        selected:best.filterId,
+        improvementVsNoFilter:best.objective-noFilter.objective,
+        medianChange:best.median-noFilter.median,
+        beatIndexChange:best.beatIndex-noFilter.beatIndex,
+        drawdownChange:best.medianDrawdown-noFilter.medianDrawdown,
+        coverage:best.coverage
+      }:null
+    };
+    renderVit3(lastVit3Report);
+    bar.style.width='100%';
+    status.textContent=`Vit 3.0 klar. ${total} kombinationer testades.`;
+  }catch(e){
+    console.error(e);status.textContent='Vit 3.0-optimeringen misslyckades: '+e.message
+  }finally{button.disabled=false;button.textContent='Optimera Vit 3.0'}
+}
+function renderVit3(report){
+  const best=report.best,decision=report.filterDecision;
+  document.getElementById('vit3Summary').innerHTML=[
+    ['Testade kombinationer',report.tested],['Vinnande grundkrav',best?.filterName||'–'],
+    ['Median',best?signed(best.median,' %'):'–'],['Förbättring mot bas',best?signed(best.improvement,' p.e.'):'–'],
+    ['Slår index',best?fmt(best.beatIndex)+' %':'–'],['Median nedgång',best?signed(best.medianDrawdown,' %'):'–']
+  ].map(([a,b])=>`<div class="metric"><small>${a}</small><b style="${String(b).length>18?'font-size:14px':''}">${b}</b></div>`).join('');
+
+  document.getElementById('vit3WeightsTable').innerHTML='<tr><th>Rank</th><th>Grundkrav</th><th>Vikter</th><th>Valda obs.</th><th>Bolag</th><th>Median</th><th>Bas</th><th>Förbättring</th><th>Slår index</th><th>Positiva</th><th>Median nedgång</th><th>Täckning</th><th>Värde</th></tr>'+
+    report.topModels.slice(0,25).map((r,i)=>`<tr class="${i===0?'vit3-winner':''}">
+      <td>${i+1}</td><td>${r.filterName}</td>
+      <td class="wrap">${report.factors.map((f,j)=>`<span class="weight-pill">${autoLabFactorLabel(f.factor)} ${r.weights[j]} p</span>`).join('')}</td>
+      <td>${r.selectedObs}/${r.eligibleObs}</td><td>${r.companies}</td><td><b>${signed(r.median,' %')}</b></td>
+      <td>${signed(r.baseline,' %')}</td><td>${signed(r.improvement,' p.e.')}</td><td>${fmt(r.beatIndex)} %</td>
+      <td>${fmt(r.positive)} %</td><td>${signed(r.medianDrawdown,' %')}</td><td>${fmt(r.coverage)} %</td><td>${fmt(r.objective)}</td>
+    </tr>`).join('');
+
+  const noFilter=report.bestByFilter.find(r=>r.filterId==='none');
+  document.getElementById('vit3FiltersTable').innerHTML='<tr><th>Rank</th><th>Grundkrav</th><th>Bästa vikter</th><th>Berättigade obs.</th><th>Täckning</th><th>Median</th><th>Slår index</th><th>Median nedgång</th><th>Skillnad i värde mot inget krav</th><th>Bedömning</th></tr>'+
+    report.bestByFilter.map((r,i)=>{
+      const delta=noFilter?r.objective-noFilter.objective:0;
+      const accepted=r.filterId==='none'||delta>=2;
+      return `<tr class="${report.best===r?'vit3-winner':''}">
+        <td>${i+1}</td><td><b>${r.filterName}</b></td>
+        <td>${r.weights.join(' / ')}</td><td>${r.eligibleObs}</td><td>${fmt(r.coverage)} %</td>
+        <td>${signed(r.median,' %')}</td><td>${fmt(r.beatIndex)} %</td><td>${signed(r.medianDrawdown,' %')}</td>
+        <td>${signed(delta,'')}</td><td class="${accepted?'filter-pass':'filter-fail'}">${r.filterId==='none'?'Referens':accepted?'Förbättrar modellen':'Inte motiverat'}</td>
+      </tr>`
+    }).join('');
+}
+function exportVit3Json(){
+  if(!lastVit3Report)return alert('Kör Vit 3.0-optimeringen först.');
+  downloadTextFile(JSON.stringify(lastVit3Report,null,2),`MomentumScore_Vit3_${todayISO()}.json`,'application/json;charset=utf-8')
+}
+function buildVit3Draft(){
+  if(!lastVit3Report?.best)return alert('Kör Vit 3.0-optimeringen först.');
+  const b=lastVit3Report.best,d=lastVit3Report.filterDecision;
+  const filterAccepted=b.filterId==='none'||(d&&d.improvementVsNoFilter>=2);
+  document.getElementById('vit3Draft').innerHTML=`
+    <div class="status ok"><b>Vit 3.0 – datadriven teknisk 100-poängsmodell</b></div>
+    <div class="tablewrap"><table><tr><th>Faktor</th><th>Maxpoäng</th><th>Kurvform</th><th>Centrum</th><th>Vänsterbredd</th><th>Högerbredd</th></tr>
+      ${lastVit3Report.factors.map((f,i)=>`<tr>
+        <td><b>${autoLabFactorLabel(f.factor)}</b></td><td><b>${b.weights[i]} p</b></td>
+        <td>${curveShapeName(f.curve.shape)}</td><td>${fmt(f.curve.center)}</td>
+        <td>${fmt(f.curve.leftWidth)}</td><td>${fmt(f.curve.rightWidth)}</td>
+      </tr>`).join('')}
+    </table></div>
+    <div class="rowcard"><b>Grundkrav</b><br>
+      ${filterAccepted&&b.filterId!=='none'?`Inför: <b>${b.filterName}</b>. Filterfördelen var ${signed(d.improvementVsNoFilter,' optimeringsenheter')} jämfört med inget krav.`:
+      'Inget hårt krav införs. Faktorerna påverkar i stället Vit-poängen mjukt.'}
+    </div>
+    <div class="rowcard"><b>Poängberäkning</b><br>
+      Varje faktor ger mellan 0 och sin maxpoäng enligt sin optimerade kurva. Summan avrundas till 0–100 och är den primära Vit-poängen.
+    </div>
+    <div class="rowcard"><b>Stödfakta som visas bredvid poängen</b><br>
+      Historisk andel som slog index, medianavkastning och median maximal nedgång för närmast jämförbara historiska observationer.
+    </div>
+    <div class="note">Detta är ett regelutkast och ändrar fortfarande inte den aktiva Vit-koden automatiskt.</div>`;
+}
+
 function toggleLaboratoryMode(){
   const combo=document.getElementById('labMode').value==='combo';
   document.getElementById('labSingleFactorControl').classList.toggle('hidden',combo);
@@ -3286,6 +3577,9 @@ document.getElementById('importFile').addEventListener('change',async e=>{
     input.value='';
   }
 });
+document.getElementById('runVit3Optimizer').onclick=runVit3Optimizer;
+document.getElementById('exportVit3Json').onclick=exportVit3Json;
+document.getElementById('buildVit3Draft').onclick=buildVit3Draft;
 document.getElementById('runCurveOptimizer').onclick=runCurveOptimizer;
 document.getElementById('exportCurveJson').onclick=exportCurveJson;
 document.getElementById('buildCurveDraft').onclick=buildCurveDraft;
