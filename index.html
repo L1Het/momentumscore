@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v7.3</title>
+<title>MomentumScore v7.4</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -97,7 +97,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v7.3 – säker import</h1>
+<h1>MomentumScore v7.4 – synlig import</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -186,7 +186,9 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 <div class="card">
 <div class="actions" style="margin:0;align-items:end">
 <button class="secondary" id="exportBtn">Spara som…</button>
-<label class="file-label">Importera säkerhetskopia<input type="file" id="importFile" accept=".json" hidden></label>
+<button class="secondary" id="chooseImportFile" type="button">Välj datafil…</button>
+<input type="file" id="importFile" accept=".json,application/json" style="max-width:320px">
+<div id="importStatus" class="note" style="margin-top:8px">Ingen fil vald.</div>
 </div>
 </div>
 <div class="card">
@@ -294,7 +296,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v7.3 – regler för Blå och Vit</h2>
+<h2>MomentumScore v7.4 – regler för Blå och Vit</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -338,7 +340,7 @@ Dessutom krävs minst 263 handelsdagar för både aktien och jämförelseindex.<
 <div class="rowcard"><b>Vit – Kvalitet, max 10 p</b><br>ROE, nettoskuld/EBITDA och FCF-marginal använder samma trösklar som Blå och skalas gemensamt från 15 till 10 poäng.</div>
 <div class="rowcard"><b>Vit – Värdering, max 10 p</b><br>Mot vart och ett av 3- och 5-årssnitten: vid eller under snittet 5 p · högst 10 % över 4 p · högst 20 % över 2 p · högst 35 % över 1 p · mer än 35 % över 0 p.</div>
 <div class="rowcard"><b>Vit – Bedömning</b><br>90–100 = Mycket stark · 80–89 = Stark · 70–79 = Bevakning · under 70 = Avstå. Ett brutet grundkrav ger alltid Ej kvalificerad.</div>
-<div class="rowcard"><b>Import och versionskompatibilitet</b><br>Säkerhetskopior från version 6 och 7 kan importeras. Saknade fält för börs, Yahoo-symbol, teknisk historik och modeller fylls i automatiskt utan att äldre history, marketHistory eller transaktioner tas bort.</div>
+<div class="rowcard"><b>Import och versionskompatibilitet</b><br>Säkerhetskopior från version 6 och 7 kan importeras. Importförlopp och eventuella fel visas direkt bredvid filväljaren. Saknade fält för börs, Yahoo-symbol, teknisk historik och modeller fylls i automatiskt utan att äldre history, marketHistory eller transaktioner tas bort.</div>
 
 </div></section>
 
@@ -1231,6 +1233,7 @@ document.getElementById('closeDevelopmentDetail').onclick=()=>document.getElemen
   toast('Säkerhetskopian laddades ner');
 }
 document.getElementById('exportBtn').onclick=exportBackup;
+
 function extractImportedRows(parsed){
   if(Array.isArray(parsed))return parsed;
   if(parsed&&Array.isArray(parsed.rows))return parsed.rows;
@@ -1238,77 +1241,100 @@ function extractImportedRows(parsed){
   if(parsed&&Array.isArray(parsed.companies))return parsed.companies;
   throw new Error('Filen innehåller ingen bolagslista');
 }
-function importStorageReplace(importedRows){
-  const oldRows=cloneJson(rows);
+function setImportStatus(text,isError=false){
+  const el=document.getElementById('importStatus');
+  if(!el)return;
+  el.textContent=text;
+  el.style.color=isError?'var(--red)':'var(--muted)';
+}
+async function prepareImportedRows(importedRows){
+  const clean=[],skipped=[],seen=new Set();
+  for(let i=0;i<importedRows.length;i++){
+    const raw=importedRows[i];
+    if(!raw||typeof raw!=='object')continue;
+    const n=normalizeRow(raw);
+    n.priceHistory=Array.isArray(n.priceHistory)?n.priceHistory.slice(-400):[];
+    n.marketHistory=Array.isArray(n.marketHistory)?n.marketHistory:[];
+    n.history=Array.isArray(n.history)?n.history:[];
+    n.transactions=Array.isArray(n.transactions)?n.transactions:[];
+    n.market=['SE','DK','NO','FI','IS'].includes(n.market)?n.market:'SE';
+    n.yahooSymbol=n.yahooSymbol||inferYahooSymbol(n.ticker||'',n.market);
+    if(!('marketUpdatedAt' in n))n.marketUpdatedAt='';
+    if(!('fundamentalUpdatedAt' in n))n.fundamentalUpdatedAt=n.updatedAt||n.createdAt||'';
+    if(!('ma200Level' in n))n.ma200Level='';
+    if(!('technicalSource' in n))n.technicalSource=n.priceHistory.length>=263?'Importerad kurshistorik':'Manuell';
+
+    const id=normalizedIdentity(n.ticker)||normalizedIdentity(n.company);
+    if(id&&seen.has(id)){skipped.push(n.company||n.ticker||'Namnlöst bolag')}
+    else{
+      if(id)seen.add(id);
+      clean.push(n);
+    }
+    if(i%10===0){
+      setImportStatus(`Förbereder import: ${i+1} av ${importedRows.length} bolag…`);
+      await new Promise(resolve=>setTimeout(resolve,0));
+    }
+  }
+  return{clean,skipped}
+}
+async function importSelectedFile(file){
+  const oldRows=rows;
   const oldStored=localStorage.getItem(storageKey);
   const oldVersion=localStorage.getItem(dbVersionKey);
-  const migrated=migrateDatabase(importedRows);
-  const json=JSON.stringify(migrated);
 
-  // Frigör först onödig lokal backup och indexhistorik. Index kan hämtas igen.
-  try{localStorage.removeItem(backupKey)}catch{}
-  try{localStorage.removeItem(benchmarkKey)}catch{}
+  setImportStatus(`Läser ${file.name}…`);
+  const text=await file.text();
+  setImportStatus('Tolkar JSON-filen…');
+  await new Promise(resolve=>setTimeout(resolve,0));
+  const parsed=JSON.parse(text);
+  const imported=extractImportedRows(parsed);
+  if(!imported.length)throw new Error('Filen innehåller inga bolag');
 
+  const result=await prepareImportedRows(imported);
+  if(!result.clean.length)throw new Error('Filen innehåller inga giltiga bolag');
+
+  setImportStatus(`Sparar ${result.clean.length} bolag i webbläsaren…`);
+  await new Promise(resolve=>setTimeout(resolve,0));
+
+  const compact=JSON.stringify(result.clean);
   try{
-    // Ta bort gamla huvudkopian innan den nya skrivs för att undvika
-    // att Chrome tillfälligt behöver lagra båda samtidigt.
+    localStorage.removeItem(backupKey);
+    localStorage.removeItem(benchmarkKey);
     localStorage.removeItem(storageKey);
-    localStorage.setItem(storageKey,json);
+    localStorage.setItem(storageKey,compact);
     localStorage.setItem(dbVersionKey,String(appDbVersion));
-    rows=migrated;
-    benchmarkHistories={};
-    return{rows:migrated,oldRows};
   }catch(e){
-    // Återställ föregående databas om den nya inte får plats.
     try{
       localStorage.removeItem(storageKey);
       if(oldStored!==null)localStorage.setItem(storageKey,oldStored);
       if(oldVersion!==null)localStorage.setItem(dbVersionKey,oldVersion);
-    }catch(restoreError){
-      console.error('Återställning efter importfel misslyckades',restoreError);
-    }
+    }catch(restoreError){console.error('Återställning misslyckades',restoreError)}
     rows=oldRows;
     if(e?.name==='QuotaExceededError'||String(e?.message||'').toLowerCase().includes('quota')){
-      throw new Error('Filen är större än webbläsarens lediga lagringsutrymme. Den gamla databasen har återställts. Exportera nuvarande data, rensa webbplatsens lokala data och importera filen igen.');
+      throw new Error(`Filen kräver cirka ${(compact.length/1024/1024).toFixed(2)} MB och får inte plats i webbläsarens lagring. Den gamla databasen har återställts.`);
     }
     throw e;
   }
-}
 
-document.getElementById('importFile').onchange=e=>{
-  const input=e.target,f=input.files[0];
-  if(!f)return;
-  const rd=new FileReader();
-  rd.onload=()=>{
-    try{
-      const parsed=JSON.parse(rd.result);
-      const imported=extractImportedRows(parsed);
-      const result=deduplicateRows(imported);
-      if(!result.clean.length)throw new Error('Filen innehåller inga giltiga bolag');
-      const oldCount=rows.length;
-      importStorageReplace(result.clean);
-      render();renderDatabaseHealth();renderMarketSettings();
-      input.value='';
-      toast(`Import klar: ${rows.length} bolag`);
-      setTimeout(()=>{
-        alert(
-          'Import klar.\\n\\n'+
-          'Tidigare databas: '+oldCount+' bolag\\n'+
-          'Importerad databas: '+rows.length+' bolag\\n'+
-          (result.skipped.length?'Dubbletter i filen som hoppades över: '+result.skipped.length+'\\n':'')+
-          'Gamla exportformat har migrerats automatiskt. Jämförelseindex hämtas igen vid nästa kursuppdatering.'
-        );
-      },50);
-    }catch(err){
-      input.value='';
-      alert('Importen misslyckades: '+(err.message||'okänt fel'));
-      console.error(err);
-    }
-  };
-  rd.onerror=()=>{
+  rows=result.clean;
+  benchmarkHistories={};
+  render();renderDatabaseHealth();renderMarketSettings();renderDashboard();
+  setImportStatus(`Import klar: ${rows.length} bolag. ${result.skipped.length?result.skipped.length+' dubbletter hoppades över.':''}`);
+  toast(`Import klar: ${rows.length} bolag`);
+}
+document.getElementById('chooseImportFile').onclick=()=>document.getElementById('importFile').click();
+document.getElementById('importFile').addEventListener('change',async e=>{
+  const input=e.target,file=input.files?.[0];
+  if(!file)return;
+  try{
+    await importSelectedFile(file);
+  }catch(err){
+    setImportStatus('Importen misslyckades: '+(err.message||'okänt fel'),true);
+    alert('Importen misslyckades: '+(err.message||'okänt fel'));
+    console.error(err);
+  }finally{
     input.value='';
-    alert('Filen kunde inte läsas.');
-  };
-  rd.readAsText(f);
-};document.getElementById('saveSettings').onclick=saveMarketSettings;document.getElementById('checkDatabase').onclick=renderDatabaseHealth;document.getElementById('restoreLocalBackup').onclick=restoreLocalBackup;document.getElementById('updatePrices').onclick=()=>updateAllPrices(false);render();renderPreview();renderMarketSettings();renderDashboard();renderDatabaseHealth();setTimeout(maybeAutoUpdate,600);
+  }
+});
+document.getElementById('saveSettings').onclick=saveMarketSettings;document.getElementById('checkDatabase').onclick=renderDatabaseHealth;document.getElementById('restoreLocalBackup').onclick=restoreLocalBackup;document.getElementById('updatePrices').onclick=()=>updateAllPrices(false);render();renderPreview();renderMarketSettings();renderDashboard();renderDatabaseHealth();setTimeout(maybeAutoUpdate,600);
 </script></body></html>
