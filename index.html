@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v14.0</title>
+<title>MomentumScore v15.0</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -127,6 +127,9 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .engine-progress>div{height:100%;width:0%;background:linear-gradient(90deg,#4ca6ff,#48d697,#ffd166);transition:width .2s}
 .engine-primary{border:2px solid rgba(72,214,151,.6);background:rgba(72,214,151,.05)}
 .engine-log{max-height:240px;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:12px;white-space:pre-wrap}
+.search-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
+.search-chip{padding:8px;border:1px solid var(--line);border-radius:999px;text-align:center;background:rgba(255,255,255,.03)}
+
 
 
 
@@ -145,7 +148,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v14.0 – Enmotor</h1>
+<h1>MomentumScore v15.0 – Självsökande modell</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -468,7 +471,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 
   <div class="card engine-primary">
     <h2>Optimera Vit</h2>
-    <p class="note">En motor läser historiken, väljer användbara faktorer, hittar sweet spots och poängkurvor, optimerar 100-poängsvikterna, testar möjliga grundkrav och skapar ett färdigt regelutkast. Du behöver inte köra delstegen manuellt.</p>
+    <p class="note">Motorn testar alla tillgängliga tekniska faktorer och alla möjliga kombinationer utan att först kasta bort dem med bokstavsbetyg. Därefter optimeras sweet spots, poängkurvor, 100-poängsvikter och eventuella grundkrav automatiskt.</p>
     <div class="lab-grid">
       <div>
         <label>Framtida period</label>
@@ -947,7 +950,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v14.0 – regler och analys</h2>
+<h2>MomentumScore v15.0 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -992,6 +995,7 @@ Dessutom krävs minst 263 handelsdagar för både aktien och jämförelseindex.<
 <div class="rowcard"><b>Vit – Värdering, max 10 p</b><br>Mot vart och ett av 3- och 5-årssnitten: vid eller under snittet 5 p · högst 10 % över 4 p · högst 20 % över 2 p · högst 35 % över 1 p · mer än 35 % över 0 p.</div>
 <div class="rowcard"><b>Vit – poäng innan indexdata finns</b><br>Vit består av 75 poäng från aktie- och rapportdata samt 25 poäng relativ styrka. Om jämförelseindex saknas visas därför en preliminär poäng med en asterisk, exempelvis 67*. Bolaget markeras då som Underlag saknas – inte Ej kvalificerat. Efter kursuppdatering eller import av en komplett v7.6-säkerhetskopia räknas hela 100-poängsmodellen.</div>
 <div class="rowcard"><b>Vit – Bedömning</b><br>90–100 = Mycket stark · 80–89 = Stark · 70–79 = Bevakning · under 70 = Avstå. Ett brutet grundkrav ger alltid Ej kvalificerad.</div>
+<div class="rowcard"><b>Självsökande modellurval</b><br>Alla tillgängliga tekniska faktorer får delta. Motorn testar enskilda faktorer och kombinationer utan att först filtrera bort dem med robusthetsbetyg. Endast modeller som saknar tillräckligt historiskt underlag tas bort.</div>
 <div class="rowcard"><b>Enmotorn</b><br>Knappen Optimera Vit kör hela analyskedjan utan manuella delsteg. Motorn väljer faktorer, sweet spots, kurvor, 100-poängsvikter och eventuella grundkrav och skapar därefter ett färdigt regelutkast. Mellanresultat sparas automatiskt.</div>
 <div class="rowcard"><b>Helautomatisk optimering</b><br>Den fullständiga kedjan kör AutoLab, modellurval, intervalloptimering, poängkurvor och Vit 3.0 i rätt ordning. Delresultat cachas lokalt och återanvänds när samma inställningar används. En komplett analysfil kan exporteras i ett enda steg.</div>
 <div class="rowcard"><b>Vit 3.0-optimeraren</b><br>Vit 3.0 testar poängvikter som summerar till 100 och möjliga hårda tekniska riskfilter. Ett grundkrav rekommenderas bara om det förbättrar det sammanvägda resultatet tillräckligt jämfört med samma modell utan filter. Vit-poängen är huvudresultatet; historisk träffsäkerhet, medianavkastning och nedgång visas som stödfakta.</div>
@@ -3276,11 +3280,142 @@ function engineRenderFinal(){
   buildVit3Draft(true);
   document.getElementById('pipelineSummary').innerHTML=[
     ['Status','Klar'],['Faktorer',lastVit3Report.factors.length],
-    ['Modeller testade',lastOptimizerReport?.testedModels||0],
+    ['Faktormodeller testade',lastOptimizerReport?.testedModels||0],
     ['Vikt/filtertester',lastVit3Report?.tested||0],
     ['Median',signed(b.median,' %')],['Slår index',fmt(b.beatIndex)+' %']
   ].map(([a,v])=>`<div class="metric"><small>${a}</small><b>${v}</b></div>`).join('')
 }
+
+function exhaustiveAbsoluteReports(){
+  if(!lastAutoLabReport?.reports?.length)return [];
+  return lastAutoLabReport.reports
+    .filter(r=>r.target==='absolute'&&r.best&&Number.isFinite(r.best.median))
+    .sort((a,b)=>(b.improvement||-999)-(a.improvement||-999))
+}
+function exhaustiveBuildDataset(reports){
+  const map=new Map();
+  for(const report of reports){
+    const factor=report.factor;
+    const data=withLabSettings({
+      labFactor:factor,
+      labHorizon:lastAutoLabReport.settings.horizon,
+      labSample:lastAutoLabReport.settings.step,
+      labTarget:'absolute',
+      labUniverse:'all',
+      labMinObs:10,
+      labGrouping:'deciles'
+    },()=>buildLaboratoryObservations());
+    for(const o of data.obs){
+      const key=comboObservationKey(o);
+      if(!map.has(key))map.set(key,{
+        ticker:o.ticker,company:o.company,date:o.date,
+        futureReturn:o.futureReturn,relativeReturn:o.relativeReturn,
+        maxDrawdown:o.maxDrawdown,values:{}
+      });
+      map.get(key).values[factor]=o.factorValue;
+    }
+  }
+  return [...map.values()]
+}
+function exhaustiveSignal(value,report){
+  const groups=(report.groups||[]).filter(g=>g.eligible&&Number.isFinite(g.median));
+  if(!groups.length)return 0;
+  const containing=groups.find(g=>value>=g.lo&&value<=g.hi);
+  if(!containing)return 0;
+  const ranked=groups.slice().sort((a,b)=>a.median-b.median);
+  const idx=ranked.indexOf(containing);
+  return ranked.length<=1?1:idx/(ranked.length-1)
+}
+function exhaustiveEvaluateModel(rows,reportsByFactor,subset,topShare,minObs){
+  const complete=rows.filter(o=>subset.every(f=>Number.isFinite(o.values[f])));
+  const n=Math.max(minObs,Math.floor(complete.length*topShare));
+  if(complete.length<n||n<minObs)return null;
+
+  const scored=complete.map(o=>{
+    const score=subset.reduce((sum,f)=>sum+exhaustiveSignal(o.values[f],reportsByFactor[f]),0)/subset.length;
+    return{...o,score}
+  }).sort((a,b)=>b.score-a.score);
+
+  const selected=scored.slice(0,n),ret=selected.map(o=>o.futureReturn),dd=selected.map(o=>o.maxDrawdown);
+  const rel=selected.filter(o=>Number.isFinite(o.relativeReturn));
+  const baseline=labMedian(scored.map(o=>o.futureReturn));
+  const median=labMedian(ret),mean=labMean(ret);
+  const positive=selected.filter(o=>o.futureReturn>0).length/selected.length*100;
+  const beatIndex=rel.length?rel.filter(o=>o.relativeReturn>0).length/rel.length*100:NaN;
+  const medianDrawdown=labMedian(dd);
+  const companies=new Set(selected.map(o=>o.ticker)).size;
+  const counts=selected.reduce((a,o)=>(a[o.ticker]=(a[o.ticker]||0)+1,a),{});
+  const concentration=Math.max(...Object.values(counts))/selected.length*100;
+  const improvement=median-baseline;
+  const objective=
+    improvement*2.5 +
+    (Number.isFinite(beatIndex)?beatIndex-50:0)*0.45 +
+    (positive-50)*0.18 +
+    Math.max(-20,medianDrawdown)*0.20 -
+    Math.max(0,concentration-15)*0.5;
+
+  return{
+    subset,weights:Array(subset.length).fill(1),
+    selectedCount:selected.length,totalObs:scored.length,companies,
+    median,mean,baselineMedian:baseline,improvement,beatIndex,positive,
+    medianDrawdown,worstDrawdown:Math.min(...dd.filter(Number.isFinite)),
+    concentration,objective,topObservations:selected.slice(0,30)
+  }
+}
+async function runExhaustiveOptimizer(settings){
+  const reports=exhaustiveAbsoluteReports();
+  if(!reports.length)throw new Error('AutoLab hittade inga användbara absoluta faktorserier.');
+
+  // Keep every factor available, but cap combination size for runtime.
+  const factors=reports.map(r=>r.factor);
+  const reportsByFactor=Object.fromEntries(reports.map(r=>[r.factor,r]));
+  const rows=exhaustiveBuildDataset(reports);
+  const maxK=settings.depth==='fast'?3:settings.depth==='deep'?5:4;
+  const minK=1;
+  const topShare=0.20;
+  const minObs=settings.minObs;
+
+  const jobs=[];
+  for(let k=minK;k<=Math.min(maxK,factors.length);k++){
+    for(const subset of combinations(factors,k))jobs.push(subset)
+  }
+  if(!jobs.length)throw new Error('Inga faktorkombinationer kunde skapas.');
+
+  const results=[];
+  for(let i=0;i<jobs.length;i++){
+    const r=exhaustiveEvaluateModel(rows,reportsByFactor,jobs[i],topShare,minObs);
+    if(r)results.push(r);
+    if(i%50===0){
+      engineStatus(`Testar faktormodell ${i+1} av ${jobs.length}…`,25+20*(i+1)/jobs.length);
+      await new Promise(r=>setTimeout(r,0))
+    }
+  }
+  results.sort((a,b)=>b.objective-a.objective);
+  if(!results.length)throw new Error('Ingen kombination hade tillräckligt historiskt underlag.');
+
+  lastOptimizerReport={
+    format:'MomentumScoreExhaustiveOptimizer',
+    version:'15.0',
+    createdAt:new Date().toISOString(),
+    settings:{
+      horizon:lastAutoLabReport.settings.horizon,
+      step:lastAutoLabReport.settings.step,
+      topShare,minObs,minK,maxK
+    },
+    availableFactors:reports.map(r=>({
+      factor:r.factor,
+      grade:r.robustness?.grade||'Ej använd',
+      robustness:r.robustness?.score||0,
+      best:r.best
+    })),
+    testedModels:jobs.length,
+    validModels:results.length,
+    winners:results.slice(0,50)
+  };
+  renderOptimizer(lastOptimizerReport);
+  return lastOptimizerReport
+}
+
 async function runOneEngine(){
   if(oneEngineRunning)return;
   oneEngineRunning=true;
@@ -3307,12 +3442,12 @@ async function runOneEngine(){
     engineSave(settings);
     engineLog(`AutoLab klart: ${lastAutoLabReport.reports.length} faktortester.`);
 
-    engineStatus('Väljer faktorer och modellstruktur…',25);
-    engineLog('Modellurval och faktorkombinationer startar.');
-    await runOptimizer();
-    if(!lastOptimizerReport?.winners?.length)throw new Error('Ingen giltig faktormodell hittades.');
+    engineStatus('Testar alla faktorer och kombinationer…',25);
+    engineLog('Självsökande modellurval startar utan betygsfilter.');
+    await runExhaustiveOptimizer(settings);
+    if(!lastOptimizerReport?.winners?.length)throw new Error('Ingen giltig faktormodell hittades efter full sökning.');
     engineSave(settings);
-    engineLog(`Modellurval klart: ${lastOptimizerReport.testedModels} modeller testade.`);
+    engineLog(`Full sökning klar: ${lastOptimizerReport.testedModels} modeller testade, ${lastOptimizerReport.validModels} giltiga.`);
 
     engineStatus('Söker exakta sweet spots…',45);
     engineLog('Intervalloptimering startar.');
