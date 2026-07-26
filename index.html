@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v7.7</title>
+<title>MomentumScore v7.8</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -104,7 +104,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v7.7 – analyslaboratorium</h1>
+<h1>MomentumScore v7.8 – decillaboratorium</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -313,7 +313,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 <section id="laboratory" class="panel">
   <div class="card">
     <h2>Analyslaboratorium</h2>
-    <p class="note">Testar historiskt vilka tekniska lägen som följts av bäst framtida utveckling i ditt eget aktieuniversum. Resultaten ändrar inte Blå eller Vit automatiskt.</p>
+    <p class="note">Testar historiskt vilka tekniska lägen som följts av bäst utveckling sex månader senare. Standardläget delar observationerna i tio lika stora grupper, så att datan själv bestämmer gränserna. Resultaten ändrar inte Blå eller Vit automatiskt.</p>
     <div class="lab-grid">
       <div>
         <label>Faktor</label>
@@ -334,6 +334,13 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
           <option value="63">3 månader</option>
           <option value="126" selected>6 månader</option>
           <option value="252">12 månader</option>
+        </select>
+      </div>
+      <div>
+        <label>Gruppering</label>
+        <select id="labGrouping">
+          <option value="deciles" selected>10 lika stora grupper (deciler)</option>
+          <option value="fixed">Fasta intervall</option>
         </select>
       </div>
       <div>
@@ -380,7 +387,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
   <div id="labSummary" class="summary"></div>
 
   <div class="card">
-    <h3>Resultat per intervall</h3>
+    <h3>Resultat per grupp</h3><p class="note">Träffsäkerhet mot index visar hur stor andel av observationerna som slog sitt jämförelseindex under den valda framtidsperioden.</p>
     <div class="tablewrap"><table id="labResults" class="lab-table"></table></div>
   </div>
 
@@ -413,7 +420,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v7.7 – regler och analys</h2>
+<h2>MomentumScore v7.8 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -458,7 +465,7 @@ Dessutom krävs minst 263 handelsdagar för både aktien och jämförelseindex.<
 <div class="rowcard"><b>Vit – Värdering, max 10 p</b><br>Mot vart och ett av 3- och 5-årssnitten: vid eller under snittet 5 p · högst 10 % över 4 p · högst 20 % över 2 p · högst 35 % över 1 p · mer än 35 % över 0 p.</div>
 <div class="rowcard"><b>Vit – poäng innan indexdata finns</b><br>Vit består av 75 poäng från aktie- och rapportdata samt 25 poäng relativ styrka. Om jämförelseindex saknas visas därför en preliminär poäng med en asterisk, exempelvis 67*. Bolaget markeras då som Underlag saknas – inte Ej kvalificerat. Efter kursuppdatering eller import av en komplett v7.6-säkerhetskopia räknas hela 100-poängsmodellen.</div>
 <div class="rowcard"><b>Vit – Bedömning</b><br>90–100 = Mycket stark · 80–89 = Stark · 70–79 = Bevakning · under 70 = Avstå. Ett brutet grundkrav ger alltid Ej kvalificerad.</div>
-<div class="rowcard"><b>Analyslaboratoriet</b><br>Laboratoriet beräknar historiska tekniska faktorer utan framtidsläcka och jämför dem med avkastning 1, 3, 6 eller 12 månader senare. Resultaten är beslutsunderlag och ändrar inte Blå eller Vit automatiskt. Fundamentala faktorer kan inte backtestas korrekt förrän rapportdata finns sparad med historiska publiceringsdatum.</div>
+<div class="rowcard"><b>Analyslaboratoriet</b><br>Laboratoriet beräknar historiska tekniska faktorer utan framtidsläcka och jämför dem med avkastning 1, 3, 6 eller 12 månader senare. Standardläget använder deciler, alltså tio lika stora observationsgrupper, och visar även hur ofta varje grupp slog index. Resultaten är beslutsunderlag och ändrar inte Blå eller Vit automatiskt. Fundamentala faktorer kan inte backtestas korrekt förrän rapportdata finns sparad med historiska publiceringsdatum.</div>
 <div class="rowcard"><b>Import och versionskompatibilitet</b><br>Säkerhetskopior från version 6 och 7 kan importeras. Importförlopp och eventuella fel visas direkt bredvid filväljaren. Saknade fält för börs, Yahoo-symbol, teknisk historik och modeller fylls i automatiskt utan att äldre history, marketHistory eller transaktioner tas bort.</div>
 
 </div></section>
@@ -1311,66 +1318,128 @@ function buildLaboratoryObservations(){
   }
   return{factor,horizon,step,target,universe,obs}
 }
-function summarizeLaboratory(data){
-  const def=labFactorDefinition(data.factor),minObs=Number(document.getElementById('labMinObs').value);
+
+function labDecileGroups(data,minObs){
+  const sorted=data.obs.slice().sort((a,b)=>a.factorValue-b.factorValue);
   const groups=[];
-  for(let b=0;b<def.bins.length-1;b++){
-    const lo=def.bins[b],hi=def.bins[b+1];
-    const items=data.obs.filter(o=>o.factorValue>=lo&&o.factorValue<hi);
-    const returns=items.map(o=>o.targetReturn),absReturns=items.map(o=>o.futureReturn),drawdowns=items.map(o=>o.maxDrawdown);
+  if(!sorted.length)return groups;
+  const n=sorted.length;
+  for(let d=0;d<10;d++){
+    const start=Math.floor(d*n/10),end=Math.floor((d+1)*n/10);
+    const items=sorted.slice(start,end);
+    if(!items.length)continue;
+    const values=items.map(o=>o.factorValue);
+    const returns=items.map(o=>o.targetReturn);
+    const absReturns=items.map(o=>o.futureReturn);
+    const drawdowns=items.map(o=>o.maxDrawdown);
+    const hitIndexItems=items.filter(o=>Number.isFinite(o.relativeReturn));
     groups.push({
-      lo,hi,label:labBinLabel(def,lo,hi),items,n:items.length,companies:new Set(items.map(o=>o.ticker)).size,
+      decile:d+1,
+      lo:Math.min(...values),hi:Math.max(...values),
+      label:`Decil ${d+1}`,
+      rangeLabel:`${fmt(Math.min(...values))} till ${fmt(Math.max(...values))}`,
+      items,n:items.length,companies:new Set(items.map(o=>o.ticker)).size,
       mean:labMean(returns),median:labMedian(returns),p25:labPercentile(returns,.25),p75:labPercentile(returns,.75),
       positive:items.length?items.filter(o=>o.targetReturn>0).length/items.length*100:NaN,
+      beatIndex:hitIndexItems.length?hitIndexItems.filter(o=>o.relativeReturn>0).length/hitIndexItems.length*100:NaN,
       meanAbs:labMean(absReturns),medianAbs:labMedian(absReturns),
       medianDrawdown:labMedian(drawdowns),worstDrawdown:items.length?Math.min(...drawdowns.filter(Number.isFinite)):NaN,
       std:labStd(returns),eligible:items.length>=minObs
     })
   }
+  return groups
+}
+function labFixedGroups(data,minObs){
+  const def=labFactorDefinition(data.factor),groups=[];
+  for(let b=0;b<def.bins.length-1;b++){
+    const lo=def.bins[b],hi=def.bins[b+1];
+    const items=data.obs.filter(o=>o.factorValue>=lo&&o.factorValue<hi);
+    const returns=items.map(o=>o.targetReturn),absReturns=items.map(o=>o.futureReturn),drawdowns=items.map(o=>o.maxDrawdown);
+    const hitIndexItems=items.filter(o=>Number.isFinite(o.relativeReturn));
+    groups.push({
+      lo,hi,label:labBinLabel(def,lo,hi),rangeLabel:labBinLabel(def,lo,hi),
+      items,n:items.length,companies:new Set(items.map(o=>o.ticker)).size,
+      mean:labMean(returns),median:labMedian(returns),p25:labPercentile(returns,.25),p75:labPercentile(returns,.75),
+      positive:items.length?items.filter(o=>o.targetReturn>0).length/items.length*100:NaN,
+      beatIndex:hitIndexItems.length?hitIndexItems.filter(o=>o.relativeReturn>0).length/hitIndexItems.length*100:NaN,
+      meanAbs:labMean(absReturns),medianAbs:labMedian(absReturns),
+      medianDrawdown:labMedian(drawdowns),worstDrawdown:items.length?Math.min(...drawdowns.filter(Number.isFinite)):NaN,
+      std:labStd(returns),eligible:items.length>=minObs
+    })
+  }
+  return groups
+}
+function labCompositeRank(groups){
   const eligible=groups.filter(g=>g.eligible&&Number.isFinite(g.median));
-  const ranked=eligible.slice().sort((a,b)=>b.median-a.median);
-  ranked.forEach((g,i)=>g.recommendedPoints=ranked.length<=1?10:Math.round((ranked.length-1-i)/(ranked.length-1)*10));
-  groups.forEach(g=>{
-    const r=ranked.find(x=>x.label===g.label);
-    g.recommendedPoints=r?r.recommendedPoints:null
+  const medians=eligible.map(g=>g.median),hits=eligible.map(g=>g.beatIndex).filter(Number.isFinite);
+  const minMed=Math.min(...medians),maxMed=Math.max(...medians);
+  const minHit=hits.length?Math.min(...hits):0,maxHit=hits.length?Math.max(...hits):100;
+  eligible.forEach(g=>{
+    const medScore=maxMed===minMed?50:(g.median-minMed)/(maxMed-minMed)*100;
+    const hitScore=Number.isFinite(g.beatIndex)?(maxHit===minHit?50:(g.beatIndex-minHit)/(maxHit-minHit)*100):50;
+    const riskPenalty=Number.isFinite(g.medianDrawdown)?Math.max(0,Math.min(100,Math.abs(g.medianDrawdown)*3)):0;
+    g.composite=medScore*0.55+hitScore*0.35-riskPenalty*0.10
   });
-  return{...data,def,groups,minObs,best:ranked[0]||null}
+  const ranked=eligible.slice().sort((a,b)=>b.composite-a.composite);
+  ranked.forEach((g,i)=>g.recommendedPoints=ranked.length<=1?10:Math.round((ranked.length-1-i)/(ranked.length-1)*10));
+  return ranked
+}
+
+function summarizeLaboratory(data){
+  const def=labFactorDefinition(data.factor);
+  const minObs=Number(document.getElementById('labMinObs').value);
+  const grouping=document.getElementById('labGrouping')?.value||'deciles';
+  const groups=grouping==='deciles'?labDecileGroups(data,minObs):labFixedGroups(data,minObs);
+  const ranked=labCompositeRank(groups);
+  groups.forEach(g=>{
+    const match=ranked.find(x=>x===g);
+    if(!match)g.recommendedPoints=null
+  });
+  return{...data,def,groups,minObs,grouping,best:ranked[0]||null,ranked}
 }
 function renderLaboratory(result){
   lastLaboratoryResult=result;
   const targetName=result.target==='relative'?'överavkastning mot index':'absolut avkastning';
   const horizonName={21:'1 månad',63:'3 månader',126:'6 månader',252:'12 månader'}[result.horizon]||result.horizon+' dagar';
   const uniqueCompanies=new Set(result.obs.map(o=>o.ticker)).size;
+  const best=result.best;
   document.getElementById('labSummary').innerHTML=[
     ['Observationer',result.obs.length],['Bolag',uniqueCompanies],
+    ['Gruppering',result.grouping==='deciles'?'Deciler':'Fasta intervall'],
     ['Faktor',result.def.name],['Framåtblick',horizonName],
-    ['Bästa intervall',result.best?.label||'Otillräckligt underlag'],
-    ['Bästa median',Number.isFinite(result.best?.median)?signed(result.best.median,' %'):'–']
+    ['Bästa grupp',best?best.label:'Otillräckligt underlag'],
+    ['Bästa faktorintervall',best?best.rangeLabel:'–'],
+    ['Bästa median',Number.isFinite(best?.median)?signed(best.median,' %'):'–'],
+    ['Träff mot index',Number.isFinite(best?.beatIndex)?fmt(best.beatIndex)+' %':'–']
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b style="${String(b).length>18?'font-size:14px':''}">${b}</b></div>`).join('');
 
   document.getElementById('labResults').innerHTML='<tr>'+[
-    'Intervall','Observationer','Bolag','Genomsnitt','Median','25:e percentil','75:e percentil',
-    'Andel positiva','Median max nedgång','Värsta nedgång','Std.avvikelse','Underlag'
+    'Grupp','Faktorintervall','Observationer','Bolag','Genomsnitt','Median','25:e percentil','75:e percentil',
+    'Andel positiva','Slår index','Median max nedgång','Värsta nedgång','Std.avvikelse','Underlag'
   ].map(x=>`<th>${x}</th>`).join('')+'</tr>'+
-  result.groups.map(g=>`<tr class="${result.best&&g.label===result.best.label?'lab-best lab-highlight':''}">
-    <td><b>${g.label}</b></td><td>${g.n}</td><td>${g.companies}</td>
+  result.groups.map(g=>`<tr class="${best&&g===best?'lab-best lab-highlight':''}">
+    <td><b>${g.label}</b></td><td><b>${g.rangeLabel}</b></td><td>${g.n}</td><td>${g.companies}</td>
     <td class="${classByValue(g.mean)}">${signed(g.mean,' %')}</td>
     <td class="${classByValue(g.median)}"><b>${signed(g.median,' %')}</b></td>
     <td>${signed(g.p25,' %')}</td><td>${signed(g.p75,' %')}</td>
-    <td>${fmt(g.positive)} %</td><td>${signed(g.medianDrawdown,' %')}</td><td>${signed(g.worstDrawdown,' %')}</td>
+    <td>${fmt(g.positive)} %</td><td>${Number.isFinite(g.beatIndex)?fmt(g.beatIndex)+' %':'–'}</td>
+    <td>${signed(g.medianDrawdown,' %')}</td><td>${signed(g.worstDrawdown,' %')}</td>
     <td>${fmt(g.std)} %</td><td>${g.eligible?'Godkänt':'För få'}</td>
   </tr>`).join('');
 
-  const rec=result.groups.filter(g=>g.eligible).slice().sort((a,b)=>(b.recommendedPoints??-1)-(a.recommendedPoints??-1));
-  document.getElementById('labRecommendation').innerHTML='<tr><th>Intervall</th><th>Rekommenderad poäng 0–10</th><th>Median '+targetName+'</th><th>Andel positiva</th><th>Observationer</th><th>Kommentar</th></tr>'+
-    rec.map(g=>`<tr><td><b>${g.label}</b></td><td><b>${g.recommendedPoints}</b></td><td>${signed(g.median,' %')}</td><td>${fmt(g.positive)} %</td><td>${g.n}</td><td class="wrap">${g.recommendedPoints>=8?'Historiskt starkast i detta test':g.recommendedPoints<=2?'Historiskt svagast i detta test':'Mellanläge'}</td></tr>`).join('');
+  const rec=result.ranked||[];
+  document.getElementById('labRecommendation').innerHTML='<tr><th>Grupp</th><th>Faktorintervall</th><th>Rekommenderad poäng 0–10</th><th>Median '+targetName+'</th><th>Slår index</th><th>Andel positiva</th><th>Median nedgång</th><th>Observationer</th><th>Kommentar</th></tr>'+
+    rec.map(g=>`<tr><td><b>${g.label}</b></td><td><b>${g.rangeLabel}</b></td><td><b>${g.recommendedPoints}</b></td>
+      <td>${signed(g.median,' %')}</td><td>${Number.isFinite(g.beatIndex)?fmt(g.beatIndex)+' %':'–'}</td>
+      <td>${fmt(g.positive)} %</td><td>${signed(g.medianDrawdown,' %')}</td><td>${g.n}</td>
+      <td class="wrap">${g.recommendedPoints>=8?'Starkt historiskt utfall och god träffsäkerhet':g.recommendedPoints<=2?'Svagt historiskt utfall i detta test':'Mellanläge'}</td></tr>`).join('');
 
   const top=result.obs.slice().sort((a,b)=>b.targetReturn-a.targetReturn).slice(0,25);
   document.getElementById('labTopObservations').innerHTML='<tr><th>Datum</th><th>Ticker</th><th>Bolag</th><th>Faktorvärde</th><th>Framtida aktieavkastning</th><th>Index</th><th>Överavkastning</th><th>Max nedgång</th></tr>'+
     top.map(o=>`<tr><td>${o.date}</td><td>${o.ticker}</td><td>${o.company}</td><td>${fmt(o.factorValue)}</td><td>${signed(o.futureReturn,' %')}</td><td>${signed(o.indexReturn,' %')}</td><td>${signed(o.relativeReturn,' %')}</td><td>${signed(o.maxDrawdown,' %')}</td></tr>`).join('');
 
   document.getElementById('labStatus').textContent=
-    `Klart. ${result.obs.length} observationer från ${uniqueCompanies} bolag. Resultatmått: ${targetName}.`;
+    `Klart. ${result.obs.length} observationer från ${uniqueCompanies} bolag. ${result.grouping==='deciles'?'Varje decil innehåller ungefär lika många observationer.':'Fasta intervall används.'}`;
 }
 async function runLaboratory(){
   const status=document.getElementById('labStatus');
@@ -1392,8 +1461,8 @@ async function runLaboratory(){
 }
 function exportLaboratoryCsv(){
   if(!lastLaboratoryResult)return alert('Kör ett test först.');
-  const rowsCsv=[['Intervall','Observationer','Bolag','Genomsnitt','Median','P25','P75','Andel positiva','Median max nedgång','Värsta nedgång','Std avvikelse','Rekommenderad poäng']];
-  lastLaboratoryResult.groups.forEach(g=>rowsCsv.push([g.label,g.n,g.companies,g.mean,g.median,g.p25,g.p75,g.positive,g.medianDrawdown,g.worstDrawdown,g.std,g.recommendedPoints??'']));
+  const rowsCsv=[['Grupp','Faktorintervall','Observationer','Bolag','Genomsnitt','Median','P25','P75','Andel positiva','Slår index','Median max nedgång','Värsta nedgång','Std avvikelse','Rekommenderad poäng']];
+  lastLaboratoryResult.groups.forEach(g=>rowsCsv.push([g.label,g.rangeLabel,g.n,g.companies,g.mean,g.median,g.p25,g.p75,g.positive,g.beatIndex,g.medianDrawdown,g.worstDrawdown,g.std,g.recommendedPoints??'']));
   const esc=v=>`"${String(v??'').replace(/"/g,'""')}"`;
   const csv='\ufeff'+rowsCsv.map(r=>r.map(esc).join(';')).join('\n');
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
