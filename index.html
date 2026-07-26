@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v7.4</title>
+<title>MomentumScore v7.5</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -97,7 +97,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v7.4 – synlig import</h1>
+<h1>MomentumScore v7.5 – stabil import</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -296,7 +296,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v7.4 – regler för Blå och Vit</h2>
+<h2>MomentumScore v7.5 – regler för Blå och Vit</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -642,6 +642,71 @@ function listRows(){
     return av<bv?1:av>bv?-1:0
   });
   return l
+}
+
+
+function renderDashboard(){
+  const table=document.getElementById('dashboardTable');
+  if(!table)return;
+
+  const q=(document.getElementById('dashboardSearch')?.value||'').toLowerCase();
+  const filter=document.getElementById('dashboardFilter')?.value||'all';
+  const market=document.getElementById('dashboardMarket')?.value||'all';
+  const sort=document.getElementById('dashboardSort')?.value||'score';
+
+  let list=rows.map((r,i)=>({
+    r,i,c:calc(r),w:whiteCalc(r),h:holdings(r),m:developmentMetrics(r)
+  }));
+
+  if(q)list=list.filter(x=>`${x.r.ticker||''} ${x.r.company||''}`.toLowerCase().includes(q));
+  if(market!=='all')list=list.filter(x=>(x.r.market||'SE')===market);
+  if(filter==='qualified')list=list.filter(x=>x.c.qualified);
+  if(filter==='owned')list=list.filter(x=>x.h.shares>0);
+  if(filter==='strong')list=list.filter(x=>x.c.qualified&&x.c.total>=80);
+
+  list.sort((a,b)=>{
+    if(sort==='company')return (a.r.company||'').localeCompare(b.r.company||'','sv');
+    if(sort==='ma200')return (num(b.r.ma200)||-Infinity)-(num(a.r.ma200)||-Infinity);
+    if(sort==='rsi')return (num(b.r.rsi14)||-Infinity)-(num(a.r.rsi14)||-Infinity);
+    if(sort==='scoreChange')return (Number.isFinite(b.m.scoreAll)?b.m.scoreAll:-Infinity)-(Number.isFinite(a.m.scoreAll)?a.m.scoreAll:-Infinity);
+    return b.c.total-a.c.total;
+  });
+
+  const settings=loadMarketSettings();
+  const summary=document.getElementById('dashboardSummary');
+  if(summary){
+    summary.innerHTML=[
+      ['Blå kvalificerade',rows.filter(r=>calc(r).qualified).length],
+      ['Vit kvalificerade',rows.filter(r=>whiteCalc(r).qualified).length],
+      ['Kvalificerade i båda',rows.filter(r=>calc(r).qualified&&whiteCalc(r).qualified).length],
+      ['Ägs nu',rows.filter(r=>holdings(r).shares>0).length],
+      ['Senaste marknadsdata',settings.lastUpdate?new Date(settings.lastUpdate).toLocaleString('sv-SE'):'Aldrig']
+    ].map(([a,b])=>`<div class="metric"><small>${a}</small><b style="${typeof b==='string'?'font-size:15px':''}">${b}</b></div>`).join('');
+  }
+
+  table.innerHTML='<tr>'+[
+    'Ticker','Bolag','Börs','🔵 Blå','⚪ Vit','Kurs','Kurs/MA200',
+    'MA200 3m','RSI','Ägs','Blå status','Vit status','Marknadsdata'
+  ].map(x=>`<th>${x}</th>`).join('')+'</tr>'+
+  list.map(x=>`<tr class="dashboard-row" data-i="${x.i}">
+    <td>${x.r.ticker||''}</td>
+    <td>${x.r.company||''}</td>
+    <td>${marketLabel(x.r.market||'SE')}</td>
+    <td class="model-blue"><b>${x.c.total}</b></td>
+    <td class="model-white"><b>${x.w.total}</b></td>
+    <td>${fmt(num(x.r.price))}</td>
+    <td>${signed(num(x.r.ma200),' %')}</td>
+    <td class="${classByValue(num(x.r.ma3m))}">${signed(num(x.r.ma3m),' %')}</td>
+    <td class="${rsiClass(num(x.r.rsi14))}">${fmt(num(x.r.rsi14))}</td>
+    <td>${x.h.shares>0?'Ja':'Nej'}</td>
+    <td>${x.c.qualified?x.c.rating:'Ej kval.'}</td>
+    <td title="${x.w.warning||''}">${x.w.qualified?x.w.rating:'Ej kval.'}</td>
+    <td class="${ageClass(x.r.marketUpdatedAt||x.r.technicalSourceDate)}">${ageText(x.r.marketUpdatedAt||x.r.technicalSourceDate)}</td>
+  </tr>`).join('');
+
+  document.querySelectorAll('.dashboard-row').forEach(tr=>{
+    tr.onclick=()=>openDetail(Number(tr.dataset.i));
+  });
 }
 
 function render(){
@@ -1318,8 +1383,16 @@ async function importSelectedFile(file){
 
   rows=result.clean;
   benchmarkHistories={};
-  render();renderDatabaseHealth();renderMarketSettings();renderDashboard();
-  setImportStatus(`Import klar: ${rows.length} bolag. ${result.skipped.length?result.skipped.length+' dubbletter hoppades över.':''}`);
+  const uiErrors=[];
+  for(const [name,fn] of [
+    ['Poäng/översikt',()=>render()],
+    ['Databaskontroll',()=>renderDatabaseHealth()],
+    ['Inställningar',()=>renderMarketSettings()],
+    ['Dashboard',()=>renderDashboard()]
+  ]){
+    try{fn()}catch(e){uiErrors.push(name+': '+e.message);console.error(name,e)}
+  }
+  setImportStatus(`Import klar: ${rows.length} bolag. ${result.skipped.length?result.skipped.length+' dubbletter hoppades över. ':''}${uiErrors.length?'Visningsvarning: '+uiErrors.join(' · '):''}`,uiErrors.length>0);
   toast(`Import klar: ${rows.length} bolag`);
 }
 document.getElementById('chooseImportFile').onclick=()=>document.getElementById('importFile').click();
@@ -1336,5 +1409,14 @@ document.getElementById('importFile').addEventListener('change',async e=>{
     input.value='';
   }
 });
-document.getElementById('saveSettings').onclick=saveMarketSettings;document.getElementById('checkDatabase').onclick=renderDatabaseHealth;document.getElementById('restoreLocalBackup').onclick=restoreLocalBackup;document.getElementById('updatePrices').onclick=()=>updateAllPrices(false);render();renderPreview();renderMarketSettings();renderDashboard();renderDatabaseHealth();setTimeout(maybeAutoUpdate,600);
+document.getElementById('saveSettings').onclick=saveMarketSettings;document.getElementById('checkDatabase').onclick=renderDatabaseHealth;document.getElementById('restoreLocalBackup').onclick=restoreLocalBackup;document.getElementById('updatePrices').onclick=()=>updateAllPrices(false);for(const [name,fn] of [
+  ['Poäng/översikt',()=>render()],
+  ['Förhandsvisning',()=>renderPreview()],
+  ['Inställningar',()=>renderMarketSettings()],
+  ['Dashboard',()=>renderDashboard()],
+  ['Databaskontroll',()=>renderDatabaseHealth()]
+]){
+  try{fn()}catch(e){console.error('Startfel i '+name,e)}
+}
+setTimeout(maybeAutoUpdate,600);
 </script></body></html>
