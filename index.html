@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v8.0</title>
+<title>MomentumScore v8.1</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -101,6 +101,11 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .factor-checks input{width:auto}
 .combo-good{background:rgba(72,214,151,.08)}
 .combo-best{outline:2px solid rgba(72,214,151,.55)}
+.autolab-progress{height:14px;background:rgba(255,255,255,.07);border-radius:999px;overflow:hidden;border:1px solid var(--line)}
+.autolab-progress>div{height:100%;width:0%;background:linear-gradient(90deg,#4ca6ff,#48d697);transition:width .2s}
+.autolab-grade{font-weight:800}
+.autolab-a{color:#48d697}.autolab-b{color:#8fd3ff}.autolab-c{color:#ffd166}.autolab-d{color:#ff8a8a}
+
 
 .lab-table td.wrap{white-space:normal;min-width:240px;text-align:left}
 
@@ -110,7 +115,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v8.0 – kombinationstest</h1>
+<h1>MomentumScore v8.1 – AutoLab</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -429,6 +434,68 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
     <div id="labStatus" class="note">Välj inställningar och kör testet.</div>
   </div>
 
+
+  <div class="card">
+    <h2>AutoLab – kör hela analysprogrammet</h2>
+    <p class="note">Kör automatiskt alla tekniska faktorer, både absolut avkastning och överavkastning mot index, samt kombinationstest. Resultaten sparas i en rapport som kan exporteras.</p>
+    <div class="lab-grid">
+      <div>
+        <label>Framtida period</label>
+        <select id="autoLabHorizon">
+          <option value="63">3 månader</option>
+          <option value="126" selected>6 månader</option>
+        </select>
+      </div>
+      <div>
+        <label>Observationstäthet</label>
+        <select id="autoLabStep">
+          <option value="21" selected>Månadsvis</option>
+          <option value="5">Veckovis</option>
+        </select>
+      </div>
+      <div>
+        <label>Minsta observationer per decil</label>
+        <select id="autoLabMinObs">
+          <option value="10">10</option>
+          <option value="25" selected>25</option>
+          <option value="50">50</option>
+        </select>
+      </div>
+      <div>
+        <label>Kombination</label>
+        <select id="autoLabComboTop">
+          <option value="1" selected>Bästa decilen/faktor</option>
+          <option value="2">Två bästa deciler/faktor</option>
+        </select>
+      </div>
+    </div>
+    <div class="actions" style="margin-top:12px">
+      <button id="runAutoLab">Kör hela AutoLab</button>
+      <button class="secondary" id="exportAutoLabJson">Exportera AutoLab JSON</button>
+      <button class="secondary" id="exportAutoLabCsv">Exportera sammanfattning CSV</button>
+    </div>
+    <div class="autolab-progress" style="margin-top:12px"><div id="autoLabProgressBar"></div></div>
+    <div id="autoLabStatus" class="note" style="margin-top:8px">AutoLab är redo.</div>
+  </div>
+
+  <div id="autoLabSummary" class="summary"></div>
+
+  <div class="card">
+    <h3>AutoLab – faktorranking</h3>
+    <div class="tablewrap"><table id="autoLabFactorTable" class="lab-table"></table></div>
+  </div>
+
+  <div class="card">
+    <h3>AutoLab – rekommendation för Vit</h3>
+    <p class="note">Förslaget bygger på robusthet, förbättring mot hela universumet, träffsäkerhet mot index, antal bolag och nedgångsrisk. Det uppdaterar inte modellen automatiskt.</p>
+    <div class="tablewrap"><table id="autoLabWhiteRecommendation" class="lab-table"></table></div>
+  </div>
+
+  <div class="card">
+    <h3>AutoLab – kombinationsresultat</h3>
+    <div class="tablewrap"><table id="autoLabComboTable" class="lab-table"></table></div>
+  </div>
+
   <div id="labSummary" class="summary"></div>
 
   <div class="card">
@@ -481,7 +548,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v8.0 – regler och analys</h2>
+<h2>MomentumScore v8.1 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -526,6 +593,7 @@ Dessutom krävs minst 263 handelsdagar för både aktien och jämförelseindex.<
 <div class="rowcard"><b>Vit – Värdering, max 10 p</b><br>Mot vart och ett av 3- och 5-årssnitten: vid eller under snittet 5 p · högst 10 % över 4 p · högst 20 % över 2 p · högst 35 % över 1 p · mer än 35 % över 0 p.</div>
 <div class="rowcard"><b>Vit – poäng innan indexdata finns</b><br>Vit består av 75 poäng från aktie- och rapportdata samt 25 poäng relativ styrka. Om jämförelseindex saknas visas därför en preliminär poäng med en asterisk, exempelvis 67*. Bolaget markeras då som Underlag saknas – inte Ej kvalificerat. Efter kursuppdatering eller import av en komplett v7.6-säkerhetskopia räknas hela 100-poängsmodellen.</div>
 <div class="rowcard"><b>Vit – Bedömning</b><br>90–100 = Mycket stark · 80–89 = Stark · 70–79 = Bevakning · under 70 = Avstå. Ett brutet grundkrav ger alltid Ej kvalificerad.</div>
+<div class="rowcard"><b>AutoLab</b><br>AutoLab kör samtliga tekniska faktorer automatiskt för både absolut avkastning och överavkastning mot index. Robusthetsbetyget väger observationer, antal bolag, förbättring mot basnivån, träffsäkerhet, nedgångsrisk och stöd i angränsande deciler. AutoLab ändrar aldrig Blå eller Vit automatiskt.</div>
 <div class="rowcard"><b>Analyslaboratoriet</b><br>Laboratoriet beräknar historiska tekniska faktorer utan framtidsläcka och jämför dem med avkastning 1, 3, 6 eller 12 månader senare. Standardläget använder deciler, alltså tio lika stora observationsgrupper, och visar även hur ofta varje grupp slog index. Resultaten är beslutsunderlag och ändrar inte Blå eller Vit automatiskt. Fundamentala faktorer kan inte backtestas korrekt förrän rapportdata finns sparad med historiska publiceringsdatum.</div>
 <div class="rowcard"><b>Import och versionskompatibilitet</b><br>Säkerhetskopior från version 6 och 7 kan importeras. Importförlopp och eventuella fel visas direkt bredvid filväljaren. Saknade fält för börs, Yahoo-symbol, teknisk historik och modeller fylls i automatiskt utan att äldre history, marketHistory eller transaktioner tas bort.</div>
 
@@ -1216,6 +1284,8 @@ function quarter(){
 }
 
 let lastLaboratoryResult=null;
+let lastAutoLabReport=null;
+let lastCombinationResult=null;
 
 function labMedian(values){
   const a=values.filter(Number.isFinite).slice().sort((x,y)=>x-y);
@@ -1592,6 +1662,7 @@ function currentFactorValue(r,factor){
   return labHistoricalFactor(factor,closes,closes.length-1)
 }
 function renderCombinationResult(result){
+  lastCombinationResult=result;
   document.getElementById('labComboSection').classList.remove('hidden');
   const best=result.visible.slice().sort((a,b)=>b.median-a.median)[0]||null;
 
@@ -1640,6 +1711,205 @@ function renderCombinationResult(result){
 
   document.getElementById('labStatus').textContent=`Kombinationstest klart. ${total} kompletta observationer analyserades över ${result.factors.length} faktorer.`;
 }
+
+function autoLabFactors(){
+  return ['distanceMa200','ma200Slope1m','ma200Slope3m','ma50Spread','distanceHigh52','rsi14','momentum6m']
+}
+function autoLabFactorLabel(f){return labFactorDefinition(f).name}
+function autoLabBaseline(data){
+  const vals=data.obs.map(o=>o.targetReturn),draws=data.obs.map(o=>o.maxDrawdown);
+  const idx=data.obs.filter(o=>Number.isFinite(o.relativeReturn));
+  return{
+    n:data.obs.length,companies:new Set(data.obs.map(o=>o.ticker)).size,
+    mean:labMean(vals),median:labMedian(vals),
+    positive:data.obs.length?data.obs.filter(o=>o.targetReturn>0).length/data.obs.length*100:NaN,
+    beatIndex:idx.length?idx.filter(o=>o.relativeReturn>0).length/idx.length*100:NaN,
+    medianDrawdown:labMedian(draws)
+  }
+}
+function autoLabRobustness(best,baseline,groups){
+  if(!best||best.n<10)return{score:0,grade:'D',reasons:['För få observationer']};
+  let score=0,reasons=[];
+  const improvement=best.median-baseline.median;
+  if(best.n>=50){score+=20;reasons.push('minst 50 observationer')}else if(best.n>=25){score+=12;reasons.push('minst 25 observationer')}else score+=5;
+  if(best.companies>=30){score+=15;reasons.push('minst 30 bolag')}else if(best.companies>=15)score+=8;
+  if(improvement>=8){score+=25;reasons.push('stor medianförbättring')}else if(improvement>=4)score+=16;else if(improvement>0)score+=7;
+  if(Number.isFinite(best.beatIndex)&&best.beatIndex>=65){score+=20;reasons.push('hög träff mot index')}else if(best.beatIndex>=55)score+=12;
+  if(Number.isFinite(best.medianDrawdown)&&best.medianDrawdown>=-10){score+=10;reasons.push('begränsad medianrisk')}else if(best.medianDrawdown>=-15)score+=5;
+  const adjacent=groups.filter(g=>g.eligible&&g!==best&&Math.abs((g.decile||0)-(best.decile||0))===1);
+  if(adjacent.some(g=>g.median>baseline.median)){score+=10;reasons.push('stöd i angränsande decil')}
+  const grade=score>=80?'A':score>=60?'B':score>=40?'C':'D';
+  return{score,grade,reasons}
+}
+function autoLabWhiteWeight(robustness){
+  if(robustness.grade==='A')return 10;
+  if(robustness.grade==='B')return 7;
+  if(robustness.grade==='C')return 4;
+  return 0
+}
+function withLabSettings(settings,fn){
+  const ids=['labFactor','labHorizon','labSample','labTarget','labUniverse','labMinObs','labGrouping'];
+  const old={};ids.forEach(id=>old[id]=document.getElementById(id).value);
+  Object.entries(settings).forEach(([id,v])=>document.getElementById(id).value=String(v));
+  try{return fn()}finally{Object.entries(old).forEach(([id,v])=>document.getElementById(id).value=v)}
+}
+function autoLabRunFactor(factor,target,horizon,step,minObs){
+  return withLabSettings({
+    labFactor:factor,labHorizon:horizon,labSample:step,labTarget:target,
+    labUniverse:'all',labMinObs:minObs,labGrouping:'deciles'
+  },()=>{
+    const data=buildLaboratoryObservations();
+    const result=summarizeLaboratory(data);
+    const baseline=autoLabBaseline(data);
+    const robustness=autoLabRobustness(result.best,baseline,result.groups);
+    return{
+      factor,target,horizon,step,minObs,
+      baseline,
+      best:result.best?{
+        label:result.best.label,rangeLabel:result.best.rangeLabel,lo:result.best.lo,hi:result.best.hi,
+        n:result.best.n,companies:result.best.companies,mean:result.best.mean,median:result.best.median,
+        positive:result.best.positive,beatIndex:result.best.beatIndex,medianDrawdown:result.best.medianDrawdown,
+        worstDrawdown:result.best.worstDrawdown,std:result.best.std
+      }:null,
+      groups:result.groups.map(g=>({
+        label:g.label,rangeLabel:g.rangeLabel,lo:g.lo,hi:g.hi,n:g.n,companies:g.companies,
+        mean:g.mean,median:g.median,positive:g.positive,beatIndex:g.beatIndex,
+        medianDrawdown:g.medianDrawdown,worstDrawdown:g.worstDrawdown,std:g.std,eligible:g.eligible
+      })),
+      robustness,
+      improvement:result.best?result.best.median-baseline.median:NaN
+    }
+  })
+}
+function autoLabCombination(factorReports,horizon,step,topCount){
+  const usable=factorReports.filter(r=>r.target==='absolute'&&r.best&&['A','B'].includes(r.robustness.grade)).slice(0,5);
+  if(usable.length<2)return null;
+  const factors=usable.map(r=>r.factor);
+  const optimalByFactor={};
+  usable.forEach(r=>optimalByFactor[r.factor]=[{
+    factor:r.factor,label:r.best.label,rangeLabel:r.best.rangeLabel,lo:r.best.lo,hi:r.best.hi,
+    median:r.best.median,beatIndex:r.best.beatIndex,positive:r.best.positive,n:r.best.n
+  }]);
+  const obsMap=new Map();
+  for(const factor of factors){
+    const data=withLabSettings({
+      labFactor:factor,labHorizon:horizon,labSample:step,labTarget:'absolute',
+      labUniverse:'all',labMinObs:10,labGrouping:'deciles'
+    },()=>buildLaboratoryObservations());
+    for(const o of data.obs){
+      const key=comboObservationKey(o);
+      if(!obsMap.has(key))obsMap.set(key,{
+        ticker:o.ticker,company:o.company,date:o.date,futureReturn:o.futureReturn,
+        relativeReturn:o.relativeReturn,maxDrawdown:o.maxDrawdown,values:{},matches:[]
+      });
+      const row=obsMap.get(key);row.values[factor]=o.factorValue;
+      if(valueInOptimalIntervals(o.factorValue,optimalByFactor[factor]))row.matches.push(factor)
+    }
+  }
+  const complete=[...obsMap.values()].filter(o=>factors.every(f=>Number.isFinite(o.values[f])));
+  const groups=[];
+  for(let m=0;m<=factors.length;m++){
+    const items=complete.filter(o=>o.matches.length===m),ret=items.map(o=>o.futureReturn),dd=items.map(o=>o.maxDrawdown);
+    const idx=items.filter(o=>Number.isFinite(o.relativeReturn));
+    groups.push({
+      matches:m,n:items.length,companies:new Set(items.map(o=>o.ticker)).size,
+      mean:labMean(ret),median:labMedian(ret),
+      positive:items.length?items.filter(o=>o.futureReturn>0).length/items.length*100:NaN,
+      beatIndex:idx.length?idx.filter(o=>o.relativeReturn>0).length/idx.length*100:NaN,
+      medianDrawdown:labMedian(dd),worstDrawdown:items.length?Math.min(...dd.filter(Number.isFinite)):NaN
+    })
+  }
+  return{factors,optimalByFactor,completeCount:complete.length,groups}
+}
+async function runAutoLab(){
+  const button=document.getElementById('runAutoLab'),status=document.getElementById('autoLabStatus'),bar=document.getElementById('autoLabProgressBar');
+  const horizon=Number(document.getElementById('autoLabHorizon').value);
+  const step=Number(document.getElementById('autoLabStep').value);
+  const minObs=Number(document.getElementById('autoLabMinObs').value);
+  const comboTop=Number(document.getElementById('autoLabComboTop').value);
+  const factors=autoLabFactors(),targets=['absolute','relative'],total=factors.length*targets.length+1;
+  button.disabled=true;button.textContent='AutoLab kör…';bar.style.width='0%';
+  const reports=[];let done=0;
+  try{
+    for(const factor of factors){
+      for(const target of targets){
+        status.textContent=`Analyserar ${autoLabFactorLabel(factor)} – ${target==='absolute'?'absolut':'mot index'} (${done+1}/${total})…`;
+        await new Promise(resolve=>setTimeout(resolve,10));
+        const report=autoLabRunFactor(factor,target,horizon,step,minObs);
+        reports.push(report);done++;bar.style.width=`${done/total*100}%`
+      }
+    }
+    status.textContent='Kör kombinationstest…';await new Promise(resolve=>setTimeout(resolve,10));
+    const combo=autoLabCombination(reports,horizon,step,comboTop);
+    done++;bar.style.width='100%';
+    lastAutoLabReport={
+      format:'MomentumScoreAutoLab',
+      version:'8.1',
+      createdAt:new Date().toISOString(),
+      settings:{horizon,step,minObs,comboTop},
+      reports,combo
+    };
+    renderAutoLab(lastAutoLabReport);
+    status.textContent=`AutoLab klart: ${reports.length} faktortester och ${combo?'ett kombinationstest':'inget kombinationstest (för få robusta faktorer)'}.`;
+  }catch(e){
+    console.error(e);status.textContent='AutoLab misslyckades: '+e.message
+  }finally{
+    button.disabled=false;button.textContent='Kör hela AutoLab'
+  }
+}
+function renderAutoLab(report){
+  const abs=report.reports.filter(r=>r.target==='absolute').sort((a,b)=>b.robustness.score-a.robustness.score);
+  const grades=abs.reduce((acc,r)=>(acc[r.robustness.grade]=(acc[r.robustness.grade]||0)+1,acc),{});
+  document.getElementById('autoLabSummary').innerHTML=[
+    ['Faktortester',report.reports.length],['A-faktorer',grades.A||0],['B-faktorer',grades.B||0],
+    ['C-faktorer',grades.C||0],['Kombination',report.combo?report.combo.factors.length+' faktorer':'Ej tillräckligt underlag']
+  ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
+
+  document.getElementById('autoLabFactorTable').innerHTML='<tr><th>Faktor</th><th>Bästa intervall</th><th>Median</th><th>Basmedian</th><th>Förbättring</th><th>Slår index</th><th>Observationer</th><th>Bolag</th><th>Median nedgång</th><th>Robusthet</th><th>Orsak</th></tr>'+
+    abs.map(r=>`<tr>
+      <td><b>${autoLabFactorLabel(r.factor)}</b></td><td><b>${r.best?.rangeLabel||'–'}</b></td>
+      <td>${signed(r.best?.median,' %')}</td><td>${signed(r.baseline.median,' %')}</td>
+      <td class="${classByValue(r.improvement)}"><b>${signed(r.improvement,' p.e.')}</b></td>
+      <td>${Number.isFinite(r.best?.beatIndex)?fmt(r.best.beatIndex)+' %':'–'}</td>
+      <td>${r.best?.n||0}</td><td>${r.best?.companies||0}</td><td>${signed(r.best?.medianDrawdown,' %')}</td>
+      <td class="autolab-grade autolab-${r.robustness.grade.toLowerCase()}">${r.robustness.grade} (${r.robustness.score})</td>
+      <td class="wrap">${r.robustness.reasons.join(', ')||'Svagt underlag'}</td>
+    </tr>`).join('');
+
+  const recommendations=abs.map(r=>({
+    ...r,weight:autoLabWhiteWeight(r.robustness)
+  })).sort((a,b)=>b.weight-a.weight||b.robustness.score-a.robustness.score);
+
+  document.getElementById('autoLabWhiteRecommendation').innerHTML='<tr><th>Faktor</th><th>Rekommenderad vikt</th><th>Poängzon</th><th>Robusthet</th><th>Beslut</th></tr>'+
+    recommendations.map(r=>`<tr>
+      <td><b>${autoLabFactorLabel(r.factor)}</b></td><td><b>${r.weight} p</b></td>
+      <td>${r.best?.rangeLabel||'–'}</td>
+      <td class="autolab-grade autolab-${r.robustness.grade.toLowerCase()}">${r.robustness.grade}</td>
+      <td class="wrap">${r.weight>=7?'Kandidat för Vit efter granskning':r.weight===4?'Behåll som sekundär faktor':'Bör inte styra Vit med nuvarande underlag'}</td>
+    </tr>`).join('');
+
+  const combo=report.combo;
+  document.getElementById('autoLabComboTable').innerHTML=combo
+    ?'<tr><th>Optimala träffar</th><th>Observationer</th><th>Bolag</th><th>Genomsnitt</th><th>Median</th><th>Andel positiva</th><th>Slår index</th><th>Median nedgång</th></tr>'+
+      combo.groups.filter(g=>g.n>0).map(g=>`<tr><td><b>${g.matches} av ${combo.factors.length}</b></td><td>${g.n}</td><td>${g.companies}</td><td>${signed(g.mean,' %')}</td><td><b>${signed(g.median,' %')}</b></td><td>${fmt(g.positive)} %</td><td>${Number.isFinite(g.beatIndex)?fmt(g.beatIndex)+' %':'–'}</td><td>${signed(g.medianDrawdown,' %')}</td></tr>`).join('')
+    :'<tr><td>För få faktorer med robusthet A eller B för ett meningsfullt kombinationstest.</td></tr>'
+}
+function exportAutoLabJson(){
+  if(!lastAutoLabReport)return alert('Kör AutoLab först.');
+  downloadTextFile(JSON.stringify(lastAutoLabReport,null,2),`MomentumScore_AutoLab_${todayISO()}.json`,'application/json;charset=utf-8')
+}
+function exportAutoLabCsv(){
+  if(!lastAutoLabReport)return alert('Kör AutoLab först.');
+  const lines=[['Faktor','Mått','Bästa intervall','Median','Basmedian','Förbättring','Slår index','Observationer','Bolag','Median nedgång','Robusthet','Robusthetspoäng','Rekommenderad vikt']];
+  lastAutoLabReport.reports.forEach(r=>lines.push([
+    autoLabFactorLabel(r.factor),r.target,r.best?.rangeLabel||'',r.best?.median,r.baseline.median,r.improvement,
+    r.best?.beatIndex,r.best?.n,r.best?.companies,r.best?.medianDrawdown,r.robustness.grade,r.robustness.score,
+    r.target==='absolute'?autoLabWhiteWeight(r.robustness):''
+  ]));
+  const csv='\ufeff'+lines.map(row=>row.map(csvEscape).join(';')).join('\n');
+  downloadTextFile(csv,`MomentumScore_AutoLab_summary_${todayISO()}.csv`,'text/csv;charset=utf-8')
+}
+
 function toggleLaboratoryMode(){
   const combo=document.getElementById('labMode').value==='combo';
   document.getElementById('labSingleFactorControl').classList.toggle('hidden',combo);
@@ -1680,15 +1950,49 @@ async function runLaboratory(){
     button.textContent='Kör historiskt test';
   }
 }
+function downloadTextFile(content,filename,mime='text/plain;charset=utf-8'){
+  const blob=new Blob([content],{type:mime});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download=filename;a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000)
+}
+function csvEscape(v){return `"${String(v??'').replace(/"/g,'""')}"`}
 function exportLaboratoryCsv(){
+  if(document.getElementById('labMode').value==='combo'){
+    if(!lastCombinationResult)return alert('Kör ett kombinationstest först.');
+    const r=lastCombinationResult;
+    const lines=[];
+    lines.push(['KOMBINATIONSRESULTAT']);
+    lines.push(['Antal träffar','Observationer','Bolag','Genomsnitt','Median','Andel positiva','Slår index','Median max nedgång','Värsta nedgång','Std.avvikelse']);
+    r.groups.filter(g=>g.n>0).forEach(g=>lines.push([g.matches,g.n,g.companies,g.mean,g.median,g.positive,g.beatIndex,g.medianDrawdown,g.worstDrawdown,g.std]));
+    lines.push([]);
+    lines.push(['OPTIMALA INTERVALL']);
+    lines.push(['Faktor','Rang','Decil','Intervall','Median','Slår index','Andel positiva','Observationer']);
+    for(const factor of r.factors){
+      const def=labFactorDefinition(factor);
+      r.optimalByFactor[factor].forEach((x,i)=>lines.push([def.name,i+1,x.label,x.rangeLabel,x.median,x.beatIndex,x.positive,x.n]))
+    }
+    lines.push([]);
+    lines.push(['AKTUELLA KANDIDATER']);
+    lines.push(['Ticker','Bolag','Optimala träffar','Träffade faktorer','Blå','Vit']);
+    rows.map(row=>{
+      const matches=r.factors.filter(f=>{
+        const v=currentFactorValue(row,f);
+        return Number.isFinite(v)&&valueInOptimalIntervals(v,r.optimalByFactor[f])
+      });
+      return{row,matches}
+    }).sort((a,b)=>b.matches.length-a.matches.length).forEach(x=>lines.push([
+      x.row.ticker||'',x.row.company||'',x.matches.length,x.matches.map(f=>labFactorDefinition(f).name).join(', '),calc(x.row).total,whiteCalc(x.row).total
+    ]));
+    const csv='\ufeff'+lines.map(row=>row.map(csvEscape).join(';')).join('\n');
+    downloadTextFile(csv,`MomentumScore_kombination_${todayISO()}.csv`,'text/csv;charset=utf-8');
+    return
+  }
   if(!lastLaboratoryResult)return alert('Kör ett test först.');
   const rowsCsv=[['Grupp','Faktorintervall','Observationer','Bolag','Genomsnitt','Median','P25','P75','Andel positiva','Slår index','Median max nedgång','Värsta nedgång','Std avvikelse','Rekommenderad poäng']];
   lastLaboratoryResult.groups.forEach(g=>rowsCsv.push([g.label,g.rangeLabel,g.n,g.companies,g.mean,g.median,g.p25,g.p75,g.positive,g.beatIndex,g.medianDrawdown,g.worstDrawdown,g.std,g.recommendedPoints??'']));
-  const esc=v=>`"${String(v??'').replace(/"/g,'""')}"`;
-  const csv='\ufeff'+rowsCsv.map(r=>r.map(esc).join(';')).join('\n');
-  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download=`MomentumScore_laboratorium_${todayISO()}.csv`;a.click();URL.revokeObjectURL(a.href)
+  const csv='\ufeff'+rowsCsv.map(r=>r.map(csvEscape).join(';')).join('\n');
+  downloadTextFile(csv,`MomentumScore_laboratorium_${todayISO()}.csv`,'text/csv;charset=utf-8')
 }
 
 function showTab(id){document.querySelectorAll('.panel,.tab').forEach(e=>e.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelector(`.tab[data-tab="${id}"]`).classList.add('active')}
@@ -2089,6 +2393,9 @@ document.getElementById('importFile').addEventListener('change',async e=>{
     input.value='';
   }
 });
+document.getElementById('runAutoLab').onclick=runAutoLab;
+document.getElementById('exportAutoLabJson').onclick=exportAutoLabJson;
+document.getElementById('exportAutoLabCsv').onclick=exportAutoLabCsv;
 document.getElementById('labMode').onchange=toggleLaboratoryMode;
 document.getElementById('runLaboratory').onclick=runLaboratory;
 document.getElementById('exportLaboratoryCsv').onclick=exportLaboratoryCsv;
