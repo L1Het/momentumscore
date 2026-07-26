@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v10.0</title>
+<title>MomentumScore v11.0</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -112,6 +112,12 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .interval-progress{height:14px;background:rgba(255,255,255,.07);border-radius:999px;overflow:hidden;border:1px solid var(--line)}
 .interval-progress>div{height:100%;width:0%;background:linear-gradient(90deg,#ffb14a,#9d7cff,#4ca6ff);transition:width .15s}
 .interval-winner{outline:2px solid rgba(255,177,74,.65);background:rgba(255,177,74,.08)}
+.curve-progress{height:14px;background:rgba(255,255,255,.07);border-radius:999px;overflow:hidden;border:1px solid var(--line)}
+.curve-progress>div{height:100%;width:0%;background:linear-gradient(90deg,#48d697,#4ca6ff,#9d7cff);transition:width .15s}
+.curve-winner{outline:2px solid rgba(72,214,151,.65);background:rgba(72,214,151,.08)}
+.curve-preview{display:flex;align-items:flex-end;gap:3px;height:110px;padding:8px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.02)}
+.curve-preview span{flex:1;min-width:2px;background:rgba(76,166,255,.75);border-radius:3px 3px 0 0}
+
 
 
 
@@ -124,7 +130,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v10.0 – Intervalloptimerare</h1>
+<h1>MomentumScore v11.0 – Poängkurvor</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -660,6 +666,90 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
     <div id="intervalDraft" class="note">Ingen intervalloptimering körd.</div>
   </div>
 
+  <div class="card">
+    <h2>Poängkurveoptimerare – mjuka regler för Vit</h2>
+    <p class="note">Testar mjuka poängkurvor för faktorerna i den vinnande modellen. Centrum, vänsterbredd, högerbredd och kurvform optimeras mot historisk 6-månadersutveckling.</p>
+    <div class="lab-grid">
+      <div>
+        <label>Faktorer</label>
+        <select id="curveFactorMode">
+          <option value="winner" selected>Vinnande modell</option>
+          <option value="interval">Alla intervalloptimerade faktorer</option>
+          <option value="allAB">Alla A- och B-faktorer</option>
+        </select>
+      </div>
+      <div>
+        <label>Kurvformer</label>
+        <select id="curveShapes">
+          <option value="all" selected>Gauss + triangel + platå</option>
+          <option value="gaussian">Endast asymmetrisk Gauss</option>
+          <option value="triangle">Endast asymmetrisk triangel</option>
+          <option value="plateau">Endast platå med mjuka kanter</option>
+        </select>
+      </div>
+      <div>
+        <label>Resultaturval</label>
+        <select id="curveTopShare">
+          <option value="0.10">Topp 10 %</option>
+          <option value="0.20" selected>Topp 20 %</option>
+          <option value="0.30">Topp 30 %</option>
+        </select>
+      </div>
+      <div>
+        <label>Minsta valda observationer</label>
+        <select id="curveMinObs">
+          <option value="25">25</option>
+          <option value="40" selected>40</option>
+          <option value="60">60</option>
+        </select>
+      </div>
+      <div>
+        <label>Precision</label>
+        <select id="curvePrecision">
+          <option value="coarse">Snabb</option>
+          <option value="normal" selected>Normal</option>
+          <option value="fine">Noggrann</option>
+        </select>
+      </div>
+      <div>
+        <label>Framtida period</label>
+        <select id="curveHorizon">
+          <option value="63">3 månader</option>
+          <option value="126" selected>6 månader</option>
+        </select>
+      </div>
+    </div>
+    <div class="actions" style="margin-top:12px">
+      <button id="runCurveOptimizer">Optimera poängkurvor</button>
+      <button class="secondary" id="exportCurveJson">Exportera kurvor JSON</button>
+      <button class="secondary" id="buildCurveDraft">Skapa Vit 2.0-utkast</button>
+    </div>
+    <div class="curve-progress" style="margin-top:12px"><div id="curveProgressBar"></div></div>
+    <div id="curveStatus" class="note" style="margin-top:8px">Kör AutoLab, Vit Optimizer och Intervalloptimeraren först för bästa resultat.</div>
+  </div>
+
+  <div id="curveSummary" class="summary"></div>
+
+  <div class="card">
+    <h3>Optimerade kurvor per faktor</h3>
+    <div class="tablewrap"><table id="curveResultsTable" class="lab-table"></table></div>
+  </div>
+
+  <div class="card">
+    <h3>Vinnande kombinerad kurvmodell</h3>
+    <div class="tablewrap"><table id="curveModelTable" class="lab-table"></table></div>
+  </div>
+
+  <div class="card">
+    <h3>Kurvförhandsvisning</h3>
+    <div id="curvePreviewContainer" class="note">Ingen kurvoptimering körd.</div>
+  </div>
+
+  <div class="card">
+    <h3>Vit 2.0 – regelutkast</h3>
+    <div id="curveDraft" class="note">Ingen kurvoptimering körd.</div>
+  </div>
+
   <div id="labSummary" class="summary"></div>
 
   <div class="card">
@@ -712,7 +802,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v10.0 – regler och analys</h2>
+<h2>MomentumScore v11.0 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -757,6 +847,7 @@ Dessutom krävs minst 263 handelsdagar för både aktien och jämförelseindex.<
 <div class="rowcard"><b>Vit – Värdering, max 10 p</b><br>Mot vart och ett av 3- och 5-årssnitten: vid eller under snittet 5 p · högst 10 % över 4 p · högst 20 % över 2 p · högst 35 % över 1 p · mer än 35 % över 0 p.</div>
 <div class="rowcard"><b>Vit – poäng innan indexdata finns</b><br>Vit består av 75 poäng från aktie- och rapportdata samt 25 poäng relativ styrka. Om jämförelseindex saknas visas därför en preliminär poäng med en asterisk, exempelvis 67*. Bolaget markeras då som Underlag saknas – inte Ej kvalificerat. Efter kursuppdatering eller import av en komplett v7.6-säkerhetskopia räknas hela 100-poängsmodellen.</div>
 <div class="rowcard"><b>Vit – Bedömning</b><br>90–100 = Mycket stark · 80–89 = Stark · 70–79 = Bevakning · under 70 = Avstå. Ett brutet grundkrav ger alltid Ej kvalificerad.</div>
+<div class="rowcard"><b>Poängkurveoptimeraren</b><br>Poängkurveoptimeraren testar asymmetrisk Gauss, asymmetrisk triangel och platåkurvor. Den optimerar centrum samt vänster- och högerbredd för varje faktor och jämför därefter kombinerade faktorvikter. Kurvorna ger mjuka poängövergångar utan godtyckliga trappsteg.</div>
 <div class="rowcard"><b>Intervalloptimeraren</b><br>Intervalloptimeraren söker konkreta sammanhängande sweet spots utifrån kvantilgränser. Den belönar medianförbättring, träff mot index och andel positiva utfall samt straffar nedgångsrisk och bolagskoncentration. Resultaten är in-sample och ska valideras på längre eller annan historik innan de används skarpt.</div>
 <div class="rowcard"><b>Vit Optimizer</b><br>Optimeraren testar alla faktorurval med 2–5 faktorer och objektiva heltalsvikter. Den rangordnar historiska observationer, väljer de starkaste 10–30 procenten och bedömer medianavkastning, överavkastning, träffsäkerhet, nedgångsrisk och bolagskoncentration. Den ändrar inte Vit automatiskt och resultatet måste granskas för överanpassning.</div>
 <div class="rowcard"><b>AutoLab</b><br>AutoLab kör samtliga tekniska faktorer automatiskt för både absolut avkastning och överavkastning mot index. Robusthetsbetyget väger observationer, antal bolag, förbättring mot basnivån, träffsäkerhet, nedgångsrisk och stöd i angränsande deciler. AutoLab ändrar aldrig Blå eller Vit automatiskt.</div>
@@ -1454,6 +1545,7 @@ let lastAutoLabReport=null;
 let lastCombinationResult=null;
 let lastOptimizerReport=null;
 let lastIntervalReport=null;
+let lastCurveReport=null;
 
 function labMedian(values){
   const a=values.filter(Number.isFinite).slice().sort((x,y)=>x-y);
@@ -2499,6 +2591,218 @@ function buildIntervalDraft(){
     <div class="note">Utkastet ändrar inte Vit automatiskt.</div>`;
 }
 
+
+function curveSelectedFactors(){
+  const mode=document.getElementById('curveFactorMode').value;
+  if(mode==='winner'&&lastOptimizerReport?.winners?.[0])return lastOptimizerReport.winners[0].subset.slice();
+  if(mode==='interval'&&lastIntervalReport)return lastIntervalReport.results.filter(r=>r.best).map(r=>r.factor);
+  if(lastAutoLabReport)return lastAutoLabReport.reports
+    .filter(r=>r.target==='absolute'&&r.best&&['A','B'].includes(r.robustness.grade))
+    .map(r=>r.factor);
+  return []
+}
+function curveShapeList(){
+  const mode=document.getElementById('curveShapes').value;
+  return mode==='all'?['gaussian','triangle','plateau']:[mode]
+}
+function curvePrecisionGrid(){
+  const p=document.getElementById('curvePrecision').value;
+  if(p==='coarse')return{centers:5,widths:[0.7,1.0,1.5],plateaus:[0,0.2]};
+  if(p==='fine')return{centers:11,widths:[0.45,0.6,0.8,1.0,1.25,1.6,2.0],plateaus:[0,0.1,0.2,0.3]};
+  return{centers:7,widths:[0.55,0.75,1.0,1.35,1.75],plateaus:[0,0.15,0.3]}
+}
+function curveScoreValue(x,p){
+  const dl=Math.max(0,p.center-x),dr=Math.max(0,x-p.center);
+  const d=dl>0?dl/Math.max(1e-9,p.leftWidth):dr/Math.max(1e-9,p.rightWidth);
+  if(p.shape==='triangle')return Math.max(0,1-d);
+  if(p.shape==='plateau'){
+    if(d<=p.plateau)return 1;
+    const z=(d-p.plateau)/Math.max(1e-9,1-p.plateau);
+    return Math.max(0,1-z*z)
+  }
+  return Math.exp(-0.5*d*d)
+}
+function curveFactorDataset(factor,horizon){
+  return withLabSettings({
+    labFactor:factor,labHorizon:horizon,labSample:21,labTarget:'absolute',
+    labUniverse:'all',labMinObs:25,labGrouping:'deciles'
+  },()=>buildLaboratoryObservations())
+}
+function curveCandidateParams(factor,data){
+  const values=data.obs.map(o=>o.factorValue).filter(Number.isFinite).sort((a,b)=>a-b);
+  const cfg=curvePrecisionGrid();
+  const interval=lastIntervalReport?.results?.find(r=>r.factor===factor)?.best;
+  const qLo=labPercentile(values,.05),qHi=labPercentile(values,.95);
+  const cLo=interval?interval.lo:labPercentile(values,.35);
+  const cHi=interval?interval.hi:labPercentile(values,.75);
+  const centers=[];
+  for(let i=0;i<cfg.centers;i++)centers.push(cLo+(cHi-cLo)*(cfg.centers===1?0.5:i/(cfg.centers-1)));
+  const baseLeft=Math.max((cLo-qLo)/2,(qHi-qLo)*.05);
+  const baseRight=Math.max((qHi-cHi)/2,(qHi-qLo)*.05);
+  const params=[];
+  for(const shape of curveShapeList()){
+    for(const center of centers){
+      for(const lm of cfg.widths)for(const rm of cfg.widths){
+        const leftWidth=Math.max((qHi-qLo)*.02,baseLeft*lm);
+        const rightWidth=Math.max((qHi-qLo)*.02,baseRight*rm);
+        if(shape==='plateau'){
+          for(const plateau of cfg.plateaus)params.push({shape,center,leftWidth,rightWidth,plateau})
+        }else params.push({shape,center,leftWidth,rightWidth,plateau:0})
+      }
+    }
+  }
+  return params
+}
+function evaluateSingleCurve(data,param,topShare,minObs){
+  const scored=data.obs.map(o=>({...o,curveScore:curveScoreValue(o.factorValue,param)}))
+    .sort((a,b)=>b.curveScore-a.curveScore);
+  const n=Math.max(minObs,Math.floor(scored.length*topShare));
+  if(scored.length<n)return null;
+  const selected=scored.slice(0,n),ret=selected.map(o=>o.futureReturn),dd=selected.map(o=>o.maxDrawdown);
+  const rel=selected.filter(o=>Number.isFinite(o.relativeReturn));
+  const baseline=labMedian(scored.map(o=>o.futureReturn));
+  const median=labMedian(ret),mean=labMean(ret),positive=selected.filter(o=>o.futureReturn>0).length/selected.length*100;
+  const beatIndex=rel.length?rel.filter(o=>o.relativeReturn>0).length/rel.length*100:NaN;
+  const medianDrawdown=labMedian(dd),companies=new Set(selected.map(o=>o.ticker)).size;
+  const concentration=Math.max(...Object.values(selected.reduce((a,o)=>(a[o.ticker]=(a[o.ticker]||0)+1,a),{})))/selected.length*100;
+  const improvement=median-baseline;
+  const objective=improvement*2.5+(beatIndex-50)*.45+(positive-50)*.18+Math.max(-20,medianDrawdown)*.20-Math.max(0,concentration-15)*.5;
+  return{...param,n:selected.length,companies,median,mean,baseline,improvement,positive,beatIndex,medianDrawdown,
+    worstDrawdown:Math.min(...dd.filter(Number.isFinite)),concentration,objective}
+}
+function optimizeCurveForFactor(factor,horizon,topShare,minObs){
+  const data=curveFactorDataset(factor,horizon);
+  const params=curveCandidateParams(factor,data),results=[];
+  for(const p of params){
+    const r=evaluateSingleCurve(data,p,topShare,minObs);
+    if(r)results.push(r)
+  }
+  results.sort((a,b)=>b.objective-a.objective);
+  return{factor,horizon,obs:data.obs.length,best:results[0]||null,candidates:results.slice(0,25)}
+}
+function buildCurveCombinedDataset(factorResults,horizon){
+  const map=new Map();
+  for(const fr of factorResults){
+    const data=curveFactorDataset(fr.factor,horizon);
+    for(const o of data.obs){
+      const key=comboObservationKey(o);
+      if(!map.has(key))map.set(key,{ticker:o.ticker,company:o.company,date:o.date,futureReturn:o.futureReturn,
+        relativeReturn:o.relativeReturn,maxDrawdown:o.maxDrawdown,values:{}});
+      map.get(key).values[fr.factor]=o.factorValue
+    }
+  }
+  const factors=factorResults.map(r=>r.factor);
+  return[...map.values()].filter(o=>factors.every(f=>Number.isFinite(o.values[f])))
+}
+function evaluateCombinedCurves(factorResults,horizon,topShare,minObs){
+  const rows=buildCurveCombinedDataset(factorResults,horizon),factors=factorResults.map(r=>r.factor);
+  const weightSets=weightVectors(factors.length,2),results=[];
+  for(const weights of weightSets){
+    const scored=rows.map(o=>{
+      let s=0,wSum=0;
+      factors.forEach((f,i)=>{const w=weights[i];s+=curveScoreValue(o.values[f],factorResults[i].best)*w;wSum+=w});
+      return{...o,modelScore:s/wSum}
+    }).sort((a,b)=>b.modelScore-a.modelScore);
+    const n=Math.max(minObs,Math.floor(scored.length*topShare));
+    if(scored.length<n)continue;
+    const selected=scored.slice(0,n),ret=selected.map(o=>o.futureReturn),dd=selected.map(o=>o.maxDrawdown);
+    const rel=selected.filter(o=>Number.isFinite(o.relativeReturn));
+    const baseline=labMedian(scored.map(o=>o.futureReturn)),median=labMedian(ret),positive=selected.filter(o=>o.futureReturn>0).length/selected.length*100;
+    const beatIndex=rel.length?rel.filter(o=>o.relativeReturn>0).length/rel.length*100:NaN;
+    const medianDrawdown=labMedian(dd),companies=new Set(selected.map(o=>o.ticker)).size;
+    const concentration=Math.max(...Object.values(selected.reduce((a,o)=>(a[o.ticker]=(a[o.ticker]||0)+1,a),{})))/selected.length*100;
+    const improvement=median-baseline;
+    const objective=improvement*2.5+(beatIndex-50)*.45+(positive-50)*.18+Math.max(-20,medianDrawdown)*.20-Math.max(0,concentration-15)*.5;
+    results.push({weights,n,totalObs:scored.length,companies,median,mean:labMean(ret),baseline,improvement,positive,beatIndex,
+      medianDrawdown,worstDrawdown:Math.min(...dd.filter(Number.isFinite)),concentration,objective})
+  }
+  results.sort((a,b)=>b.objective-a.objective);
+  return{factors,results:results.slice(0,25),best:results[0]||null}
+}
+async function runCurveOptimizer(){
+  if(!lastAutoLabReport)return alert('Kör AutoLab först.');
+  const factors=curveSelectedFactors();
+  if(!factors.length)return alert('Inga faktorer valdes.');
+  const button=document.getElementById('runCurveOptimizer'),status=document.getElementById('curveStatus'),bar=document.getElementById('curveProgressBar');
+  const horizon=Number(document.getElementById('curveHorizon').value),topShare=Number(document.getElementById('curveTopShare').value),
+    minObs=Number(document.getElementById('curveMinObs').value);
+  button.disabled=true;button.textContent='Optimerar kurvor…';bar.style.width='0%';
+  const factorResults=[];
+  try{
+    for(let i=0;i<factors.length;i++){
+      status.textContent=`Optimerar kurva för ${autoLabFactorLabel(factors[i])} (${i+1}/${factors.length})…`;
+      await new Promise(r=>setTimeout(r,10));
+      factorResults.push(optimizeCurveForFactor(factors[i],horizon,topShare,minObs));
+      bar.style.width=`${(i+1)/(factors.length+1)*100}%`
+    }
+    status.textContent='Optimerar kombinerade kurvvikter…';await new Promise(r=>setTimeout(r,10));
+    const combined=evaluateCombinedCurves(factorResults,horizon,topShare,minObs);
+    bar.style.width='100%';
+    lastCurveReport={format:'MomentumScoreCurveOptimizer',version:'11.0',createdAt:new Date().toISOString(),
+      settings:{factors,horizon,topShare,minObs,shapes:curveShapeList(),precision:document.getElementById('curvePrecision').value},
+      factorResults,combined};
+    renderCurveOptimizer(lastCurveReport);
+    status.textContent=`Poängkurvor klara för ${factorResults.length} faktorer.`;
+  }catch(e){
+    console.error(e);status.textContent='Kurvoptimeringen misslyckades: '+e.message
+  }finally{button.disabled=false;button.textContent='Optimera poängkurvor'}
+}
+function curveShapeName(s){return s==='gaussian'?'Asymmetrisk Gauss':s==='triangle'?'Asymmetrisk triangel':'Platå med mjuka kanter'}
+function renderCurveOptimizer(report){
+  const valid=report.factorResults.filter(r=>r.best).sort((a,b)=>b.best.objective-a.best.objective),bestCombined=report.combined.best;
+  document.getElementById('curveSummary').innerHTML=[
+    ['Faktorer',valid.length],['Bäst kurvform',valid[0]?curveShapeName(valid[0].best.shape):'–'],
+    ['Kombinerad median',bestCombined?signed(bestCombined.median,' %'):'–'],
+    ['Förbättring mot bas',bestCombined?signed(bestCombined.improvement,' p.e.'):'–'],
+    ['Slår index',bestCombined?fmt(bestCombined.beatIndex)+' %':'–']
+  ].map(([a,b])=>`<div class="metric"><small>${a}</small><b style="${String(b).length>18?'font-size:14px':''}">${b}</b></div>`).join('');
+
+  document.getElementById('curveResultsTable').innerHTML='<tr><th>Faktor</th><th>Kurvform</th><th>Centrum</th><th>Vänsterbredd</th><th>Högerbredd</th><th>Platå</th><th>Median</th><th>Bas</th><th>Förbättring</th><th>Slår index</th><th>Median nedgång</th><th>Värde</th></tr>'+
+    valid.map((r,i)=>`<tr class="${i===0?'curve-winner':''}">
+      <td><b>${autoLabFactorLabel(r.factor)}</b></td><td>${curveShapeName(r.best.shape)}</td>
+      <td><b>${fmt(r.best.center)}</b></td><td>${fmt(r.best.leftWidth)}</td><td>${fmt(r.best.rightWidth)}</td><td>${fmt(r.best.plateau)}</td>
+      <td><b>${signed(r.best.median,' %')}</b></td><td>${signed(r.best.baseline,' %')}</td><td>${signed(r.best.improvement,' p.e.')}</td>
+      <td>${fmt(r.best.beatIndex)} %</td><td>${signed(r.best.medianDrawdown,' %')}</td><td>${fmt(r.best.objective)}</td>
+    </tr>`).join('');
+
+  document.getElementById('curveModelTable').innerHTML='<tr><th>Rank</th><th>Faktorvikter</th><th>Valda obs.</th><th>Bolag</th><th>Median</th><th>Bas</th><th>Förbättring</th><th>Slår index</th><th>Positiva</th><th>Median nedgång</th><th>Värde</th></tr>'+
+    report.combined.results.map((r,i)=>`<tr class="${i===0?'curve-winner':''}">
+      <td>${i+1}</td><td class="wrap">${report.combined.factors.map((f,j)=>`<span class="weight-pill">${autoLabFactorLabel(f)} ×${r.weights[j]}</span>`).join('')}</td>
+      <td>${r.n}/${r.totalObs}</td><td>${r.companies}</td><td><b>${signed(r.median,' %')}</b></td><td>${signed(r.baseline,' %')}</td>
+      <td>${signed(r.improvement,' p.e.')}</td><td>${fmt(r.beatIndex)} %</td><td>${fmt(r.positive)} %</td><td>${signed(r.medianDrawdown,' %')}</td><td>${fmt(r.objective)}</td>
+    </tr>`).join('');
+
+  document.getElementById('curvePreviewContainer').innerHTML=valid.map(r=>{
+    const p=r.best,lo=p.center-p.leftWidth*2,hi=p.center+p.rightWidth*2,bars=[];
+    for(let i=0;i<50;i++){const x=lo+(hi-lo)*i/49;bars.push(`<span title="${fmt(x)}" style="height:${Math.max(2,curveScoreValue(x,p)*100)}%"></span>`)}
+    return `<div class="rowcard"><b>${autoLabFactorLabel(r.factor)} – ${curveShapeName(p.shape)}</b><br>
+      Centrum ${fmt(p.center)}, vänsterbredd ${fmt(p.leftWidth)}, högerbredd ${fmt(p.rightWidth)}
+      <div class="curve-preview">${bars.join('')}</div></div>`
+  }).join('');
+}
+function exportCurveJson(){
+  if(!lastCurveReport)return alert('Kör poängkurveoptimeringen först.');
+  downloadTextFile(JSON.stringify(lastCurveReport,null,2),`MomentumScore_Curves_${todayISO()}.json`,'application/json;charset=utf-8')
+}
+function buildCurveDraft(){
+  if(!lastCurveReport?.combined?.best)return alert('Kör poängkurveoptimeringen först.');
+  const best=lastCurveReport.combined.best,factors=lastCurveReport.combined.factors;
+  const wSum=best.weights.reduce((a,b)=>a+b,0),pts=best.weights.map(w=>Math.round(w/wSum*100));
+  pts[0]+=100-pts.reduce((a,b)=>a+b,0);
+  document.getElementById('curveDraft').innerHTML=`
+    <div class="status ok"><b>Vit 2.0 – ren teknisk 100-poängsmodell</b></div>
+    <div class="tablewrap"><table><tr><th>Faktor</th><th>Maxpoäng</th><th>Kurvform</th><th>Centrum</th><th>Vänsterbredd</th><th>Högerbredd</th></tr>
+      ${factors.map((f,i)=>{
+        const p=lastCurveReport.factorResults.find(r=>r.factor===f).best;
+        return `<tr><td><b>${autoLabFactorLabel(f)}</b></td><td><b>${pts[i]} p</b></td><td>${curveShapeName(p.shape)}</td>
+          <td>${fmt(p.center)}</td><td>${fmt(p.leftWidth)}</td><td>${fmt(p.rightWidth)}</td></tr>`
+      }).join('')}
+    </table></div>
+    <div class="rowcard"><b>Beräkning</b><br>Varje faktor ger 0–100 % av sin maxpoäng enligt sin optimerade mjuka kurva. Total Vit-poäng är summan av faktorpoängen.</div>
+    <div class="rowcard"><b>Grundkrav</b><br>Endast kurs över MA200 används tills vidare som hårt riskfilter. Övriga tekniska signaler påverkar poängen mjukt.</div>
+    <div class="note">Utkastet ändrar inte Vit-koden automatiskt.</div>`;
+}
+
 function toggleLaboratoryMode(){
   const combo=document.getElementById('labMode').value==='combo';
   document.getElementById('labSingleFactorControl').classList.toggle('hidden',combo);
@@ -2982,6 +3286,9 @@ document.getElementById('importFile').addEventListener('change',async e=>{
     input.value='';
   }
 });
+document.getElementById('runCurveOptimizer').onclick=runCurveOptimizer;
+document.getElementById('exportCurveJson').onclick=exportCurveJson;
+document.getElementById('buildCurveDraft').onclick=buildCurveDraft;
 document.getElementById('runIntervalOptimizer').onclick=runIntervalOptimizer;
 document.getElementById('exportIntervalJson').onclick=exportIntervalJson;
 document.getElementById('buildIntervalDraft').onclick=buildIntervalDraft;
