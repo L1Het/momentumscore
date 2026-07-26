@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v9.0</title>
+<title>MomentumScore v10.0</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -109,6 +109,10 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .optimizer-progress>div{height:100%;width:0%;background:linear-gradient(90deg,#9d7cff,#4ca6ff,#48d697);transition:width .15s}
 .optimizer-winner{outline:2px solid rgba(157,124,255,.65);background:rgba(157,124,255,.08)}
 .weight-pill{display:inline-block;padding:3px 7px;border:1px solid var(--line);border-radius:999px;margin:2px;font-size:12px}
+.interval-progress{height:14px;background:rgba(255,255,255,.07);border-radius:999px;overflow:hidden;border:1px solid var(--line)}
+.interval-progress>div{height:100%;width:0%;background:linear-gradient(90deg,#ffb14a,#9d7cff,#4ca6ff);transition:width .15s}
+.interval-winner{outline:2px solid rgba(255,177,74,.65);background:rgba(255,177,74,.08)}
+
 
 
 
@@ -120,7 +124,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v9.0 – Modelloptimerare</h1>
+<h1>MomentumScore v10.0 – Intervalloptimerare</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -579,6 +583,83 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
     <div id="optimizerDraft" class="note">När optimeringen är klar kan ett regelutkast skapas. Inga regler ändras automatiskt.</div>
   </div>
 
+  <div class="card">
+    <h2>Intervalloptimerare – hitta exakta sweet spots</h2>
+    <p class="note">Testar konkreta faktorintervall i stället för bara deciler. Programmet söker automatiskt efter sammanhängande zoner som ger hög framtida medianavkastning, hög träff mot index och rimlig nedgångsrisk.</p>
+    <div class="lab-grid">
+      <div>
+        <label>Faktorer</label>
+        <select id="intervalFactorMode">
+          <option value="winner" selected>Faktorerna i vinnande modell</option>
+          <option value="allAB">Alla A- och B-faktorer</option>
+          <option value="all">Alla tekniska faktorer</option>
+        </select>
+      </div>
+      <div>
+        <label>Minsta observationer per intervall</label>
+        <select id="intervalMinObs">
+          <option value="25">25</option>
+          <option value="40" selected>40</option>
+          <option value="60">60</option>
+        </select>
+      </div>
+      <div>
+        <label>Antal kandidatgränser</label>
+        <select id="intervalGridSize">
+          <option value="12">12</option>
+          <option value="20" selected>20</option>
+          <option value="30">30</option>
+        </select>
+      </div>
+      <div>
+        <label>Maximal intervallbredd</label>
+        <select id="intervalMaxWidth">
+          <option value="0.20">20 % av observationerna</option>
+          <option value="0.30" selected>30 % av observationerna</option>
+          <option value="0.40">40 % av observationerna</option>
+        </select>
+      </div>
+      <div>
+        <label>Resultatmått</label>
+        <select id="intervalTarget">
+          <option value="absolute" selected>Absolut avkastning</option>
+          <option value="relative">Överavkastning mot index</option>
+        </select>
+      </div>
+      <div>
+        <label>Framtida period</label>
+        <select id="intervalHorizon">
+          <option value="63">3 månader</option>
+          <option value="126" selected>6 månader</option>
+        </select>
+      </div>
+    </div>
+    <div class="actions" style="margin-top:12px">
+      <button id="runIntervalOptimizer">Optimera intervall</button>
+      <button class="secondary" id="exportIntervalJson">Exportera intervall JSON</button>
+      <button class="secondary" id="buildIntervalDraft">Skapa poängutkast</button>
+    </div>
+    <div class="interval-progress" style="margin-top:12px"><div id="intervalProgressBar"></div></div>
+    <div id="intervalStatus" class="note" style="margin-top:8px">Kör AutoLab och gärna Vit Optimizer först.</div>
+  </div>
+
+  <div id="intervalSummary" class="summary"></div>
+
+  <div class="card">
+    <h3>Bästa exakta intervall per faktor</h3>
+    <div class="tablewrap"><table id="intervalResultsTable" class="lab-table"></table></div>
+  </div>
+
+  <div class="card">
+    <h3>Intervallkurva – toppkandidater</h3>
+    <div class="tablewrap"><table id="intervalCandidatesTable" class="lab-table"></table></div>
+  </div>
+
+  <div class="card">
+    <h3>Poängutkast från intervallen</h3>
+    <div id="intervalDraft" class="note">Ingen intervalloptimering körd.</div>
+  </div>
+
   <div id="labSummary" class="summary"></div>
 
   <div class="card">
@@ -631,7 +712,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v9.0 – regler och analys</h2>
+<h2>MomentumScore v10.0 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -676,6 +757,7 @@ Dessutom krävs minst 263 handelsdagar för både aktien och jämförelseindex.<
 <div class="rowcard"><b>Vit – Värdering, max 10 p</b><br>Mot vart och ett av 3- och 5-årssnitten: vid eller under snittet 5 p · högst 10 % över 4 p · högst 20 % över 2 p · högst 35 % över 1 p · mer än 35 % över 0 p.</div>
 <div class="rowcard"><b>Vit – poäng innan indexdata finns</b><br>Vit består av 75 poäng från aktie- och rapportdata samt 25 poäng relativ styrka. Om jämförelseindex saknas visas därför en preliminär poäng med en asterisk, exempelvis 67*. Bolaget markeras då som Underlag saknas – inte Ej kvalificerat. Efter kursuppdatering eller import av en komplett v7.6-säkerhetskopia räknas hela 100-poängsmodellen.</div>
 <div class="rowcard"><b>Vit – Bedömning</b><br>90–100 = Mycket stark · 80–89 = Stark · 70–79 = Bevakning · under 70 = Avstå. Ett brutet grundkrav ger alltid Ej kvalificerad.</div>
+<div class="rowcard"><b>Intervalloptimeraren</b><br>Intervalloptimeraren söker konkreta sammanhängande sweet spots utifrån kvantilgränser. Den belönar medianförbättring, träff mot index och andel positiva utfall samt straffar nedgångsrisk och bolagskoncentration. Resultaten är in-sample och ska valideras på längre eller annan historik innan de används skarpt.</div>
 <div class="rowcard"><b>Vit Optimizer</b><br>Optimeraren testar alla faktorurval med 2–5 faktorer och objektiva heltalsvikter. Den rangordnar historiska observationer, väljer de starkaste 10–30 procenten och bedömer medianavkastning, överavkastning, träffsäkerhet, nedgångsrisk och bolagskoncentration. Den ändrar inte Vit automatiskt och resultatet måste granskas för överanpassning.</div>
 <div class="rowcard"><b>AutoLab</b><br>AutoLab kör samtliga tekniska faktorer automatiskt för både absolut avkastning och överavkastning mot index. Robusthetsbetyget väger observationer, antal bolag, förbättring mot basnivån, träffsäkerhet, nedgångsrisk och stöd i angränsande deciler. AutoLab ändrar aldrig Blå eller Vit automatiskt.</div>
 <div class="rowcard"><b>Analyslaboratoriet</b><br>Laboratoriet beräknar historiska tekniska faktorer utan framtidsläcka och jämför dem med avkastning 1, 3, 6 eller 12 månader senare. Standardläget använder deciler, alltså tio lika stora observationsgrupper, och visar även hur ofta varje grupp slog index. Resultaten är beslutsunderlag och ändrar inte Blå eller Vit automatiskt. Fundamentala faktorer kan inte backtestas korrekt förrän rapportdata finns sparad med historiska publiceringsdatum.</div>
@@ -1371,6 +1453,7 @@ let lastLaboratoryResult=null;
 let lastAutoLabReport=null;
 let lastCombinationResult=null;
 let lastOptimizerReport=null;
+let lastIntervalReport=null;
 
 function labMedian(values){
   const a=values.filter(Number.isFinite).slice().sort((x,y)=>x-y);
@@ -2247,6 +2330,175 @@ function buildOptimizerDraft(){
     <div class="note">Detta är endast ett regelutkast. Det skriver inte om Vit-modellens kod.</div>`;
 }
 
+
+function intervalSelectedFactors(){
+  const mode=document.getElementById('intervalFactorMode').value;
+  if(mode==='winner'&&lastOptimizerReport?.winners?.[0])return lastOptimizerReport.winners[0].subset.slice();
+  if(mode==='allAB'&&lastAutoLabReport)return lastAutoLabReport.reports
+    .filter(r=>r.target==='absolute'&&r.best&&['A','B'].includes(r.robustness.grade))
+    .map(r=>r.factor);
+  return autoLabFactors()
+}
+function quantileCuts(values,count){
+  const a=values.filter(Number.isFinite).slice().sort((x,y)=>x-y);
+  const cuts=[];
+  for(let i=0;i<=count;i++)cuts.push(labPercentile(a,i/count));
+  return [...new Set(cuts.filter(Number.isFinite))]
+}
+function intervalBaseline(obs){
+  const vals=obs.map(o=>o.targetReturn),dds=obs.map(o=>o.maxDrawdown);
+  const rel=obs.filter(o=>Number.isFinite(o.relativeReturn));
+  return{
+    n:obs.length,companies:new Set(obs.map(o=>o.ticker)).size,
+    median:labMedian(vals),mean:labMean(vals),
+    positive:obs.length?obs.filter(o=>o.targetReturn>0).length/obs.length*100:NaN,
+    beatIndex:rel.length?rel.filter(o=>o.relativeReturn>0).length/rel.length*100:NaN,
+    medianDrawdown:labMedian(dds)
+  }
+}
+function evaluateExactInterval(items,lo,hi,baseline,minObs){
+  const selected=items.filter(o=>o.factorValue>=lo&&o.factorValue<=hi);
+  if(selected.length<minObs)return null;
+  const ret=selected.map(o=>o.targetReturn),dd=selected.map(o=>o.maxDrawdown);
+  const rel=selected.filter(o=>Number.isFinite(o.relativeReturn));
+  const median=labMedian(ret),mean=labMean(ret),positive=selected.filter(o=>o.targetReturn>0).length/selected.length*100;
+  const beatIndex=rel.length?rel.filter(o=>o.relativeReturn>0).length/rel.length*100:NaN;
+  const medianDrawdown=labMedian(dd),companies=new Set(selected.map(o=>o.ticker)).size;
+  const improvement=median-baseline.median;
+  const coverage=selected.length/items.length*100;
+  const concentration=selected.length?Math.max(...Object.values(selected.reduce((acc,o)=>(acc[o.ticker]=(acc[o.ticker]||0)+1,acc),{})))/selected.length*100:100;
+  const objective=
+    improvement*2.5 +
+    (Number.isFinite(beatIndex)?beatIndex-50:0)*0.45 +
+    (positive-50)*0.18 +
+    Math.max(-20,medianDrawdown)*0.20 -
+    Math.max(0,concentration-15)*0.5;
+  return{
+    lo,hi,n:selected.length,companies,coverage,median,mean,positive,beatIndex,
+    medianDrawdown,worstDrawdown:selected.length?Math.min(...dd.filter(Number.isFinite)):NaN,
+    improvement,concentration,objective
+  }
+}
+function optimizeExactIntervalsForFactor(factor,target,horizon,minObs,gridSize,maxWidthShare){
+  const data=withLabSettings({
+    labFactor:factor,labHorizon:horizon,labSample:21,labTarget:target,
+    labUniverse:'all',labMinObs:minObs,labGrouping:'deciles'
+  },()=>buildLaboratoryObservations());
+  if(!data.obs.length)return{factor,target,horizon,baseline:null,best:null,candidates:[]};
+  const baseline=intervalBaseline(data.obs);
+  const values=data.obs.map(o=>o.factorValue);
+  const cuts=quantileCuts(values,gridSize);
+  const candidates=[];
+  for(let i=0;i<cuts.length-1;i++){
+    for(let j=i+1;j<cuts.length;j++){
+      const share=(j-i)/gridSize;
+      if(share>maxWidthShare+1e-9)break;
+      const r=evaluateExactInterval(data.obs,cuts[i],cuts[j],baseline,minObs);
+      if(r)candidates.push(r)
+    }
+  }
+  candidates.sort((a,b)=>b.objective-a.objective);
+  return{factor,target,horizon,baseline,best:candidates[0]||null,candidates:candidates.slice(0,30)}
+}
+async function runIntervalOptimizer(){
+  if(!lastAutoLabReport)return alert('Kör AutoLab först.');
+  const button=document.getElementById('runIntervalOptimizer'),status=document.getElementById('intervalStatus'),bar=document.getElementById('intervalProgressBar');
+  const factors=intervalSelectedFactors();
+  const minObs=Number(document.getElementById('intervalMinObs').value);
+  const gridSize=Number(document.getElementById('intervalGridSize').value);
+  const maxWidth=Number(document.getElementById('intervalMaxWidth').value);
+  const target=document.getElementById('intervalTarget').value;
+  const horizon=Number(document.getElementById('intervalHorizon').value);
+  if(!factors.length)return alert('Inga faktorer valdes.');
+
+  button.disabled=true;button.textContent='Optimerar intervall…';bar.style.width='0%';
+  const results=[];
+  try{
+    for(let i=0;i<factors.length;i++){
+      status.textContent=`Optimerar ${autoLabFactorLabel(factors[i])} (${i+1}/${factors.length})…`;
+      await new Promise(r=>setTimeout(r,10));
+      results.push(optimizeExactIntervalsForFactor(factors[i],target,horizon,minObs,gridSize,maxWidth));
+      bar.style.width=`${(i+1)/factors.length*100}%`
+    }
+    lastIntervalReport={
+      format:'MomentumScoreIntervalOptimizer',
+      version:'10.0',
+      createdAt:new Date().toISOString(),
+      settings:{factors,minObs,gridSize,maxWidth,target,horizon},
+      results
+    };
+    renderIntervalOptimizer(lastIntervalReport);
+    status.textContent=`Intervalloptimering klar för ${results.length} faktorer.`;
+  }catch(e){
+    console.error(e);status.textContent='Intervalloptimeringen misslyckades: '+e.message
+  }finally{
+    button.disabled=false;button.textContent='Optimera intervall'
+  }
+}
+function formatFactorRange(factor,lo,hi){
+  const def=labFactorDefinition(factor);
+  return `${fmt(lo)} till ${fmt(hi)}${def.suffix||''}`
+}
+function renderIntervalOptimizer(report){
+  const valid=report.results.filter(r=>r.best).sort((a,b)=>b.best.objective-a.best.objective);
+  document.getElementById('intervalSummary').innerHTML=[
+    ['Faktorer',report.results.length],['Giltiga intervall',valid.length],
+    ['Bäst faktor',valid[0]?autoLabFactorLabel(valid[0].factor):'–'],
+    ['Bäst förbättring',valid[0]?signed(valid[0].best.improvement,' p.e.'):'–'],
+    ['Bäst träff mot index',valid[0]&&Number.isFinite(valid[0].best.beatIndex)?fmt(valid[0].best.beatIndex)+' %':'–']
+  ].map(([a,b])=>`<div class="metric"><small>${a}</small><b style="${String(b).length>18?'font-size:14px':''}">${b}</b></div>`).join('');
+
+  document.getElementById('intervalResultsTable').innerHTML='<tr><th>Rank</th><th>Faktor</th><th>Optimalt intervall</th><th>Observationer</th><th>Bolag</th><th>Täckning</th><th>Median</th><th>Basmedian</th><th>Förbättring</th><th>Slår index</th><th>Positiva</th><th>Median nedgång</th><th>Koncentration</th><th>Värde</th></tr>'+
+    valid.map((r,i)=>`<tr class="${i===0?'interval-winner':''}">
+      <td>${i+1}</td><td><b>${autoLabFactorLabel(r.factor)}</b></td><td><b>${formatFactorRange(r.factor,r.best.lo,r.best.hi)}</b></td>
+      <td>${r.best.n}</td><td>${r.best.companies}</td><td>${fmt(r.best.coverage)} %</td>
+      <td><b>${signed(r.best.median,' %')}</b></td><td>${signed(r.baseline.median,' %')}</td>
+      <td class="${classByValue(r.best.improvement)}"><b>${signed(r.best.improvement,' p.e.')}</b></td>
+      <td>${Number.isFinite(r.best.beatIndex)?fmt(r.best.beatIndex)+' %':'–'}</td><td>${fmt(r.best.positive)} %</td>
+      <td>${signed(r.best.medianDrawdown,' %')}</td><td>${fmt(r.best.concentration)} %</td><td>${fmt(r.best.objective)}</td>
+    </tr>`).join('');
+
+  const candidateRows=[];
+  valid.forEach(r=>r.candidates.slice(0,10).forEach((c,i)=>candidateRows.push({factor:r.factor,rank:i+1,...c,baseline:r.baseline})));
+  candidateRows.sort((a,b)=>b.objective-a.objective);
+  document.getElementById('intervalCandidatesTable').innerHTML='<tr><th>Faktor</th><th>Intern rank</th><th>Intervall</th><th>Observationer</th><th>Median</th><th>Förbättring</th><th>Slår index</th><th>Median nedgång</th><th>Värde</th></tr>'+
+    candidateRows.slice(0,50).map(c=>`<tr>
+      <td>${autoLabFactorLabel(c.factor)}</td><td>${c.rank}</td><td><b>${formatFactorRange(c.factor,c.lo,c.hi)}</b></td>
+      <td>${c.n}</td><td>${signed(c.median,' %')}</td><td>${signed(c.improvement,' p.e.')}</td>
+      <td>${Number.isFinite(c.beatIndex)?fmt(c.beatIndex)+' %':'–'}</td><td>${signed(c.medianDrawdown,' %')}</td><td>${fmt(c.objective)}</td>
+    </tr>`).join('');
+}
+function exportIntervalJson(){
+  if(!lastIntervalReport)return alert('Kör intervalloptimeringen först.');
+  downloadTextFile(JSON.stringify(lastIntervalReport,null,2),`MomentumScore_Intervals_${todayISO()}.json`,'application/json;charset=utf-8')
+}
+function buildIntervalDraft(){
+  if(!lastIntervalReport)return alert('Kör intervalloptimeringen först.');
+  const valid=lastIntervalReport.results.filter(r=>r.best).sort((a,b)=>b.best.objective-a.best.objective);
+  if(!valid.length)return alert('Inga giltiga intervall finns.');
+  const maxTotal=50;
+  const raw=valid.map(r=>Math.max(0,r.best.objective));
+  const sum=raw.reduce((a,b)=>a+b,0)||1;
+  const pts=raw.map(v=>Math.max(3,Math.round(v/sum*maxTotal)));
+  let diff=maxTotal-pts.reduce((a,b)=>a+b,0);
+  pts[0]+=diff;
+
+  document.getElementById('intervalDraft').innerHTML=`
+    <div class="status ok"><b>Datadrivet utkast – tekniska 50 poäng</b></div>
+    <div class="tablewrap"><table>
+      <tr><th>Faktor</th><th>Maxpoäng</th><th>Högsta poängzon</th><th>Övriga nivåer</th></tr>
+      ${valid.map((r,i)=>`<tr>
+        <td><b>${autoLabFactorLabel(r.factor)}</b></td><td><b>${pts[i]} p</b></td>
+        <td>${formatFactorRange(r.factor,r.best.lo,r.best.hi)}</td>
+        <td class="wrap">Poängen bör trappas ned efter kandidatintervallens rangordning, inte linjärt efter faktorvärdet.</td>
+      </tr>`).join('')}
+    </table></div>
+    <div class="rowcard"><b>Viktig tolkning</b><br>
+      Högsta poäng ges inom sweet spot-zonen. Ett värde som är ännu högre ska inte automatiskt ge fler poäng. Intervall utanför den historiskt starka zonen får successivt lägre poäng enligt kandidatlistan.
+    </div>
+    <div class="note">Utkastet ändrar inte Vit automatiskt.</div>`;
+}
+
 function toggleLaboratoryMode(){
   const combo=document.getElementById('labMode').value==='combo';
   document.getElementById('labSingleFactorControl').classList.toggle('hidden',combo);
@@ -2730,6 +2982,9 @@ document.getElementById('importFile').addEventListener('change',async e=>{
     input.value='';
   }
 });
+document.getElementById('runIntervalOptimizer').onclick=runIntervalOptimizer;
+document.getElementById('exportIntervalJson').onclick=exportIntervalJson;
+document.getElementById('buildIntervalDraft').onclick=buildIntervalDraft;
 document.getElementById('runOptimizer').onclick=runOptimizer;
 document.getElementById('exportOptimizerJson').onclick=exportOptimizerJson;
 document.getElementById('applyOptimizerDraft').onclick=buildOptimizerDraft;
