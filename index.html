@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v7.6</title>
+<title>MomentumScore v7.7</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -91,19 +91,27 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 @media(min-width:900px){.score-loss{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .loss-item{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:9px}
 .loss-item small{display:block;color:var(--muted)}.loss-item b{font-size:18px}.model-blue{color:#62a8ff}.model-white{color:#f4f7fb}
+.lab-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.lab-highlight{background:rgba(76,166,255,.10)}
+.lab-best{outline:2px solid rgba(72,214,151,.55)}
+.lab-warning{color:var(--yellow)}
+.lab-table td,.lab-table th{white-space:nowrap}
+.lab-table td.wrap{white-space:normal;min-width:240px;text-align:left}
+
 .toolbar-inline{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
 
 </style>
 </head>
 <body>
 <header>
-<h1>MomentumScore v7.6 – komplett modelljämförelse</h1>
+<h1>MomentumScore v7.7 – analyslaboratorium</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
 <button class="tab" data-tab="scores">Poäng</button>
 <button class="tab" data-tab="top">Topplista</button>
 <button class="tab" data-tab="development">Utveckling</button>
+<button class="tab" data-tab="laboratory">Analyslaboratorium</button>
 <button class="tab" data-tab="rules">Regler</button>
 <button class="tab" data-tab="settings">Inställningar</button>
 </div>
@@ -301,8 +309,111 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
   <p class="note">Översikten visar alla bolag samtidigt. Klicka på en rad för diagram och full historik. MA200-trenderna räknas automatiskt när minst 263 handelsdagar finns; annars ligger det manuella värdet kvar.</p>
 </section>
 
+
+<section id="laboratory" class="panel">
+  <div class="card">
+    <h2>Analyslaboratorium</h2>
+    <p class="note">Testar historiskt vilka tekniska lägen som följts av bäst framtida utveckling i ditt eget aktieuniversum. Resultaten ändrar inte Blå eller Vit automatiskt.</p>
+    <div class="lab-grid">
+      <div>
+        <label>Faktor</label>
+        <select id="labFactor">
+          <option value="distanceMa200">Kurs över MA200</option>
+          <option value="ma200Slope1m">MA200-trend 1 månad</option>
+          <option value="ma200Slope3m">MA200-trend 3 månader</option>
+          <option value="ma50Spread">MA50 över/under MA200</option>
+          <option value="distanceHigh52">Avstånd till 52-veckors högsta</option>
+          <option value="rsi14">RSI 14</option>
+          <option value="momentum6m">Kursutveckling föregående 6 månader</option>
+        </select>
+      </div>
+      <div>
+        <label>Framtida period</label>
+        <select id="labHorizon">
+          <option value="21">1 månad</option>
+          <option value="63">3 månader</option>
+          <option value="126" selected>6 månader</option>
+          <option value="252">12 månader</option>
+        </select>
+      </div>
+      <div>
+        <label>Urval</label>
+        <select id="labSample">
+          <option value="21" selected>Månadsvisa observationer</option>
+          <option value="5">Veckovisa observationer</option>
+          <option value="1">Alla handelsdagar</option>
+        </select>
+      </div>
+      <div>
+        <label>Resultatmått</label>
+        <select id="labTarget">
+          <option value="absolute">Absolut avkastning</option>
+          <option value="relative">Överavkastning mot index</option>
+        </select>
+      </div>
+      <div>
+        <label>Bolagsfilter</label>
+        <select id="labUniverse">
+          <option value="all">Alla bolag</option>
+          <option value="blue">Blå kvalificerade idag</option>
+          <option value="white">Vit kvalificerade idag</option>
+          <option value="both">Kvalificerade i båda idag</option>
+        </select>
+      </div>
+      <div>
+        <label>Minsta antal per intervall</label>
+        <select id="labMinObs">
+          <option value="10">10</option>
+          <option value="25" selected>25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
+    </div>
+    <div class="actions" style="margin-top:12px">
+      <button id="runLaboratory">Kör historiskt test</button>
+      <button class="secondary" id="exportLaboratoryCsv">Exportera resultat CSV</button>
+    </div>
+    <div id="labStatus" class="note">Välj inställningar och kör testet.</div>
+  </div>
+
+  <div id="labSummary" class="summary"></div>
+
+  <div class="card">
+    <h3>Resultat per intervall</h3>
+    <div class="tablewrap"><table id="labResults" class="lab-table"></table></div>
+  </div>
+
+  <div class="card">
+    <h3>Datadriven poängrekommendation</h3>
+    <p class="note">Intervallen rangordnas efter median framtida avkastning eller median överavkastning. Rekommenderad poäng är relativ inom just detta test och ska granskas innan modellerna ändras.</p>
+    <div class="tablewrap"><table id="labRecommendation" class="lab-table"></table></div>
+  </div>
+
+  <div class="card">
+    <h3>Toppobservationer</h3>
+    <div class="tablewrap"><table id="labTopObservations" class="lab-table"></table></div>
+  </div>
+
+  <div class="card">
+    <h3>Metod och begränsningar</h3>
+    <div class="rowcard">
+      <b>Ingen framtidsläcka:</b> indikatorerna beräknas endast med kurser som var kända på observationsdagen.
+    </div>
+    <div class="rowcard">
+      <b>Överlappande observationer:</b> månadsvis urval är standard för att minska att nästan identiska dagar räknas flera gånger.
+    </div>
+    <div class="rowcard">
+      <b>Survivorship bias:</b> testet omfattar bara bolag som finns i din nuvarande databas. Avnoterade eller borttagna bolag saknas.
+    </div>
+    <div class="rowcard">
+      <b>Rapportdata:</b> laboratoriet testar tills vidare endast faktorer som kan återskapas historiskt från kurserna. Historiska fundamentala kvartalsdata finns inte dag för dag.
+    </div>
+  </div>
+</section>
+
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v7.6 – regler för Blå och Vit</h2>
+<h2>MomentumScore v7.7 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -347,6 +458,7 @@ Dessutom krävs minst 263 handelsdagar för både aktien och jämförelseindex.<
 <div class="rowcard"><b>Vit – Värdering, max 10 p</b><br>Mot vart och ett av 3- och 5-årssnitten: vid eller under snittet 5 p · högst 10 % över 4 p · högst 20 % över 2 p · högst 35 % över 1 p · mer än 35 % över 0 p.</div>
 <div class="rowcard"><b>Vit – poäng innan indexdata finns</b><br>Vit består av 75 poäng från aktie- och rapportdata samt 25 poäng relativ styrka. Om jämförelseindex saknas visas därför en preliminär poäng med en asterisk, exempelvis 67*. Bolaget markeras då som Underlag saknas – inte Ej kvalificerat. Efter kursuppdatering eller import av en komplett v7.6-säkerhetskopia räknas hela 100-poängsmodellen.</div>
 <div class="rowcard"><b>Vit – Bedömning</b><br>90–100 = Mycket stark · 80–89 = Stark · 70–79 = Bevakning · under 70 = Avstå. Ett brutet grundkrav ger alltid Ej kvalificerad.</div>
+<div class="rowcard"><b>Analyslaboratoriet</b><br>Laboratoriet beräknar historiska tekniska faktorer utan framtidsläcka och jämför dem med avkastning 1, 3, 6 eller 12 månader senare. Resultaten är beslutsunderlag och ändrar inte Blå eller Vit automatiskt. Fundamentala faktorer kan inte backtestas korrekt förrän rapportdata finns sparad med historiska publiceringsdatum.</div>
 <div class="rowcard"><b>Import och versionskompatibilitet</b><br>Säkerhetskopior från version 6 och 7 kan importeras. Importförlopp och eventuella fel visas direkt bredvid filväljaren. Saknade fält för börs, Yahoo-symbol, teknisk historik och modeller fylls i automatiskt utan att äldre history, marketHistory eller transaktioner tas bort.</div>
 
 </div></section>
@@ -1034,6 +1146,261 @@ function quarter(){
   renderPreview();
   toast('Teknisk data behålls från marknadshistoriken')
 }
+
+let lastLaboratoryResult=null;
+
+function labMedian(values){
+  const a=values.filter(Number.isFinite).slice().sort((x,y)=>x-y);
+  if(!a.length)return NaN;
+  const m=Math.floor(a.length/2);
+  return a.length%2?a[m]:(a[m-1]+a[m])/2
+}
+function labMean(values){
+  const a=values.filter(Number.isFinite);
+  return a.length?a.reduce((s,x)=>s+x,0)/a.length:NaN
+}
+function labStd(values){
+  const a=values.filter(Number.isFinite),mean=labMean(a);
+  if(a.length<2)return NaN;
+  return Math.sqrt(a.reduce((s,x)=>s+(x-mean)**2,0)/(a.length-1))
+}
+function labPercentile(values,p){
+  const a=values.filter(Number.isFinite).slice().sort((x,y)=>x-y);
+  if(!a.length)return NaN;
+  const pos=(a.length-1)*p,lo=Math.floor(pos),hi=Math.ceil(pos);
+  return lo===hi?a[lo]:a[lo]+(a[hi]-a[lo])*(pos-lo)
+}
+function labReturn(closes,start,end){
+  const a=num(closes[start]),b=num(closes[end]);
+  return Number.isFinite(a)&&Number.isFinite(b)&&a!==0?(b/a-1)*100:NaN
+}
+function labMaxDrawdown(closes,start,end){
+  const base=num(closes[start]);
+  if(!Number.isFinite(base)||base===0)return NaN;
+  let worst=0;
+  for(let i=start+1;i<=end;i++){
+    const v=num(closes[i]);
+    if(Number.isFinite(v))worst=Math.min(worst,(v/base-1)*100)
+  }
+  return worst
+}
+function labMA(closes,end,period){
+  const start=end-period+1;
+  if(start<0)return NaN;
+  let sum=0;
+  for(let i=start;i<=end;i++){
+    const v=num(closes[i]);if(!Number.isFinite(v))return NaN;sum+=v
+  }
+  return sum/period
+}
+function labRSI(closes,end,period=14){
+  const start=end-period;
+  if(start<0)return NaN;
+  let gains=0,losses=0;
+  for(let i=start+1;i<=end;i++){
+    const d=num(closes[i])-num(closes[i-1]);
+    if(d>0)gains+=d;else losses-=d
+  }
+  if(losses===0)return gains>0?100:50;
+  const rs=(gains/period)/(losses/period);
+  return 100-(100/(1+rs))
+}
+function labHistoricalFactor(factor,closes,i){
+  const price=num(closes[i]),ma200=labMA(closes,i,200);
+  if(!Number.isFinite(price)||!Number.isFinite(ma200))return NaN;
+  if(factor==='distanceMa200')return (price/ma200-1)*100;
+  if(factor==='ma200Slope1m'){
+    const old=labMA(closes,i-21,200);
+    return Number.isFinite(old)&&old!==0?(ma200/old-1)*100:NaN
+  }
+  if(factor==='ma200Slope3m'){
+    const old=labMA(closes,i-63,200);
+    return Number.isFinite(old)&&old!==0?(ma200/old-1)*100:NaN
+  }
+  if(factor==='ma50Spread'){
+    const ma50=labMA(closes,i,50);
+    return Number.isFinite(ma50)?(ma50/ma200-1)*100:NaN
+  }
+  if(factor==='distanceHigh52'){
+    const start=i-251;if(start<0)return NaN;
+    let high=-Infinity;
+    for(let j=start;j<=i;j++)high=Math.max(high,num(closes[j]));
+    return Number.isFinite(high)&&high!==0?(price/high-1)*100:NaN
+  }
+  if(factor==='rsi14')return labRSI(closes,i,14);
+  if(factor==='momentum6m')return i>=126?labReturn(closes,i-126,i):NaN;
+  return NaN
+}
+function labFactorDefinition(factor){
+  const defs={
+    distanceMa200:{name:'Kurs över MA200',bins:[-Infinity,0,5,10,15,20,30,40,Infinity],digits:0,suffix:' %'},
+    ma200Slope1m:{name:'MA200-trend 1 månad',bins:[-Infinity,0,0.5,1,2,3,5,Infinity],digits:1,suffix:' %'},
+    ma200Slope3m:{name:'MA200-trend 3 månader',bins:[-Infinity,0,2,4,6,8,12,20,Infinity],digits:0,suffix:' %'},
+    ma50Spread:{name:'MA50 mot MA200',bins:[-Infinity,0,3,6,10,15,25,Infinity],digits:0,suffix:' %'},
+    distanceHigh52:{name:'Avstånd till 52-veckors högsta',bins:[-Infinity,-30,-20,-15,-10,-5,-2,0,Infinity],digits:0,suffix:' %'},
+    rsi14:{name:'RSI 14',bins:[-Infinity,30,40,50,60,70,80,Infinity],digits:0,suffix:''},
+    momentum6m:{name:'Föregående 6 månaders utveckling',bins:[-Infinity,-20,-10,0,10,20,40,70,Infinity],digits:0,suffix:' %'}
+  };
+  return defs[factor]||defs.distanceMa200
+}
+function labBinLabel(def,lo,hi){
+  const f=v=>Number.isFinite(v)?Number(v).toFixed(def.digits):'';
+  if(lo===-Infinity)return `< ${f(hi)}${def.suffix}`;
+  if(hi===Infinity)return `≥ ${f(lo)}${def.suffix}`;
+  return `${f(lo)} till < ${f(hi)}${def.suffix}`
+}
+function labFindIndexPoint(history,date){
+  const h=Array.isArray(history)?history:[];
+  if(!h.length)return -1;
+  let lo=0,hi=h.length-1,best=-1;
+  while(lo<=hi){
+    const mid=(lo+hi)>>1,d=String(h[mid].date||'');
+    if(d<=date){best=mid;lo=mid+1}else hi=mid-1
+  }
+  return best
+}
+function labUniversePass(r,universe){
+  if(universe==='blue')return calc(r).qualified;
+  if(universe==='white')return whiteCalc(r).qualified;
+  if(universe==='both')return calc(r).qualified&&whiteCalc(r).qualified;
+  return true
+}
+function buildLaboratoryObservations(){
+  const factor=document.getElementById('labFactor').value;
+  const horizon=Number(document.getElementById('labHorizon').value);
+  const step=Number(document.getElementById('labSample').value);
+  const target=document.getElementById('labTarget').value;
+  const universe=document.getElementById('labUniverse').value;
+  const obs=[];
+
+  for(const r of rows){
+    if(!labUniversePass(r,universe))continue;
+    const history=(Array.isArray(r.priceHistory)?r.priceHistory:[])
+      .filter(p=>p&&p.date&&Number.isFinite(num(p.close)))
+      .slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    if(history.length<200+horizon)continue;
+    const closes=history.map(p=>num(p.close));
+    const market=r.market||'SE';
+    const indexHistory=(Array.isArray(benchmarkHistories[market])?benchmarkHistories[market]:[])
+      .filter(p=>p&&p.date&&Number.isFinite(num(p.close)))
+      .slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+
+    const minIndex=factor==='ma200Slope3m'?262:factor==='distanceHigh52'?251:factor==='momentum6m'?199:199;
+    for(let i=minIndex;i+horizon<history.length;i+=step){
+      const factorValue=labHistoricalFactor(factor,closes,i);
+      if(!Number.isFinite(factorValue))continue;
+      const futureReturn=labReturn(closes,i,i+horizon);
+      if(!Number.isFinite(futureReturn))continue;
+      let indexReturn=NaN,relativeReturn=NaN;
+      if(indexHistory.length){
+        const s=labFindIndexPoint(indexHistory,history[i].date);
+        const e=labFindIndexPoint(indexHistory,history[i+horizon].date);
+        if(s>=0&&e>s){
+          indexReturn=labReturn(indexHistory.map(p=>num(p.close)),s,e);
+          if(Number.isFinite(indexReturn))relativeReturn=futureReturn-indexReturn
+        }
+      }
+      if(target==='relative'&&!Number.isFinite(relativeReturn))continue;
+      obs.push({
+        ticker:r.ticker||'',company:r.company||'',market,
+        date:history[i].date,factorValue,futureReturn,indexReturn,relativeReturn,
+        targetReturn:target==='relative'?relativeReturn:futureReturn,
+        maxDrawdown:labMaxDrawdown(closes,i,i+horizon)
+      })
+    }
+  }
+  return{factor,horizon,step,target,universe,obs}
+}
+function summarizeLaboratory(data){
+  const def=labFactorDefinition(data.factor),minObs=Number(document.getElementById('labMinObs').value);
+  const groups=[];
+  for(let b=0;b<def.bins.length-1;b++){
+    const lo=def.bins[b],hi=def.bins[b+1];
+    const items=data.obs.filter(o=>o.factorValue>=lo&&o.factorValue<hi);
+    const returns=items.map(o=>o.targetReturn),absReturns=items.map(o=>o.futureReturn),drawdowns=items.map(o=>o.maxDrawdown);
+    groups.push({
+      lo,hi,label:labBinLabel(def,lo,hi),items,n:items.length,companies:new Set(items.map(o=>o.ticker)).size,
+      mean:labMean(returns),median:labMedian(returns),p25:labPercentile(returns,.25),p75:labPercentile(returns,.75),
+      positive:items.length?items.filter(o=>o.targetReturn>0).length/items.length*100:NaN,
+      meanAbs:labMean(absReturns),medianAbs:labMedian(absReturns),
+      medianDrawdown:labMedian(drawdowns),worstDrawdown:items.length?Math.min(...drawdowns.filter(Number.isFinite)):NaN,
+      std:labStd(returns),eligible:items.length>=minObs
+    })
+  }
+  const eligible=groups.filter(g=>g.eligible&&Number.isFinite(g.median));
+  const ranked=eligible.slice().sort((a,b)=>b.median-a.median);
+  ranked.forEach((g,i)=>g.recommendedPoints=ranked.length<=1?10:Math.round((ranked.length-1-i)/(ranked.length-1)*10));
+  groups.forEach(g=>{
+    const r=ranked.find(x=>x.label===g.label);
+    g.recommendedPoints=r?r.recommendedPoints:null
+  });
+  return{...data,def,groups,minObs,best:ranked[0]||null}
+}
+function renderLaboratory(result){
+  lastLaboratoryResult=result;
+  const targetName=result.target==='relative'?'överavkastning mot index':'absolut avkastning';
+  const horizonName={21:'1 månad',63:'3 månader',126:'6 månader',252:'12 månader'}[result.horizon]||result.horizon+' dagar';
+  const uniqueCompanies=new Set(result.obs.map(o=>o.ticker)).size;
+  document.getElementById('labSummary').innerHTML=[
+    ['Observationer',result.obs.length],['Bolag',uniqueCompanies],
+    ['Faktor',result.def.name],['Framåtblick',horizonName],
+    ['Bästa intervall',result.best?.label||'Otillräckligt underlag'],
+    ['Bästa median',Number.isFinite(result.best?.median)?signed(result.best.median,' %'):'–']
+  ].map(([a,b])=>`<div class="metric"><small>${a}</small><b style="${String(b).length>18?'font-size:14px':''}">${b}</b></div>`).join('');
+
+  document.getElementById('labResults').innerHTML='<tr>'+[
+    'Intervall','Observationer','Bolag','Genomsnitt','Median','25:e percentil','75:e percentil',
+    'Andel positiva','Median max nedgång','Värsta nedgång','Std.avvikelse','Underlag'
+  ].map(x=>`<th>${x}</th>`).join('')+'</tr>'+
+  result.groups.map(g=>`<tr class="${result.best&&g.label===result.best.label?'lab-best lab-highlight':''}">
+    <td><b>${g.label}</b></td><td>${g.n}</td><td>${g.companies}</td>
+    <td class="${classByValue(g.mean)}">${signed(g.mean,' %')}</td>
+    <td class="${classByValue(g.median)}"><b>${signed(g.median,' %')}</b></td>
+    <td>${signed(g.p25,' %')}</td><td>${signed(g.p75,' %')}</td>
+    <td>${fmt(g.positive)} %</td><td>${signed(g.medianDrawdown,' %')}</td><td>${signed(g.worstDrawdown,' %')}</td>
+    <td>${fmt(g.std)} %</td><td>${g.eligible?'Godkänt':'För få'}</td>
+  </tr>`).join('');
+
+  const rec=result.groups.filter(g=>g.eligible).slice().sort((a,b)=>(b.recommendedPoints??-1)-(a.recommendedPoints??-1));
+  document.getElementById('labRecommendation').innerHTML='<tr><th>Intervall</th><th>Rekommenderad poäng 0–10</th><th>Median '+targetName+'</th><th>Andel positiva</th><th>Observationer</th><th>Kommentar</th></tr>'+
+    rec.map(g=>`<tr><td><b>${g.label}</b></td><td><b>${g.recommendedPoints}</b></td><td>${signed(g.median,' %')}</td><td>${fmt(g.positive)} %</td><td>${g.n}</td><td class="wrap">${g.recommendedPoints>=8?'Historiskt starkast i detta test':g.recommendedPoints<=2?'Historiskt svagast i detta test':'Mellanläge'}</td></tr>`).join('');
+
+  const top=result.obs.slice().sort((a,b)=>b.targetReturn-a.targetReturn).slice(0,25);
+  document.getElementById('labTopObservations').innerHTML='<tr><th>Datum</th><th>Ticker</th><th>Bolag</th><th>Faktorvärde</th><th>Framtida aktieavkastning</th><th>Index</th><th>Överavkastning</th><th>Max nedgång</th></tr>'+
+    top.map(o=>`<tr><td>${o.date}</td><td>${o.ticker}</td><td>${o.company}</td><td>${fmt(o.factorValue)}</td><td>${signed(o.futureReturn,' %')}</td><td>${signed(o.indexReturn,' %')}</td><td>${signed(o.relativeReturn,' %')}</td><td>${signed(o.maxDrawdown,' %')}</td></tr>`).join('');
+
+  document.getElementById('labStatus').textContent=
+    `Klart. ${result.obs.length} observationer från ${uniqueCompanies} bolag. Resultatmått: ${targetName}.`;
+}
+async function runLaboratory(){
+  const status=document.getElementById('labStatus');
+  status.textContent='Beräknar historiska indikatorer och framtida utfall…';
+  await new Promise(resolve=>setTimeout(resolve,20));
+  try{
+    const data=buildLaboratoryObservations();
+    if(!data.obs.length){
+      status.textContent='Inga observationer kunde skapas. Välj kortare framtidsperiod, kontrollera kurshistoriken eller uppdatera jämförelseindex.';
+      document.getElementById('labSummary').innerHTML='';
+      document.getElementById('labResults').innerHTML='';
+      return
+    }
+    renderLaboratory(summarizeLaboratory(data))
+  }catch(e){
+    console.error(e);
+    status.textContent='Analysen misslyckades: '+e.message
+  }
+}
+function exportLaboratoryCsv(){
+  if(!lastLaboratoryResult)return alert('Kör ett test först.');
+  const rowsCsv=[['Intervall','Observationer','Bolag','Genomsnitt','Median','P25','P75','Andel positiva','Median max nedgång','Värsta nedgång','Std avvikelse','Rekommenderad poäng']];
+  lastLaboratoryResult.groups.forEach(g=>rowsCsv.push([g.label,g.n,g.companies,g.mean,g.median,g.p25,g.p75,g.positive,g.medianDrawdown,g.worstDrawdown,g.std,g.recommendedPoints??'']));
+  const esc=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+  const csv='\ufeff'+rowsCsv.map(r=>r.map(esc).join(';')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=`MomentumScore_laboratorium_${todayISO()}.csv`;a.click();URL.revokeObjectURL(a.href)
+}
+
 function showTab(id){document.querySelectorAll('.panel,.tab').forEach(e=>e.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelector(`.tab[data-tab="${id}"]`).classList.add('active')}
 const reasons={'Köp':['Hög totalpoäng','Kvalificerad av filter','Stark vinsttrend','Stark omsättningstrend','Stark teknisk trend','Rimlig värdering'],'Öka':['Förbättrad totalpoäng','Förbättrad vinsttrend','Förbättrad omsättningstrend','Starkare teknisk trend','Lägre värdering','Undervikt i portföljen','Återköp efter minskning'],'Minska':['För stor del av portföljen','Försämrad totalpoäng','Försämrad vinsttrend','Försämrad omsättningstrend','Svagare teknisk trend','P/E närmar sig filter','Bättre kandidat finns','Riskminskning','Delvis vinsthemtagning'],'Sälj':['Under MA200','Negativ 3-månaderstrend','P/E-filter brutet','För låg totalpoäng','Bättre kandidat finns','Riskminskning'],'Utdelning':['Ordinarie utdelning','Extrautdelning']};
 function reasonUI(){const t=document.getElementById('txType').value;document.getElementById('reasonChecks').innerHTML=(reasons[t]||[]).map(x=>`<label class="rowcard"><input type="checkbox" class="reasonBox" value="${x}">${x}</label>`).join('')}
@@ -1407,7 +1774,10 @@ async function importSelectedFile(file){
   rows=result.clean;
   benchmarkHistories=importedBenchmarks;
   const uiErrors=[];
-  for(const [name,fn] of [
+  document.getElementById('runLaboratory').onclick=runLaboratory;
+document.getElementById('exportLaboratoryCsv').onclick=exportLaboratoryCsv;
+
+for(const [name,fn] of [
     ['Poäng/översikt',()=>render()],
     ['Databaskontroll',()=>renderDatabaseHealth()],
     ['Inställningar',()=>renderMarketSettings()],
