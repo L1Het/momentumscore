@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v16.0</title>
+<title>MomentumScore v17.0</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -132,6 +132,11 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .ensemble-card{border:2px solid rgba(157,124,255,.55);background:rgba(157,124,255,.05)}
 .ensemble-model{padding:10px;border:1px solid var(--line);border-radius:10px;margin:8px 0}
 .ensemble-badge{display:inline-block;padding:3px 8px;border-radius:999px;border:1px solid rgba(157,124,255,.55);margin:2px}
+.plateau-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
+.plateau-card{padding:12px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.025)}
+.plateau-bar{position:relative;height:16px;border-radius:999px;background:linear-gradient(90deg,rgba(255,138,138,.35),rgba(255,209,102,.4),rgba(72,214,151,.6),rgba(255,209,102,.4),rgba(255,138,138,.35));margin:10px 0}
+.plateau-marker{position:absolute;top:-5px;width:3px;height:26px;background:#fff;border-radius:3px;box-shadow:0 0 6px rgba(255,255,255,.75)}
+
 
 
 
@@ -152,7 +157,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v16.0 – Ensemblemotor</h1>
+<h1>MomentumScore v17.0 – Vit platåmodell</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -474,7 +479,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 
 
   <div class="card engine-primary">
-    <h2>Optimera Vit</h2>
+    <h2>Utvecklarverktyg – automatisk forskning</h2>
     <p class="note">Motorn testar alla tillgängliga tekniska faktorer och alla möjliga kombinationer utan att först kasta bort dem med bokstavsbetyg. Därefter optimeras sweet spots, poängkurvor, 100-poängsvikter och eventuella grundkrav automatiskt.</p>
     <div class="lab-grid">
       <div>
@@ -531,6 +536,16 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
   <div class="card">
     <h3>Färdig Vit-modell</h3>
     <div id="pipelineConclusion" class="note">Ingen fullständig körning har genomförts.</div>
+  </div>
+
+
+  <div class="card">
+    <h2>Vit – fasta platåer 1:1:1</h2>
+    <p class="note">Den aktiva Vit-modellen använder bara Kurs/MA200, MA50/MA200 och MA200-trend 1 månad. Alla väger lika mycket.</p>
+    <div class="actions">
+      <button id="applyIntervalsToWhite">Uppdatera platåer från senaste intervalltest</button>
+      <button class="secondary" id="resetWhitePlateaus">Återställ testade standardplatåer</button>
+    </div>
   </div>
 
   <div class="card">
@@ -962,7 +977,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v16.0 – regler och analys</h2>
+<h2>MomentumScore v17.0 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -993,30 +1008,17 @@ Under 1,0 = 5 p · 1,0–2,0 = 4 p · över 2,0 till 3,0 = 2 p · över 3,0 = 0 
 <div class="rowcard"><b>Bedömning efter totalpoäng</b><br>
 90–100 = Mycket stark · 80–89 = Stark · 70–79 = Bevakning · under 70 = Avstå. En aktie som bryter en grundregel står alltid som Ej kvalificerad oavsett poäng.</div>
 
-<div class="rowcard"><b>⚪ Modell Vit – syfte</b><br>Vit rangordnar bolag som kombinerar positiv verksamhetsutveckling, bekräftad upptrend och överavkastning mot hemmamarknadens index. Blå ändras inte.</div>
-<div class="rowcard"><b>Vit – tre grundkrav</b><br>
-1. Fundamental styrka: medianen av de fyra senaste omsättningskvartalen ska vara positiv och medianen av de fyra senaste vinstkvartalen ska vara positiv. För investmentbolag används positiv EK-tillväxt Y-Y samt positiv vinstmedian.<br>
-2. Teknisk trend: kursen ska ligga över MA200 och MA200-trenden över 3 månader ska vara positiv.<br>
-3. Relativ styrka: aktiens kursutveckling över 6 månader ska vara bättre än jämförelseindex för vald börs.<br>
-Dessutom krävs minst 263 handelsdagar för både aktien och jämförelseindex.</div>
-<div class="rowcard"><b>Vit – jämförelseindex</b><br>Stockholm: OMX Stockholm PI (^OMXSPI) · Köpenhamn: OMX Copenhagen 25 (^OMXC25) · Oslo: Oslo Børs All-Share (^OSEAX) · Helsingfors: OMX Helsinki PI (^OMXHPI) · Reykjavik: OMX Iceland All-Share PI (^OMXIPI).</div>
-<div class="rowcard"><b>Vit – Trend, max 30 p</b><br>Kurs/MA200 max 5 p · MA200 1 vecka max 5 p · MA200 1 månad max 7 p · MA200 3 månader max 10 p · MA50 över MA200 3 p.</div>
-<div class="rowcard"><b>Vit – Relativ styrka, max 25 p</b><br>Överavkastning mot index över 3 månader max 8 p, 6 månader max 9 p och 12 månader max 8 p. Endast positiv överavkastning ger poäng.</div>
-<div class="rowcard"><b>Vit – Fundamental utveckling, max 25 p</b><br>Omsättning/EK max 10 p och vinst max 15 p. Samma objektiva kvartalsmomentum och historikberäkning som i Blå används, men skalas till den nya viktningen.</div>
-<div class="rowcard"><b>Vit – Kvalitet, max 10 p</b><br>ROE, nettoskuld/EBITDA och FCF-marginal använder samma trösklar som Blå och skalas gemensamt från 15 till 10 poäng.</div>
-<div class="rowcard"><b>Vit – Värdering, max 10 p</b><br>Mot vart och ett av 3- och 5-årssnitten: vid eller under snittet 5 p · högst 10 % över 4 p · högst 20 % över 2 p · högst 35 % över 1 p · mer än 35 % över 0 p.</div>
-<div class="rowcard"><b>Vit – poäng innan indexdata finns</b><br>Vit består av 75 poäng från aktie- och rapportdata samt 25 poäng relativ styrka. Om jämförelseindex saknas visas därför en preliminär poäng med en asterisk, exempelvis 67*. Bolaget markeras då som Underlag saknas – inte Ej kvalificerat. Efter kursuppdatering eller import av en komplett v7.6-säkerhetskopia räknas hela 100-poängsmodellen.</div>
-<div class="rowcard"><b>Vit – Bedömning</b><br>90–100 = Mycket stark · 80–89 = Stark · 70–79 = Bevakning · under 70 = Avstå. Ett brutet grundkrav ger alltid Ej kvalificerad.</div>
-<div class="rowcard"><b>Ensemblelagret</b><br>Motorn väljer tre starka men olika modeller, optimerar deras procentvikter och använder ensemblen endast när den förbättrar resultatet tydligt jämfört med bästa enskilda modell. Annars behålls den enklare modellen.</div>
-<div class="rowcard"><b>Självsökande modellurval</b><br>Alla tillgängliga tekniska faktorer får delta. Motorn testar enskilda faktorer och kombinationer utan att först filtrera bort dem med robusthetsbetyg. Endast modeller som saknar tillräckligt historiskt underlag tas bort.</div>
-<div class="rowcard"><b>Enmotorn</b><br>Knappen Optimera Vit kör hela analyskedjan utan manuella delsteg. Motorn väljer faktorer, sweet spots, kurvor, 100-poängsvikter och eventuella grundkrav och skapar därefter ett färdigt regelutkast. Mellanresultat sparas automatiskt.</div>
-<div class="rowcard"><b>Helautomatisk optimering</b><br>Den fullständiga kedjan kör AutoLab, modellurval, intervalloptimering, poängkurvor och Vit 3.0 i rätt ordning. Delresultat cachas lokalt och återanvänds när samma inställningar används. En komplett analysfil kan exporteras i ett enda steg.</div>
-<div class="rowcard"><b>Vit 3.0-optimeraren</b><br>Vit 3.0 testar poängvikter som summerar till 100 och möjliga hårda tekniska riskfilter. Ett grundkrav rekommenderas bara om det förbättrar det sammanvägda resultatet tillräckligt jämfört med samma modell utan filter. Vit-poängen är huvudresultatet; historisk träffsäkerhet, medianavkastning och nedgång visas som stödfakta.</div>
-<div class="rowcard"><b>Poängkurveoptimeraren</b><br>Poängkurveoptimeraren testar asymmetrisk Gauss, asymmetrisk triangel och platåkurvor. Den optimerar centrum samt vänster- och högerbredd för varje faktor och jämför därefter kombinerade faktorvikter. Kurvorna ger mjuka poängövergångar utan godtyckliga trappsteg.</div>
-<div class="rowcard"><b>Intervalloptimeraren</b><br>Intervalloptimeraren söker konkreta sammanhängande sweet spots utifrån kvantilgränser. Den belönar medianförbättring, träff mot index och andel positiva utfall samt straffar nedgångsrisk och bolagskoncentration. Resultaten är in-sample och ska valideras på längre eller annan historik innan de används skarpt.</div>
-<div class="rowcard"><b>Vit Optimizer</b><br>Optimeraren testar alla faktorurval med 2–5 faktorer och objektiva heltalsvikter. Den rangordnar historiska observationer, väljer de starkaste 10–30 procenten och bedömer medianavkastning, överavkastning, träffsäkerhet, nedgångsrisk och bolagskoncentration. Den ändrar inte Vit automatiskt och resultatet måste granskas för överanpassning.</div>
-<div class="rowcard"><b>AutoLab</b><br>AutoLab kör samtliga tekniska faktorer automatiskt för både absolut avkastning och överavkastning mot index. Robusthetsbetyget väger observationer, antal bolag, förbättring mot basnivån, träffsäkerhet, nedgångsrisk och stöd i angränsande deciler. AutoLab ändrar aldrig Blå eller Vit automatiskt.</div>
-<div class="rowcard"><b>Analyslaboratoriet</b><br>Laboratoriet beräknar historiska tekniska faktorer utan framtidsläcka och jämför dem med avkastning 1, 3, 6 eller 12 månader senare. Standardläget använder deciler, alltså tio lika stora observationsgrupper, och visar även hur ofta varje grupp slog index. Resultaten är beslutsunderlag och ändrar inte Blå eller Vit automatiskt. Fundamentala faktorer kan inte backtestas korrekt förrän rapportdata finns sparad med historiska publiceringsdatum.</div>
+<div class="rowcard"><b>⚪ Modell Vit – fast platåmodell</b><br>
+Vit använder exakt tre tekniska faktorer med fast vikt 1:1:1. Faktorerna ändras inte och inga fundamentala data, värderingsmått, indexjämförelser eller hårda grundkrav ingår.</div>
+<div class="rowcard"><b>Vit – faktorer och vikter</b><br>
+Kursens avstånd till MA200: max 33,33 p · MA50:s avstånd till MA200: max 33,33 p · MA200-trend senaste månaden: max 33,34 p.</div>
+<div class="rowcard"><b>Vit – platåprincip</b><br>
+Full poäng ges i faktorernas historiskt bästa intervall. Utanför intervallet faller poängen mjukt mot noll. Ett extremt högt trendvärde ger därför inte automatiskt högre poäng.</div>
+<div id="whitePlateauRules" class="plateau-grid"></div>
+<div class="rowcard"><b>Vit – bedömning</b><br>
+90–100 = Extremt stark · 80–89,99 = Stark · 70–79,99 = Intressant · 60–69,99 = Neutral · under 60 = Svag. Saknas någon av de tre faktorerna visas Underlag saknas.</div>
+<div class="rowcard"><b>Vit – uppdatering av platåerna</b><br>
+Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gränser kan uppdateras från Intervalloptimeraren. Detta ändrar inte vilka faktorer som används.</div>
 <div class="rowcard"><b>Import och versionskompatibilitet</b><br>Säkerhetskopior från version 6 och 7 kan importeras. Importförlopp och eventuella fel visas direkt bredvid filväljaren. Saknade fält för börs, Yahoo-symbol, teknisk historik och modeller fylls i automatiskt utan att äldre history, marketHistory eller transaktioner tas bort.</div>
 
 </div></section>
@@ -1143,48 +1145,103 @@ function returnAtOffset(history,offset){
   const latest=num(h[h.length-1].close),old=num(h[h.length-1-offset].close);
   return Number.isFinite(latest)&&Number.isFinite(old)&&old!==0?(latest/old-1)*100:NaN
 }
-function whitePePart(pe,avg){
-  if(!Number.isFinite(pe)||!Number.isFinite(avg)||avg<=0)return 0;
-  if(pe<=avg)return 5;if(pe<=avg*1.10)return 4;if(pe<=avg*1.20)return 2;if(pe<=avg*1.35)return 1;return 0
+
+const WHITE_PLATEAU_KEY='momentumscore_white_plateaus_v17';
+const DEFAULT_WHITE_PLATEAUS={
+  distanceMa200:{name:'Kurs mot MA200',min:2.20,max:4.48,leftZero:-8,rightZero:25,maxPoints:33.33},
+  ma50Spread:{name:'MA50 mot MA200',min:8.40,max:13.20,leftZero:-2,rightZero:30,maxPoints:33.33},
+  ma200Slope1m:{name:'MA200-trend 1 månad',min:0.69,max:1.23,leftZero:-2.5,rightZero:5.5,maxPoints:33.34}
+};
+function loadWhitePlateaus(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(WHITE_PLATEAU_KEY)||'null');
+    return saved&&saved.distanceMa200&&saved.ma50Spread&&saved.ma200Slope1m?saved:structuredClone(DEFAULT_WHITE_PLATEAUS)
+  }catch{return structuredClone(DEFAULT_WHITE_PLATEAUS)}
 }
-function whiteRsPart(excess,maxPoints){
-  if(!Number.isFinite(excess)||excess<=0)return 0;
-  if(maxPoints===9){if(excess>15)return 9;if(excess>8)return 7;if(excess>3)return 4;return 2}
-  if(excess>20)return maxPoints;if(excess>10)return Math.max(maxPoints-2,1);if(excess>5)return Math.max(maxPoints-4,1);return 2
+function saveWhitePlateaus(config){
+  localStorage.setItem(WHITE_PLATEAU_KEY,JSON.stringify(config))
+}
+function plateauFraction(value,cfg){
+  if(!Number.isFinite(value))return 0;
+  if(value>=cfg.min&&value<=cfg.max)return 1;
+  if(value<cfg.min){
+    if(value<=cfg.leftZero)return 0;
+    const t=(value-cfg.leftZero)/(cfg.min-cfg.leftZero);
+    return Math.max(0,Math.min(1,t*t*(3-2*t)))
+  }
+  if(value>=cfg.rightZero)return 0;
+  const t=(cfg.rightZero-value)/(cfg.rightZero-cfg.max);
+  return Math.max(0,Math.min(1,t*t*(3-2*t)))
+}
+function plateauPoints(value,cfg){
+  return plateauFraction(value,cfg)*cfg.maxPoints
+}
+function currentTechnicalValues(r){
+  const v={};numericIds.forEach(k=>v[k]=num(r[k]));
+  const closes=(Array.isArray(r.priceHistory)?r.priceHistory:[]).map(p=>num(p.close)).filter(Number.isFinite);
+  const ma50=movingAverageAtOffset(closes,50,0);
+  const ma200Level=movingAverageAtOffset(closes,200,0);
+  const ma50Spread=Number.isFinite(ma50)&&Number.isFinite(ma200Level)&&ma200Level!==0?(ma50/ma200Level-1)*100:NaN;
+  return{distanceMa200:v.ma200,ma50Spread,ma200Slope1m:v.ma1m,ma50,ma200Level}
 }
 function whiteCalc(r){
-  const b=calc(r),v={};numericIds.forEach(k=>v[k]=num(r[k]));
-  const market=r.market||'SE',stockHistory=Array.isArray(r.priceHistory)?r.priceHistory:[],indexHistory=Array.isArray(benchmarkHistories[market])?benchmarkHistories[market]:[];
-  const stock3=returnAtOffset(stockHistory,63),stock6=returnAtOffset(stockHistory,126),stock12=returnAtOffset(stockHistory,252);
-  const index3=returnAtOffset(indexHistory,63),index6=returnAtOffset(indexHistory,126),index12=returnAtOffset(indexHistory,252);
-  const rs3=stock3-index3,rs6=stock6-index6,rs12=stock12-index12;
-  const maDistance=v.ma200>0?(v.ma200<=5?3:v.ma200<=15?5:v.ma200<=30?4:2):0;
-  const t1=v.ma1w>0.75?5:v.ma1w>0.25?4:v.ma1w>0?2:0;
-  const t21=v.ma1m>3?7:v.ma1m>1?5:v.ma1m>0?3:0;
-  const t63=v.ma3m>8?10:v.ma3m>3?7:v.ma3m>0?4:0;
-  const closes=stockHistory.map(p=>num(p.close)).filter(Number.isFinite);
-  const ma50=movingAverageAtOffset(closes,50,0),ma200Level=movingAverageAtOffset(closes,200,0);
-  const golden=Number.isFinite(ma50)&&Number.isFinite(ma200Level)&&ma50>ma200Level?3:0;
-  const trend=maDistance+t1+t21+t63+golden;
-  const relative=whiteRsPart(rs3,8)+whiteRsPart(rs6,9)+whiteRsPart(rs12,8);
-  const fundamental=Math.round((b.rev/15)*10)+Math.round((b.eps/20)*15);
-  const quality=Math.round(((b.roe+b.debt+b.fcf)/15)*10);
-  const valuation=whitePePart(v.pe,v.pe3)+whitePePart(v.pe,v.pe5);
-  const total=trend+relative+fundamental+quality+valuation;
-  const investment=r.companyType==='investment';
-  const fundamentalOk=investment?Number.isFinite(v.ekYoy)&&v.ekYoy>0&&Number.isFinite(b.epsMedian)&&b.epsMedian>0:Number.isFinite(b.revMedian)&&b.revMedian>0&&Number.isFinite(b.epsMedian)&&b.epsMedian>0;
-  const technicalOk=Number.isFinite(v.ma200)&&v.ma200>0&&Number.isFinite(v.ma3m)&&v.ma3m>0;
-  const relativeOk=Number.isFinite(rs6)&&rs6>0;
-  const dataReady=stockHistory.length>=263&&indexHistory.length>=263;
-  const fail=[];
-  if(stockHistory.length<263)fail.push('För få aktiedagar');
-  if(indexHistory.length<263)fail.push('Jämförelseindex saknas – kör kursuppdatering eller importera en komplett v7.6-säkerhetskopia');
-  if(!fundamentalOk)fail.push('Grundkrav 1: positiv aktuell omsättnings-/EK- och vinstutveckling saknas');
-  if(!technicalOk)fail.push('Grundkrav 2: kurs över MA200 och positiv MA200 3m krävs');
-  if(dataReady&&!relativeOk)fail.push('Grundkrav 3: aktien slår inte index på 6 månader');
-  const qualified=dataReady&&fundamentalOk&&technicalOk&&relativeOk;
-  const rating=!dataReady?'Underlag saknas':!qualified?'Ej kvalificerad':total>=90?'Mycket stark':total>=80?'Stark':total>=70?'Bevakning':'Avstå';
-  return{trend,relative,fundamental,quality,valuation,total,qualified,dataReady,rating,rs3,rs6,rs12,stock3,stock6,stock12,index3,index6,index12,ma50,ma200Level,golden,warning:fail.join(' · '),failReasons:fail}
+  const cfg=loadWhitePlateaus();
+  const t=currentTechnicalValues(r);
+  const parts={
+    distanceMa200:plateauPoints(t.distanceMa200,cfg.distanceMa200),
+    ma50Spread:plateauPoints(t.ma50Spread,cfg.ma50Spread),
+    ma200Slope1m:plateauPoints(t.ma200Slope1m,cfg.ma200Slope1m)
+  };
+  const total=Math.max(0,Math.min(100,parts.distanceMa200+parts.ma50Spread+parts.ma200Slope1m));
+  const missing=[];
+  if(!Number.isFinite(t.distanceMa200))missing.push('kurs mot MA200');
+  if(!Number.isFinite(t.ma50Spread))missing.push('MA50 mot MA200');
+  if(!Number.isFinite(t.ma200Slope1m))missing.push('MA200-trend 1 månad');
+  const dataReady=missing.length===0;
+  const qualified=dataReady;
+  const rating=!dataReady?'Underlag saknas':total>=90?'Extremt stark':total>=80?'Stark':total>=70?'Intressant':total>=60?'Neutral':'Svag';
+  const warning=missing.length?'Saknar '+missing.join(', '):
+    `Kurs/MA200 ${parts.distanceMa200.toFixed(1)} p · MA50/MA200 ${parts.ma50Spread.toFixed(1)} p · MA200-trend ${parts.ma200Slope1m.toFixed(1)} p`;
+  return{
+    trend:total,relative:0,fundamental:0,quality:0,valuation:0,total,qualified,dataReady,rating,
+    warning,failReasons:missing,parts,technicalValues:t,plateaus:cfg,
+    rs3:NaN,rs6:NaN,rs12:NaN,stock3:NaN,stock6:NaN,stock12:NaN,index3:NaN,index6:NaN,index12:NaN,
+    ma50:t.ma50,ma200Level:t.ma200Level,golden:Number.isFinite(t.ma50Spread)&&t.ma50Spread>0?3:0
+  }
+}
+function updateWhitePlateausFromIntervals(){
+  if(!lastIntervalReport?.results?.length)return alert('Kör Intervalloptimeraren först, eller behåll standardplatåerna.');
+  const cfg=loadWhitePlateaus();
+  const map={distanceMa200:'distanceMa200',ma50Spread:'ma50Spread',ma200Slope1m:'ma200Slope1m'};
+  let changed=0;
+  for(const result of lastIntervalReport.results){
+    const key=map[result.factor];
+    if(!key||!result.best)continue;
+    cfg[key].min=result.best.lo;
+    cfg[key].max=result.best.hi;
+    changed++
+  }
+  if(!changed)return alert('Intervallresultatet innehåller inte de tre fasta Vit-faktorerna.');
+  saveWhitePlateaus(cfg);
+  renderAll();
+  renderWhitePlateauRules();
+  alert('Vit-platåerna har uppdaterats. Faktorer och vikter är fortfarande fasta 1:1:1.')
+}
+function resetWhitePlateaus(){
+  saveWhitePlateaus(structuredClone(DEFAULT_WHITE_PLATEAUS));
+  renderAll();
+  renderWhitePlateauRules()
+}
+function renderWhitePlateauRules(){
+  const el=document.getElementById('whitePlateauRules');
+  if(!el)return;
+  const cfg=loadWhitePlateaus();
+  el.innerHTML=Object.entries(cfg).map(([key,c])=>`
+    <div class="plateau-card">
+      <b>${c.name} – max ${c.maxPoints.toFixed(2)} p</b><br>
+      Full poäng: <b>${fmt(c.min)} till ${fmt(c.max)} %</b><br>
+      Mjuk nedtrappning till 0 p vid ${fmt(c.leftZero)} % respektive ${fmt(c.rightZero)} %.
+    </div>`).join('')
 }
 function latestModelDelta(r,key,currentValue){
   const hist=(Array.isArray(r.marketHistory)?r.marketHistory:[]).slice().sort((a,b)=>new Date(a.savedAt)-new Date(b.savedAt));
@@ -4398,6 +4455,8 @@ document.getElementById('importFile').addEventListener('change',async e=>{
 });
 const oldPipelineButton=document.getElementById('runFullPipeline');
 if(oldPipelineButton)oldPipelineButton.onclick=runFullPipeline;
+document.getElementById('applyIntervalsToWhite').onclick=updateWhitePlateausFromIntervals;
+document.getElementById('resetWhitePlateaus').onclick=resetWhitePlateaus;
 document.getElementById('runOneEngine').onclick=runOneEngine;
 document.getElementById('exportOneEngine').onclick=exportOneEngine;
 document.getElementById('resetOneEngine').onclick=resetOneEngine;
@@ -4438,6 +4497,7 @@ try{
     document.getElementById('oneEngineLog').textContent='Tidigare optimering återställdes från webbläsaren.';
     engineRenderFinal();
   }
+  renderWhitePlateauRules();
   toggleLaboratoryMode();
   const labButton=document.getElementById('runLaboratory');
   if(labButton){
