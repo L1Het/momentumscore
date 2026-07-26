@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v18.4</title>
+<title>MomentumScore v19.0</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -178,18 +178,27 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .lab-table td.wrap{white-space:normal;min-width:240px;text-align:left}
 
 .toolbar-inline{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
+.portfolio-positive{color:#48d697;font-weight:800}
+.portfolio-negative{color:#ff8a8a;font-weight:800}
+.portfolio-flat{color:var(--muted);font-weight:700}
+.portfolio-model-blue{border-left:4px solid #4ca6ff}
+.portfolio-model-white{border-left:4px solid #f3f3f3}
+.portfolio-model-average{border-left:4px solid #9d7cff}
+.portfolio-card{padding:12px;border:1px solid var(--line);border-radius:12px;margin:8px 0;background:rgba(255,255,255,.025)}
+
 
 </style>
 </head>
 <body>
 <header>
-<h1>MomentumScore v18.4 – två separata modeller</h1>
+<h1>MomentumScore v19.0 – veckoportföljer</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
 <button class="tab" data-tab="scores">Poäng</button>
 <button class="tab" data-tab="top">Topplista</button>
 <button class="tab" data-tab="development">Utveckling</button>
+<button class="tab" data-tab="weekly">Veckoportföljer</button>
 <button class="tab" data-tab="laboratory">Analyslaboratorium</button>
 <button class="tab" data-tab="rules">Regler</button>
 <button class="tab" data-tab="settings">Inställningar</button>
@@ -386,6 +395,55 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
   <p class="note">Översikten visar alla bolag samtidigt. Blå och Vit är två separata modeller. Endast Blå har poängförändring tills Vit har fått egen historik. Sortera på aktuell Blå-, Vit- eller Snittpoäng samt Blås poängförändring via menyn eller kolumnrubrikerna. Status och radfärg följer den poäng som sorteringen använder. Klicka på en rad för diagram och full historik. MA200-trenderna räknas automatiskt när minst 263 handelsdagar finns; annars ligger det manuella värdet kvar.</p>
 </section>
 
+
+
+<section id="weekly" class="panel">
+  <div class="card">
+    <h2>Veckoportföljer – Top 10</h2>
+    <p class="note">En likaviktad Top 10-portfölj sparas för Blå, Vit och Snitt en gång per kalendervecka. Innehaven låses på sparningsdagen och följs därefter mot valt börsindex.</p>
+    <div class="searchbar">
+      <div>
+        <label>Jämförelseindex</label>
+        <select id="weeklyBenchmarkMarket">
+          <option value="SE" selected>Stockholm – OMXSPI</option>
+          <option value="DK">Köpenhamn – OMXC25</option>
+          <option value="NO">Oslo – OSEAX</option>
+          <option value="FI">Helsingfors – OMXHPI</option>
+          <option value="IS">Reykjavik – OMXIPI</option>
+        </select>
+      </div>
+      <div>
+        <label>Visa vecka</label>
+        <select id="weeklySnapshotSelect"></select>
+      </div>
+      <div>
+        <label>Automatisk veckosparning</label>
+        <select id="weeklyAutoSave">
+          <option value="on" selected>På – efter kursuppdatering</option>
+          <option value="off">Av</option>
+        </select>
+      </div>
+    </div>
+    <div class="actions" style="margin-top:12px">
+      <button id="saveWeeklyNow">Spara veckans Top 10 nu</button>
+      <button class="secondary" id="exportWeeklyCsv">Exportera uppföljning CSV</button>
+      <button class="secondary" id="deleteWeeklySnapshot">Radera vald vecka</button>
+    </div>
+    <div id="weeklyStatus" class="note" style="margin-top:8px">Ingen veckoportfölj sparad ännu.</div>
+  </div>
+
+  <div id="weeklySummary" class="summary"></div>
+
+  <div class="card tablewrap">
+    <h3>Historisk uppföljning mot börsen</h3>
+    <table id="weeklyHistoryTable"></table>
+  </div>
+
+  <div class="card">
+    <h3 id="weeklyDetailTitle">Vald vecka</h3>
+    <div id="weeklyDetail"></div>
+  </div>
+</section>
 
 <section id="laboratory" class="panel">
   <div class="card">
@@ -1001,7 +1059,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v18.4 – regler och analys</h2>
+<h2>MomentumScore v19.0 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -1039,6 +1097,8 @@ Kursens avstånd till MA200: max 33,33 p · MA50:s avstånd till MA200: max 33,3
 <div class="rowcard"><b>Vit – platåprincip</b><br>
 Full poäng ges i faktorernas historiskt bästa intervall. Utanför intervallet faller poängen mjukt mot noll. Ett extremt högt trendvärde ger därför inte automatiskt högre poäng.</div>
 <div id="whitePlateauRules" class="plateau-grid"></div>
+<div class="rowcard"><b>Veckoportföljer</b><br>
+En gång per kalendervecka sparas tre frysta och likaviktade Top 10-portföljer: Blå, Vit och Snitt. Startkurs, poäng och rank sparas för varje aktie. Portföljerna följs mot valt index, som standard OMXSPI. Veckans snapshot skapas automatiskt efter den första lyckade kursuppdateringen och ingår i säkerhetskopian.</div>
 <div class="rowcard"><b>Två modeller – inte en vald modell</b><br>
 Blå och Vit är separata modeller. Snitt är endast ett visat medelvärde. Vit får ingen poängförändring förrän separat Vit-historik har börjat samlas in. I Utveckling bestäms Status och radfärg av den poäng som tabellen är sorterad på.</div>
 <div class="rowcard"><b>Blå, Vit och Snitt</b><br>
@@ -1091,9 +1151,12 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
 <script>
 const ids=['companyType','ticker','company','market','yahooSymbol','price','ma200','ma1w','ma1m','ma3m','rev1','rev2','rev3','rev4','rev3y','ekYoy','ek3y','eps1','eps2','eps3','eps4','eps3y','pe','pe3','pe5','roe','debt','fcf'];
 const numericIds=['price','ma200','ma1w','ma1m','ma3m','rev1','rev2','rev3','rev4','rev3y','ekYoy','ek3y','eps1','eps2','eps3','eps4','eps3y','pe','pe3','pe5','roe','debt','fcf'], storageKey='momentumScore_v4_rows', backupKey='momentumScore_v4_rows_backup_before_update', oldKeys=['momentumScore_v3_rows','momentumRows'];
-const settingsKey='momentumScore_market_settings', dbVersionKey='momentumScore_db_version', benchmarkKey='momentumScore_benchmark_history', appDbVersion=13;
+const settingsKey='momentumScore_market_settings', dbVersionKey='momentumScore_db_version', benchmarkKey='momentumScore_benchmark_history', weeklyPortfolioKey='momentumScore_weekly_portfolios_v1', weeklySettingsKey='momentumScore_weekly_settings_v1', appDbVersion=14;
 function loadBenchmarkHistories(){try{return JSON.parse(localStorage.getItem(benchmarkKey)||'{}')||{}}catch{return {}}}
 let benchmarkHistories=loadBenchmarkHistories();
+function loadWeeklyPortfolios(){try{return JSON.parse(localStorage.getItem(weeklyPortfolioKey)||'[]')||[]}catch{return []}}
+function loadWeeklySettings(){try{return {benchmarkMarket:'SE',autoSave:'on',...JSON.parse(localStorage.getItem(weeklySettingsKey)||'{}')}}catch{return {benchmarkMarket:'SE',autoSave:'on'}}}
+let weeklyPortfolios=loadWeeklyPortfolios();
 let editing=null,detailIndex=null,scoreView='simple',quarterMode=false,rows=loadAndMigrate();
 const nowISO=()=>new Date().toISOString(),todayISO=()=>new Date().toISOString().slice(0,10);
 function num(v){if(typeof v==='number')return v;const s=String(v??'').trim().replace(/\s/g,'').replace(',','.');return s===''?NaN:Number(s)}
@@ -1275,6 +1338,7 @@ function updateWhitePlateausFromIntervals(){
   saveWhitePlateaus(cfg);
   renderAll();
   renderWhitePlateauRules();
+  renderWeeklyPortfolios();
   alert('Vit-platåerna har uppdaterats. Faktorer och vikter är fortfarande fasta 1:1:1.')
 }
 function resetWhitePlateaus(){
@@ -4415,6 +4479,236 @@ function validateNoDataLoss(before,after){
 }
 
 
+
+function isoWeekInfo(date=new Date()){
+  const d=new Date(Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()));
+  const day=d.getUTCDay()||7;
+  d.setUTCDate(d.getUTCDate()+4-day);
+  const yearStart=new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  const week=Math.ceil((((d-yearStart)/86400000)+1)/7);
+  return{year:d.getUTCFullYear(),week,key:`${d.getUTCFullYear()}-W${String(week).padStart(2,'0')}`}
+}
+function currentBenchmarkValue(market){
+  const h=(benchmarkHistories[market]||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  return h.length?num(h[h.length-1].close):NaN
+}
+function benchmarkValueOnOrBefore(market,date){
+  const h=(benchmarkHistories[market]||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  let found=NaN;
+  for(const p of h){
+    if(String(p.date).slice(0,10)<=String(date).slice(0,10))found=num(p.close);
+    else break
+  }
+  return found
+}
+function weeklyModelCandidates(model){
+  return rows.map(r=>{
+    const blue=calc(r),white=whiteCalc(r),average=averageScoreFromResults(blue,white);
+    const score=model==='blue'?blue.total:model==='white'?white.total:average;
+    const valid=model==='blue'?blue.qualified:model==='white'?white.dataReady:(blue.qualified&&white.dataReady&&Number.isFinite(average));
+    return{r,blue,white,average,score,valid}
+  }).filter(x=>x.valid&&Number.isFinite(x.score)&&Number.isFinite(num(x.r.price))&&num(x.r.price)>0)
+    .sort((a,b)=>b.score-a.score)
+}
+function weeklyMembers(model){
+  return weeklyModelCandidates(model).slice(0,10).map((x,i)=>({
+    rank:i+1,
+    ticker:x.r.ticker||'',
+    company:x.r.company||'',
+    market:x.r.market||'SE',
+    startPrice:num(x.r.price),
+    blueScore:x.blue.total,
+    whiteScore:x.white.total,
+    averageScore:x.average
+  }))
+}
+function weeklyPortfolioReturn(snapshot,model){
+  const portfolio=snapshot.portfolios?.[model];
+  if(!portfolio?.members?.length)return{value:NaN,available:0,total:0,memberReturns:[]};
+  const memberReturns=portfolio.members.map(m=>{
+    const row=rows.find(r=>(r.ticker||'').toUpperCase()===(m.ticker||'').toUpperCase()&&(r.market||'SE')===(m.market||'SE'));
+    const current=row?num(row.price):NaN;
+    const ret=Number.isFinite(current)&&Number.isFinite(m.startPrice)&&m.startPrice!==0?(current/m.startPrice-1)*100:NaN;
+    return{...m,currentPrice:current,returnPct:ret}
+  });
+  const valid=memberReturns.filter(x=>Number.isFinite(x.returnPct));
+  return{
+    value:valid.length?valid.reduce((s,x)=>s+x.returnPct,0)/valid.length:NaN,
+    available:valid.length,total:memberReturns.length,memberReturns
+  }
+}
+function weeklyBenchmarkReturn(snapshot){
+  const current=currentBenchmarkValue(snapshot.benchmarkMarket||'SE');
+  const start=Number.isFinite(num(snapshot.benchmarkStart))?num(snapshot.benchmarkStart):benchmarkValueOnOrBefore(snapshot.benchmarkMarket||'SE',snapshot.savedDate);
+  return Number.isFinite(current)&&Number.isFinite(start)&&start!==0?(current/start-1)*100:NaN
+}
+function portfolioReturnClass(v){return !Number.isFinite(v)?'portfolio-flat':v>0?'portfolio-positive':v<0?'portfolio-negative':'portfolio-flat'}
+function weeklyPersist(){
+  localStorage.setItem(weeklyPortfolioKey,JSON.stringify(weeklyPortfolios));
+  localStorage.setItem(weeklySettingsKey,JSON.stringify({
+    benchmarkMarket:document.getElementById('weeklyBenchmarkMarket')?.value||loadWeeklySettings().benchmarkMarket,
+    autoSave:document.getElementById('weeklyAutoSave')?.value||loadWeeklySettings().autoSave
+  }))
+}
+function createWeeklySnapshot(overwrite=false,automatic=false){
+  const settings=loadWeeklySettings();
+  const benchmarkMarket=document.getElementById('weeklyBenchmarkMarket')?.value||settings.benchmarkMarket||'SE';
+  const info=isoWeekInfo();
+  const existingIndex=weeklyPortfolios.findIndex(x=>x.weekKey===info.key);
+  if(existingIndex>=0&&!overwrite){
+    if(!automatic)alert('Veckans portföljer är redan sparade. Radera veckan först om du vill skapa om dem.');
+    return false
+  }
+  const blue=weeklyMembers('blue'),white=weeklyMembers('white'),average=weeklyMembers('average');
+  if(blue.length<10||white.length<10||average.length<10){
+    if(!automatic)alert(`För få giltiga bolag för Top 10. Blå ${blue.length}, Vit ${white.length}, Snitt ${average.length}.`);
+    return false
+  }
+  const benchmarkStart=currentBenchmarkValue(benchmarkMarket);
+  const snapshot={
+    id:`${info.key}-${Date.now()}`,
+    weekKey:info.key,
+    year:info.year,
+    week:info.week,
+    savedAt:nowISO(),
+    savedDate:todayISO(),
+    benchmarkMarket,
+    benchmarkSymbol:benchmarkSymbol(benchmarkMarket),
+    benchmarkStart,
+    portfolios:{
+      blue:{name:'Blå',members:blue},
+      white:{name:'Vit',members:white},
+      average:{name:'Snitt',members:average}
+    }
+  };
+  if(existingIndex>=0)weeklyPortfolios[existingIndex]=snapshot;
+  else weeklyPortfolios.push(snapshot);
+  weeklyPortfolios.sort((a,b)=>String(b.savedAt).localeCompare(String(a.savedAt)));
+  weeklyPersist();
+  renderWeeklyPortfolios();
+  if(!automatic)toast('Veckans tre Top 10-portföljer sparades');
+  return true
+}
+function ensureWeeklyPortfolioSnapshot(){
+  const settings=loadWeeklySettings();
+  if(settings.autoSave!=='on')return false;
+  const info=isoWeekInfo();
+  if(weeklyPortfolios.some(x=>x.weekKey===info.key))return false;
+  return createWeeklySnapshot(false,true)
+}
+function weeklySnapshotLabel(s){return `${s.weekKey} · ${dateFmt(s.savedAt)}`}
+function renderWeeklyPortfolios(){
+  const benchmark=document.getElementById('weeklyBenchmarkMarket');
+  const auto=document.getElementById('weeklyAutoSave');
+  if(!benchmark||!auto)return;
+  const settings=loadWeeklySettings();
+  benchmark.value=settings.benchmarkMarket||'SE';
+  auto.value=settings.autoSave||'on';
+
+  const select=document.getElementById('weeklySnapshotSelect');
+  const old=select.value;
+  select.innerHTML=weeklyPortfolios.length
+    ?weeklyPortfolios.map(s=>`<option value="${s.id}">${weeklySnapshotLabel(s)}</option>`).join('')
+    :'<option value="">Ingen sparad vecka</option>';
+  if(old&&weeklyPortfolios.some(s=>s.id===old))select.value=old;
+
+  const status=document.getElementById('weeklyStatus');
+  status.textContent=weeklyPortfolios.length
+    ?`${weeklyPortfolios.length} veckor sparade. Ny vecka sparas automatiskt efter första lyckade kursuppdateringen.`
+    :'Ingen veckoportfölj sparad ännu.';
+
+  const modelRows=[];
+  for(const s of weeklyPortfolios){
+    const indexRet=weeklyBenchmarkReturn(s);
+    for(const model of ['blue','white','average']){
+      const p=weeklyPortfolioReturn(s,model);
+      modelRows.push({s,model,p,indexRet,excess:Number.isFinite(p.value)&&Number.isFinite(indexRet)?p.value-indexRet:NaN})
+    }
+  }
+  document.getElementById('weeklyHistoryTable').innerHTML=
+    '<tr><th>Vecka</th><th>Modell</th><th>Start</th><th>Portfölj</th><th>Index</th><th>Över/under index</th><th>Kurser tillgängliga</th></tr>'+
+    modelRows.map(x=>`<tr>
+      <td>${x.s.weekKey}</td>
+      <td><b>${x.model==='blue'?'🔵 Blå':x.model==='white'?'⚪ Vit':'🟣 Snitt'}</b></td>
+      <td>${dateFmt(x.s.savedAt)}</td>
+      <td class="${portfolioReturnClass(x.p.value)}">${signed(x.p.value,' %')}</td>
+      <td class="${portfolioReturnClass(x.indexRet)}">${signed(x.indexRet,' %')}</td>
+      <td class="${portfolioReturnClass(x.excess)}">${signed(x.excess,' p.e.')}</td>
+      <td>${x.p.available}/${x.p.total}</td>
+    </tr>`).join('');
+
+  const latest=weeklyPortfolios[0];
+  if(latest){
+    const values=['blue','white','average'].map(model=>weeklyPortfolioReturn(latest,model).value);
+    const indexRet=weeklyBenchmarkReturn(latest);
+    document.getElementById('weeklySummary').innerHTML=[
+      ['Sparade veckor',weeklyPortfolios.length],
+      ['Senaste vecka',latest.weekKey],
+      ['Blå sedan start',signed(values[0],' %')],
+      ['Vit sedan start',signed(values[1],' %')],
+      ['Snitt sedan start',signed(values[2],' %')],
+      ['Index sedan start',signed(indexRet,' %')]
+    ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('')
+  }else document.getElementById('weeklySummary').innerHTML='';
+
+  renderWeeklyDetail()
+}
+function renderWeeklyDetail(){
+  const id=document.getElementById('weeklySnapshotSelect')?.value;
+  const s=weeklyPortfolios.find(x=>x.id===id)||weeklyPortfolios[0];
+  const el=document.getElementById('weeklyDetail');
+  if(!el)return;
+  if(!s){document.getElementById('weeklyDetailTitle').textContent='Vald vecka';el.innerHTML='<div class="note">Ingen vecka sparad.</div>';return}
+  document.getElementById('weeklyDetailTitle').textContent=`${s.weekKey} – sparad ${dateFmt(s.savedAt)} – jämförelse ${s.benchmarkSymbol}`;
+  const indexRet=weeklyBenchmarkReturn(s);
+  el.innerHTML=['blue','white','average'].map(model=>{
+    const p=weeklyPortfolioReturn(s,model);
+    const excess=Number.isFinite(p.value)&&Number.isFinite(indexRet)?p.value-indexRet:NaN;
+    return `<div class="portfolio-card portfolio-model-${model}">
+      <h3>${model==='blue'?'🔵 Blå':model==='white'?'⚪ Vit':'🟣 Snitt'} Top 10</h3>
+      <div class="summary">
+        <div class="metric"><small>Portfölj</small><b class="${portfolioReturnClass(p.value)}">${signed(p.value,' %')}</b></div>
+        <div class="metric"><small>Index</small><b class="${portfolioReturnClass(indexRet)}">${signed(indexRet,' %')}</b></div>
+        <div class="metric"><small>Över/under index</small><b class="${portfolioReturnClass(excess)}">${signed(excess,' p.e.')}</b></div>
+      </div>
+      <div class="tablewrap"><table>
+        <tr><th>Rank</th><th>Ticker</th><th>Bolag</th><th>Startkurs</th><th>Nuvarande kurs</th><th>Avkastning</th><th>Blå</th><th>Vit</th><th>Snitt</th></tr>
+        ${p.memberReturns.map(m=>`<tr>
+          <td>${m.rank}</td><td>${m.ticker}</td><td>${m.company}</td>
+          <td>${fmt(m.startPrice)}</td><td>${fmt(m.currentPrice)}</td>
+          <td class="${portfolioReturnClass(m.returnPct)}">${signed(m.returnPct,' %')}</td>
+          <td>${modelScoreText(m.blueScore,'blue')}</td>
+          <td>${modelScoreText(m.whiteScore,'white')}</td>
+          <td>${modelScoreText(m.averageScore,'average')}</td>
+        </tr>`).join('')}
+      </table></div>
+    </div>`
+  }).join('')
+}
+function deleteSelectedWeeklySnapshot(){
+  const id=document.getElementById('weeklySnapshotSelect')?.value;
+  if(!id)return;
+  const s=weeklyPortfolios.find(x=>x.id===id);
+  if(!s||!confirm(`Radera veckoportföljerna för ${s.weekKey}?`))return;
+  weeklyPortfolios=weeklyPortfolios.filter(x=>x.id!==id);
+  weeklyPersist();renderWeeklyPortfolios()
+}
+function exportWeeklyPortfoliosCsv(){
+  if(!weeklyPortfolios.length)return alert('Ingen veckoportfölj finns.');
+  const lines=[['Vecka','Sparad','Modell','Rank','Ticker','Bolag','Startkurs','Nuvarande kurs','Aktieavkastning %','Portföljavkastning %','Index','Indexavkastning %','Över/under index p.e.']];
+  for(const s of weeklyPortfolios){
+    const indexRet=weeklyBenchmarkReturn(s);
+    for(const model of ['blue','white','average']){
+      const p=weeklyPortfolioReturn(s,model),excess=Number.isFinite(p.value)&&Number.isFinite(indexRet)?p.value-indexRet:NaN;
+      for(const m of p.memberReturns)lines.push([
+        s.weekKey,s.savedDate,model,m.rank,m.ticker,m.company,m.startPrice,m.currentPrice,m.returnPct,p.value,s.benchmarkSymbol,indexRet,excess
+      ])
+    }
+  }
+  const csv='\ufeff'+lines.map(row=>row.map(csvEscape).join(';')).join('\n');
+  downloadTextFile(csv,`MomentumScore_Veckoportfoljer_${todayISO()}.csv`,'text/csv;charset=utf-8')
+}
+
 async function updateBenchmarksForMarkets(markets,status){
   const failed=[];
   for(const market of markets){
@@ -4436,7 +4730,7 @@ async function updateAllPrices(silent=false){
   const localBackupCreated=savePreUpdateBackup();
   if(!localBackupCreated)status.textContent='Lokal backup fick inte plats. Uppdateringen fortsätter med minnessäkerhetskopia…';
   let ok=0,failed=[];
-  const markets=[...new Set(rows.map(r=>r.market||'SE'))];
+  const markets=[...new Set([...rows.map(r=>r.market||'SE'),loadWeeklySettings().benchmarkMarket||'SE'])];
   const benchmarkFailed=await updateBenchmarksForMarkets(markets,status);
   failed.push(...benchmarkFailed.map(x=>'Index '+x));
   try{
@@ -4466,8 +4760,12 @@ async function updateAllPrices(silent=false){
     persist();
     render();
     const settings=loadMarketSettings();
-    if(ok>0){settings.lastUpdate=nowISO();localStorage.setItem(settingsKey,JSON.stringify(settings))}
+    if(ok>0){
+      settings.lastUpdate=nowISO();localStorage.setItem(settingsKey,JSON.stringify(settings));
+      ensureWeeklyPortfolioSnapshot();
+    }
     renderMarketSettings();
+    renderWeeklyPortfolios();
     status.innerHTML='<b>'+ok+' bolag uppdaterades.</b><br>Bolag med minst 263 sparade handelsdagar hämtade endast den senaste tillgängliga kursen. Övriga hämtade två års grundhistorik.'+(!localBackupCreated?'<br>⚠️ Lokal backup hoppades över eftersom webbläsarens lagringsutrymme är fullt. Säkerhetskopian i arbetsminnet användes under körningen.':'')+(failed.length?'<br>Misslyckades: '+failed.join(' · '):'');
     if(!silent&&failed.length===rows.length)alert('Ingen kurs kunde hämtas. Kontrollera internetanslutning och Yahoo-symboler.');
   }catch(e){
@@ -4509,7 +4807,9 @@ document.getElementById('closeDevelopmentDetail').onclick=()=>document.getElemen
     version:'7.6',
     exportedAt:new Date().toISOString(),
     rows,
-    benchmarkHistories
+    benchmarkHistories,
+    weeklyPortfolios,
+    weeklySettings:loadWeeklySettings()
   },null,2);
   try{
     if('showSaveFilePicker' in window){
@@ -4589,6 +4889,10 @@ async function importSelectedFile(file){
   const parsed=JSON.parse(text);
   const importedBenchmarks=parsed&&typeof parsed==='object'&&!Array.isArray(parsed)&&parsed.benchmarkHistories&&typeof parsed.benchmarkHistories==='object'
     ?parsed.benchmarkHistories:{};
+  const importedWeekly=parsed&&typeof parsed==='object'&&!Array.isArray(parsed)&&Array.isArray(parsed.weeklyPortfolios)
+    ?parsed.weeklyPortfolios:[];
+  const importedWeeklySettings=parsed&&typeof parsed==='object'&&!Array.isArray(parsed)&&parsed.weeklySettings&&typeof parsed.weeklySettings==='object'
+    ?parsed.weeklySettings:null;
   const imported=extractImportedRows(parsed);
   if(!imported.length)throw new Error('Filen innehåller inga bolag');
 
@@ -4605,6 +4909,8 @@ async function importSelectedFile(file){
     localStorage.removeItem(storageKey);
     localStorage.setItem(storageKey,compact);
     if(Object.keys(importedBenchmarks).length)localStorage.setItem(benchmarkKey,JSON.stringify(importedBenchmarks));
+    if(importedWeekly.length)localStorage.setItem(weeklyPortfolioKey,JSON.stringify(importedWeekly));
+    if(importedWeeklySettings)localStorage.setItem(weeklySettingsKey,JSON.stringify(importedWeeklySettings));
     localStorage.setItem(dbVersionKey,String(appDbVersion));
   }catch(e){
     try{
@@ -4621,18 +4927,26 @@ async function importSelectedFile(file){
 
   rows=result.clean;
   benchmarkHistories=importedBenchmarks;
+  weeklyPortfolios=importedWeekly;
   const uiErrors=[];
   for(const [name,fn] of [
     ['Poäng/översikt',()=>render()],
     ['Databaskontroll',()=>renderDatabaseHealth()],
     ['Inställningar',()=>renderMarketSettings()],
-    ['Dashboard',()=>renderDashboard()]
+    ['Dashboard',()=>renderDashboard()],
+    ['Veckoportföljer',()=>renderWeeklyPortfolios()]
   ]){
     try{fn()}catch(e){uiErrors.push(name+': '+e.message);console.error(name,e)}
   }
-  setImportStatus(`Import klar: ${rows.length} bolag. ${Object.keys(benchmarkHistories).length?'Jämförelseindex följde med.':'Jämförelseindex saknas – kör kursuppdatering för full Vit poäng.'} ${result.skipped.length?result.skipped.length+' dubbletter hoppades över. ':''}${uiErrors.length?'Visningsvarning: '+uiErrors.join(' · '):''}`,uiErrors.length>0);
+  setImportStatus(`Import klar: ${rows.length} bolag. ${Object.keys(benchmarkHistories).length?'Jämförelseindex följde med.':'Jämförelseindex saknas – kör kursuppdatering för full uppföljning.'} ${weeklyPortfolios.length?weeklyPortfolios.length+' veckoportföljer återställdes. ':''}${result.skipped.length?result.skipped.length+' dubbletter hoppades över. ':''}${uiErrors.length?'Visningsvarning: '+uiErrors.join(' · '):''}`,uiErrors.length>0);
   toast(`Import klar: ${rows.length} bolag`);
 }
+document.getElementById('saveWeeklyNow').onclick=()=>createWeeklySnapshot(false,false);
+document.getElementById('exportWeeklyCsv').onclick=exportWeeklyPortfoliosCsv;
+document.getElementById('deleteWeeklySnapshot').onclick=deleteSelectedWeeklySnapshot;
+document.getElementById('weeklySnapshotSelect').onchange=renderWeeklyDetail;
+document.getElementById('weeklyBenchmarkMarket').onchange=()=>{weeklyPersist();renderWeeklyPortfolios()};
+document.getElementById('weeklyAutoSave').onchange=weeklyPersist;
 document.getElementById('chooseImportFile').onclick=()=>document.getElementById('importFile').click();
 document.getElementById('importFile').addEventListener('change',async e=>{
   const input=e.target,file=input.files?.[0];
