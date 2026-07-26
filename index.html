@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v13.0</title>
+<title>MomentumScore v14.0</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -123,6 +123,11 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .pipeline-progress>div{height:100%;width:0%;background:linear-gradient(90deg,#4ca6ff,#9d7cff,#48d697,#ffd166);transition:width .2s}
 .pipeline-step{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border:1px solid var(--line);border-radius:10px;margin:6px 0}
 .pipeline-step b{min-width:190px}.pipeline-ok{border-color:rgba(72,214,151,.55)}.pipeline-running{border-color:rgba(76,166,255,.65)}.pipeline-fail{border-color:rgba(255,138,138,.65)}
+.engine-progress{height:18px;background:rgba(255,255,255,.07);border-radius:999px;overflow:hidden;border:1px solid var(--line)}
+.engine-progress>div{height:100%;width:0%;background:linear-gradient(90deg,#4ca6ff,#48d697,#ffd166);transition:width .2s}
+.engine-primary{border:2px solid rgba(72,214,151,.6);background:rgba(72,214,151,.05)}
+.engine-log{max-height:240px;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:12px;white-space:pre-wrap}
+
 
 
 .curve-preview{display:flex;align-items:flex-end;gap:3px;height:110px;padding:8px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.02)}
@@ -140,7 +145,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v13.0 – Helautomatisk optimering</h1>
+<h1>MomentumScore v14.0 – Enmotor</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -461,69 +466,55 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 
 
 
-  <div class="card">
-    <h2>Helautomatisk optimering</h2>
-    <p class="note">Kör hela kedjan i rätt ordning med förvalda inställningar: AutoLab → Vit Optimizer → Intervalloptimerare → Poängkurvor → Vit 3.0. Mellanresultat sparas automatiskt i webbläsaren och kan återanvändas utan att varje steg behöver köras manuellt igen.</p>
+  <div class="card engine-primary">
+    <h2>Optimera Vit</h2>
+    <p class="note">En motor läser historiken, väljer användbara faktorer, hittar sweet spots och poängkurvor, optimerar 100-poängsvikterna, testar möjliga grundkrav och skapar ett färdigt regelutkast. Du behöver inte köra delstegen manuellt.</p>
     <div class="lab-grid">
       <div>
         <label>Framtida period</label>
-        <select id="pipelineHorizon">
+        <select id="engineHorizon">
           <option value="63">3 månader</option>
           <option value="126" selected>6 månader</option>
         </select>
       </div>
       <div>
-        <label>Observationstäthet</label>
-        <select id="pipelineStep">
-          <option value="21" selected>Månadsvis</option>
-          <option value="5">Veckovis</option>
-        </select>
-      </div>
-      <div>
-        <label>Minsta observationer</label>
-        <select id="pipelineMinObs">
-          <option value="25">25</option>
-          <option value="40" selected>40</option>
-          <option value="60">60</option>
-        </select>
-      </div>
-      <div>
-        <label>Precision</label>
-        <select id="pipelinePrecision">
+        <label>Analysnivå</label>
+        <select id="engineDepth">
           <option value="fast">Snabb</option>
           <option value="normal" selected>Normal</option>
           <option value="deep">Djup</option>
         </select>
       </div>
       <div>
-        <label>Återanvänd tidigare delresultat</label>
-        <select id="pipelineReuse">
-          <option value="yes" selected>Ja, om inställningarna matchar</option>
-          <option value="no">Nej, kör allt från början</option>
+        <label>Minsta underlag</label>
+        <select id="engineMinObs">
+          <option value="25">25 observationer</option>
+          <option value="40" selected>40 observationer</option>
+          <option value="60">60 observationer</option>
         </select>
       </div>
       <div>
-        <label>Slutresultat</label>
-        <select id="pipelineFinalAction">
-          <option value="draft" selected>Skapa regelutkast</option>
-          <option value="report">Endast rapport</option>
+        <label>Återanvänd tidigare beräkningar</label>
+        <select id="engineReuse">
+          <option value="yes" selected>Ja</option>
+          <option value="no">Nej</option>
         </select>
       </div>
     </div>
     <div class="actions" style="margin-top:12px">
-      <button id="runFullPipeline">Kör hela optimeringen</button>
-      <button class="secondary" id="exportPipelineBundle">Exportera komplett analysfil</button>
-      <button class="secondary" id="clearPipelineCache">Rensa sparade analysresultat</button>
+      <button id="runOneEngine">Optimera Vit</button>
+      <button class="secondary" id="exportOneEngine">Exportera komplett resultat</button>
+      <button class="secondary" id="resetOneEngine">Börja om</button>
     </div>
-    <div class="pipeline-progress" style="margin-top:12px"><div id="pipelineProgressBar"></div></div>
-    <div id="pipelineStatus" class="note" style="margin-top:8px">Kedjan är redo.</div>
-    <div id="pipelineSteps" style="margin-top:10px"></div>
+    <div class="engine-progress" style="margin-top:12px"><div id="oneEngineProgress"></div></div>
+    <div id="oneEngineStatus" class="note" style="margin-top:8px">Motorn är redo.</div>
+    <div id="oneEngineLog" class="engine-log rowcard" style="margin-top:10px">Väntar på start.</div>
   </div>
 
   <div id="pipelineSummary" class="summary"></div>
 
   <div class="card">
-    <h3>Automatisk slutsats</h3>
+    <h3>Färdig Vit-modell</h3>
     <div id="pipelineConclusion" class="note">Ingen fullständig körning har genomförts.</div>
   </div>
 
@@ -956,7 +947,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v13.0 – regler och analys</h2>
+<h2>MomentumScore v14.0 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -1001,6 +992,7 @@ Dessutom krävs minst 263 handelsdagar för både aktien och jämförelseindex.<
 <div class="rowcard"><b>Vit – Värdering, max 10 p</b><br>Mot vart och ett av 3- och 5-årssnitten: vid eller under snittet 5 p · högst 10 % över 4 p · högst 20 % över 2 p · högst 35 % över 1 p · mer än 35 % över 0 p.</div>
 <div class="rowcard"><b>Vit – poäng innan indexdata finns</b><br>Vit består av 75 poäng från aktie- och rapportdata samt 25 poäng relativ styrka. Om jämförelseindex saknas visas därför en preliminär poäng med en asterisk, exempelvis 67*. Bolaget markeras då som Underlag saknas – inte Ej kvalificerat. Efter kursuppdatering eller import av en komplett v7.6-säkerhetskopia räknas hela 100-poängsmodellen.</div>
 <div class="rowcard"><b>Vit – Bedömning</b><br>90–100 = Mycket stark · 80–89 = Stark · 70–79 = Bevakning · under 70 = Avstå. Ett brutet grundkrav ger alltid Ej kvalificerad.</div>
+<div class="rowcard"><b>Enmotorn</b><br>Knappen Optimera Vit kör hela analyskedjan utan manuella delsteg. Motorn väljer faktorer, sweet spots, kurvor, 100-poängsvikter och eventuella grundkrav och skapar därefter ett färdigt regelutkast. Mellanresultat sparas automatiskt.</div>
 <div class="rowcard"><b>Helautomatisk optimering</b><br>Den fullständiga kedjan kör AutoLab, modellurval, intervalloptimering, poängkurvor och Vit 3.0 i rätt ordning. Delresultat cachas lokalt och återanvänds när samma inställningar används. En komplett analysfil kan exporteras i ett enda steg.</div>
 <div class="rowcard"><b>Vit 3.0-optimeraren</b><br>Vit 3.0 testar poängvikter som summerar till 100 och möjliga hårda tekniska riskfilter. Ett grundkrav rekommenderas bara om det förbättrar det sammanvägda resultatet tillräckligt jämfört med samma modell utan filter. Vit-poängen är huvudresultatet; historisk träffsäkerhet, medianavkastning och nedgång visas som stödfakta.</div>
 <div class="rowcard"><b>Poängkurveoptimeraren</b><br>Poängkurveoptimeraren testar asymmetrisk Gauss, asymmetrisk triangel och platåkurvor. Den optimerar centrum samt vänster- och högerbredd för varje faktor och jämför därefter kombinerade faktorvikter. Kurvorna ger mjuka poängövergångar utan godtyckliga trappsteg.</div>
@@ -1704,6 +1696,7 @@ let lastIntervalReport=null;
 let lastCurveReport=null;
 let lastVit3Report=null;
 let lastPipelineBundle=null;
+let oneEngineRunning=false;
 
 function labMedian(values){
   const a=values.filter(Number.isFinite).slice().sort((x,y)=>x-y);
@@ -3142,8 +3135,11 @@ function exportVit3Json(){
   if(!lastVit3Report)return alert('Kör Vit 3.0-optimeringen först.');
   downloadTextFile(JSON.stringify(lastVit3Report,null,2),`MomentumScore_Vit3_${todayISO()}.json`,'application/json;charset=utf-8')
 }
-function buildVit3Draft(){
-  if(!lastVit3Report?.best)return alert('Kör Vit 3.0-optimeringen först.');
+function buildVit3Draft(silent=false){
+  if(!lastVit3Report?.best){
+    if(!silent)alert('Kör Vit 3.0-optimeringen först.');
+    return false;
+  }
   const b=lastVit3Report.best,d=lastVit3Report.filterDecision;
   const filterAccepted=b.filterId==='none'||(d&&d.improvementVsNoFilter>=2);
   document.getElementById('vit3Draft').innerHTML=`
@@ -3166,8 +3162,208 @@ function buildVit3Draft(){
       Historisk andel som slog index, medianavkastning och median maximal nedgång för närmast jämförbara historiska observationer.
     </div>
     <div class="note">Detta är ett regelutkast och ändrar fortfarande inte den aktiva Vit-koden automatiskt.</div>`;
+  return true;
 }
 
+
+
+const ONE_ENGINE_CACHE_KEY='momentumscore_one_engine_v14';
+
+function engineSettings(){
+  return{
+    horizon:Number(document.getElementById('engineHorizon').value),
+    depth:document.getElementById('engineDepth').value,
+    minObs:Number(document.getElementById('engineMinObs').value)
+  }
+}
+function engineLog(message){
+  const el=document.getElementById('oneEngineLog');
+  const time=new Date().toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  el.textContent+=(el.textContent==='Väntar på start.'?'':`\n`)+`[${time}] ${message}`;
+  el.scrollTop=el.scrollHeight
+}
+function engineStatus(text,progress){
+  document.getElementById('oneEngineStatus').textContent=text;
+  document.getElementById('oneEngineProgress').style.width=`${progress}%`
+}
+function engineConfigure(settings){
+  // Hidden/manual controls are still used internally by the proven analysis functions.
+  pipelineSetControl('autoLabHorizon',settings.horizon);
+  pipelineSetControl('autoLabStep',21);
+  pipelineSetControl('autoLabMinObs',settings.minObs);
+
+  pipelineSetControl('optimizerMinGrade','B');
+  pipelineSetControl('optimizerMinFactors',2);
+  pipelineSetControl('optimizerMaxFactors',settings.depth==='fast'?3:5);
+  pipelineSetControl('optimizerTopShare',0.2);
+  pipelineSetControl('optimizerMinSelectedObs',settings.minObs);
+  pipelineSetControl('optimizerMaxWeight',settings.depth==='deep'?3:2);
+
+  pipelineSetControl('intervalFactorMode','winner');
+  pipelineSetControl('intervalMinObs',settings.minObs);
+  pipelineSetControl('intervalGridSize',settings.depth==='fast'?12:settings.depth==='deep'?30:20);
+  pipelineSetControl('intervalMaxWidth',0.3);
+  pipelineSetControl('intervalTarget','absolute');
+  pipelineSetControl('intervalHorizon',settings.horizon);
+
+  pipelineSetControl('curveFactorMode','winner');
+  pipelineSetControl('curveShapes','all');
+  pipelineSetControl('curveTopShare',0.2);
+  pipelineSetControl('curveMinObs',settings.minObs);
+  pipelineSetControl('curvePrecision',settings.depth==='fast'?'coarse':settings.depth==='deep'?'fine':'normal');
+  pipelineSetControl('curveHorizon',settings.horizon);
+
+  pipelineSetControl('vit3WeightStep',settings.depth==='deep'?2:settings.depth==='fast'?10:5);
+  pipelineSetControl('vit3MinWeight',5);
+  pipelineSetControl('vit3TopShare',0.2);
+  pipelineSetControl('vit3MinObs',settings.minObs);
+  pipelineSetControl('vit3FilterMode','risk');
+  pipelineSetControl('vit3Horizon',settings.horizon);
+}
+function engineCacheCompatible(bundle,settings){
+  return bundle?.format==='MomentumScoreOneEngine' &&
+    bundle.settings?.horizon===settings.horizon &&
+    bundle.settings?.depth===settings.depth &&
+    bundle.settings?.minObs===settings.minObs
+}
+function engineRestore(bundle){
+  if(!bundle)return false;
+  lastAutoLabReport=bundle.autoLab||null;
+  lastOptimizerReport=bundle.optimizer||null;
+  lastIntervalReport=bundle.intervals||null;
+  lastCurveReport=bundle.curves||null;
+  lastVit3Report=bundle.vit3||null;
+  lastPipelineBundle=bundle;
+  if(lastAutoLabReport)renderAutoLab(lastAutoLabReport);
+  if(lastOptimizerReport)renderOptimizer(lastOptimizerReport);
+  if(lastIntervalReport)renderIntervalOptimizer(lastIntervalReport);
+  if(lastCurveReport)renderCurveOptimizer(lastCurveReport);
+  if(lastVit3Report)renderVit3(lastVit3Report);
+  return !!lastVit3Report?.best
+}
+function engineSave(settings){
+  const bundle={
+    format:'MomentumScoreOneEngine',version:'14.0',createdAt:new Date().toISOString(),settings,
+    autoLab:lastAutoLabReport,optimizer:lastOptimizerReport,intervals:lastIntervalReport,
+    curves:lastCurveReport,vit3:lastVit3Report
+  };
+  localStorage.setItem(ONE_ENGINE_CACHE_KEY,JSON.stringify(bundle));
+  lastPipelineBundle=bundle;
+  return bundle
+}
+function engineRenderFinal(){
+  if(!lastVit3Report?.best)throw new Error('Slutmodellen saknas.');
+  const b=lastVit3Report.best;
+  const factorRows=lastVit3Report.factors.map((f,i)=>{
+    const curve=f.curve;
+    return `<tr><td><b>${autoLabFactorLabel(f.factor)}</b></td><td><b>${b.weights[i]} p</b></td>
+      <td>${curveShapeName(curve.shape)}</td><td>${fmt(curve.center)}</td>
+      <td>${fmt(curve.leftWidth)}</td><td>${fmt(curve.rightWidth)}</td></tr>`
+  }).join('');
+  document.getElementById('pipelineConclusion').innerHTML=`
+    <div class="status ok"><b>Vit är optimerad</b></div>
+    <div class="tablewrap"><table>
+      <tr><th>Faktor</th><th>Maxpoäng</th><th>Kurva</th><th>Centrum</th><th>Vänsterbredd</th><th>Högerbredd</th></tr>
+      ${factorRows}
+    </table></div>
+    <div class="rowcard"><b>Grundkrav</b><br>${b.filterId==='none'?'Inget hårt grundkrav':b.filterName}</div>
+    <div class="rowcard"><b>Historiskt stöd</b><br>
+      Median ${signed(b.median,' %')} · slog index ${fmt(b.beatIndex)} % · positiva utfall ${fmt(b.positive)} % · median maximal nedgång ${signed(b.medianDrawdown,' %')}.
+    </div>
+    <div class="rowcard"><b>Hur poängen används</b><br>
+      Varje faktor ger 0 till sin maxpoäng enligt den optimerade mjuka kurvan. Summan är Vit-poängen 0–100. Historiska siffror är stödfakta, inte huvudresultatet.
+    </div>`;
+  buildVit3Draft(true);
+  document.getElementById('pipelineSummary').innerHTML=[
+    ['Status','Klar'],['Faktorer',lastVit3Report.factors.length],
+    ['Modeller testade',lastOptimizerReport?.testedModels||0],
+    ['Vikt/filtertester',lastVit3Report?.tested||0],
+    ['Median',signed(b.median,' %')],['Slår index',fmt(b.beatIndex)+' %']
+  ].map(([a,v])=>`<div class="metric"><small>${a}</small><b>${v}</b></div>`).join('')
+}
+async function runOneEngine(){
+  if(oneEngineRunning)return;
+  oneEngineRunning=true;
+  const button=document.getElementById('runOneEngine');
+  const settings=engineSettings();
+  const reuse=document.getElementById('engineReuse').value==='yes';
+  button.disabled=true;button.textContent='Optimerar…';
+  document.getElementById('oneEngineLog').textContent='';
+  engineConfigure(settings);
+
+  try{
+    const cached=(()=>{try{return JSON.parse(localStorage.getItem(ONE_ENGINE_CACHE_KEY)||'null')}catch{return null}})();
+    if(reuse&&engineCacheCompatible(cached,settings)&&engineRestore(cached)){
+      engineLog('Matchande färdig analys hittades och återställdes.');
+      engineRenderFinal();
+      engineStatus('Färdig modell återställdes.',100);
+      return
+    }
+
+    engineStatus('Analyserar alla faktorer…',5);
+    engineLog('AutoLab startar.');
+    await runAutoLab();
+    if(!lastAutoLabReport)throw new Error('AutoLab gav inget resultat.');
+    engineSave(settings);
+    engineLog(`AutoLab klart: ${lastAutoLabReport.reports.length} faktortester.`);
+
+    engineStatus('Väljer faktorer och modellstruktur…',25);
+    engineLog('Modellurval och faktorkombinationer startar.');
+    await runOptimizer();
+    if(!lastOptimizerReport?.winners?.length)throw new Error('Ingen giltig faktormodell hittades.');
+    engineSave(settings);
+    engineLog(`Modellurval klart: ${lastOptimizerReport.testedModels} modeller testade.`);
+
+    engineStatus('Söker exakta sweet spots…',45);
+    engineLog('Intervalloptimering startar.');
+    await runIntervalOptimizer();
+    if(!lastIntervalReport?.results?.length)throw new Error('Inga giltiga faktorintervall hittades.');
+    engineSave(settings);
+    engineLog(`Intervalloptimering klar för ${lastIntervalReport.results.length} faktorer.`);
+
+    engineStatus('Bygger mjuka poängkurvor…',65);
+    engineLog('Poängkurveoptimering startar.');
+    await runCurveOptimizer();
+    if(!lastCurveReport?.combined?.best)throw new Error('Ingen giltig poängkurvemodell hittades.');
+    engineSave(settings);
+    engineLog(`Poängkurvor klara för ${lastCurveReport.factorResults.length} faktorer.`);
+
+    engineStatus('Optimerar 100 poäng och grundkrav…',85);
+    engineLog('Slutlig vikt- och filteroptimering startar.');
+    await runVit3Optimizer();
+    if(!lastVit3Report?.best)throw new Error('Vit 3.0 gav inget slutresultat.');
+    engineSave(settings);
+    engineLog(`Slutoptimering klar: ${lastVit3Report.tested} vikt/filterkombinationer testade.`);
+
+    engineRenderFinal();
+    engineStatus('Vit är färdigoptimerad.',100);
+    engineLog('Färdig modell och regelutkast skapades automatiskt.');
+  }catch(e){
+    console.error(e);
+    engineStatus('Optimeringen stoppades: '+e.message,0);
+    engineLog('FEL: '+e.message)
+  }finally{
+    oneEngineRunning=false;
+    button.disabled=false;button.textContent='Optimera Vit'
+  }
+}
+function exportOneEngine(){
+  const raw=localStorage.getItem(ONE_ENGINE_CACHE_KEY);
+  if(!raw)return alert('Optimera Vit först.');
+  const bundle=JSON.parse(raw);
+  downloadTextFile(JSON.stringify(bundle,null,2),`MomentumScore_Vit_Complete_${todayISO()}.json`,'application/json;charset=utf-8')
+}
+function resetOneEngine(){
+  if(!confirm('Rensa endast sparade optimeringsresultat och börja om? Din aktiedata påverkas inte.'))return;
+  localStorage.removeItem(ONE_ENGINE_CACHE_KEY);
+  localStorage.removeItem(PIPELINE_CACHE_KEY);
+  lastAutoLabReport=lastOptimizerReport=lastIntervalReport=lastCurveReport=lastVit3Report=lastPipelineBundle=null;
+  document.getElementById('oneEngineStatus').textContent='Sparade optimeringsresultat har rensats.';
+  document.getElementById('oneEngineProgress').style.width='0%';
+  document.getElementById('oneEngineLog').textContent='Väntar på start.';
+  document.getElementById('pipelineConclusion').textContent='Ingen fullständig körning har genomförts.';
+  document.getElementById('pipelineSummary').innerHTML=''
+}
 
 const PIPELINE_CACHE_KEY='momentumscore_pipeline_v13';
 
@@ -3362,7 +3558,15 @@ async function runFullPipeline(){
       ['Intervallfaktorer',lastIntervalReport?.results?.length||0],['Kurvfaktorer',lastCurveReport?.factorResults?.length||0],
       ['Vit 3.0 tester',lastVit3Report?.tested||0]
     ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
-    if(document.getElementById('pipelineFinalAction').value==='draft')buildVit3Draft();
+    if(document.getElementById('pipelineFinalAction').value==='draft'){
+      if(!lastVit3Report?.best){
+        setPipelineStep('vit3','running','Kör om…');
+        await pipelineRunVit3(settings,false);
+        setPipelineStep('vit3','ok','Ny körning');
+        savePipelineCache();
+      }
+      buildVit3Draft(true);
+    }
     status.textContent='Hela optimeringen är klar och delresultaten är sparade.';
   }catch(e){
     console.error(e);
@@ -3870,9 +4074,13 @@ document.getElementById('importFile').addEventListener('change',async e=>{
     input.value='';
   }
 });
-document.getElementById('runFullPipeline').onclick=runFullPipeline;
-document.getElementById('exportPipelineBundle').onclick=exportPipelineBundle;
-document.getElementById('clearPipelineCache').onclick=clearPipelineCache;
+const oldPipelineButton=document.getElementById('runFullPipeline');
+if(oldPipelineButton)oldPipelineButton.onclick=runFullPipeline;
+document.getElementById('runOneEngine').onclick=runOneEngine;
+document.getElementById('exportOneEngine').onclick=exportOneEngine;
+document.getElementById('resetOneEngine').onclick=resetOneEngine;
+const oldExportPipeline=document.getElementById('exportPipelineBundle'); if(oldExportPipeline)oldExportPipeline.onclick=exportPipelineBundle;
+const oldClearPipeline=document.getElementById('clearPipelineCache'); if(oldClearPipeline)oldClearPipeline.onclick=clearPipelineCache;
 document.getElementById('runVit3Optimizer').onclick=runVit3Optimizer;
 document.getElementById('exportVit3Json').onclick=exportVit3Json;
 document.getElementById('buildVit3Draft').onclick=buildVit3Draft;
@@ -3901,12 +4109,12 @@ document.getElementById('saveSettings').onclick=saveMarketSettings;document.getE
   try{fn()}catch(e){console.error('Startfel i '+name,e)}
 }
 try{
-  pipelineStepRows();
-  const cachedPipeline=loadPipelineCache();
-  if(cachedPipeline){
-    restorePipelineBundle(cachedPipeline);
-    document.getElementById('pipelineStatus').textContent='Tidigare analysresultat hittades och återställdes.';
-    document.getElementById('pipelineConclusion').innerHTML=pipelineConclusionHtml();
+  const cachedEngine=(()=>{try{return JSON.parse(localStorage.getItem(ONE_ENGINE_CACHE_KEY)||'null')}catch{return null}})();
+  if(cachedEngine&&engineRestore(cachedEngine)){
+    document.getElementById('oneEngineStatus').textContent='Tidigare färdig modell hittades och återställdes.';
+    document.getElementById('oneEngineProgress').style.width='100%';
+    document.getElementById('oneEngineLog').textContent='Tidigare optimering återställdes från webbläsaren.';
+    engineRenderFinal();
   }
   toggleLaboratoryMode();
   const labButton=document.getElementById('runLaboratory');
