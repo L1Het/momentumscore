@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v19.4</title>
+<title>MomentumScore v19.5</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -202,7 +202,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v19.4 – flexibel utvecklingssortering</h1>
+<h1>MomentumScore v19.5 – flexibel översiktssortering</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -225,19 +225,25 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
       <div><label>Poäng och status</label><select id="dashboardModel"><option value="blue">🔵 Blå</option><option value="white">⚪ Vit</option><option value="average" selected>🟣 Snitt</option></select></div>
       <div><label>Visa</label><select id="dashboardFilter"><option value="all">Alla</option><option value="qualified">Kvalificerade</option><option value="owned">Ägs nu</option><option value="strong">80+ poäng</option></select></div>
       <div><label>Börs</label><select id="dashboardMarket"><option value="all">Alla nordiska</option><option value="SE">Stockholm</option><option value="DK">Köpenhamn</option><option value="NO">Oslo</option><option value="FI">Helsingfors</option><option value="IS">Reykjavik</option></select></div>
-      <div><label>Sortering</label><select id="dashboardSort">
-        <option value="score">Vald poäng</option>
-        <option value="deltaBlue">Δ Blå dag</option>
-        <option value="deltaWhite">Δ Vit dag</option>
-        <option value="deltaAverage">Δ Snitt dag</option>
+      <div><label>Sortera på</label><select id="dashboardSort">
+        <option value="scoreAverage" selected>🟣 Snittpoäng</option>
+        <option value="scoreBlue">🔵 Blå poäng</option>
+        <option value="scoreWhite">⚪ Vit poäng</option>
+        <option value="deltaBlue">Δ 🔵 Blå dag</option>
+        <option value="deltaWhite">Δ ⚪ Vit dag</option>
+        <option value="deltaAverage">Δ 🟣 Snitt dag</option>
         <option value="price1">Kurs 1 dag</option>
         <option value="rsi">RSI</option>
         <option value="company">Bolag</option>
       </select></div>
+      <div><label>Ordning</label><select id="dashboardDirection">
+        <option value="desc" selected>Högst / bäst överst</option>
+        <option value="asc">Lägst / sämst överst</option>
+      </select></div>
     </div>
   </div>
   <div class="card tablewrap"><table id="dashboardTable" class="dashboard-table"></table></div>
-  <p class="note">Den dagliga översikten visar aktuell Blå-, Vit- och Snittpoäng, förändringen mot föregående sparade handelsdag samt kursutvecklingen senaste handelsdagen. Positiva förändringar visas grönt, negativa rött och exakt noll neutralt.</p>
+  <p class="note">Den dagliga översikten kan sorteras på Blå, Vit, Snitt, respektive dagsförändring, kursutveckling, RSI eller bolagsnamn. Välj Högst/bäst eller Lägst/sämst överst. Klickar du på samma kolumnrubrik igen växlar ordningen automatiskt. Saknade värden placeras alltid sist.</p>
 </section>
 
 <section id="input" class="panel">
@@ -1141,7 +1147,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v19.4 – regler och analys</h2>
+<h2>MomentumScore v19.5 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -1179,6 +1185,8 @@ Kursens avstånd till MA200: max 33,33 p · MA50:s avstånd till MA200: max 33,3
 <div class="rowcard"><b>Vit – platåprincip</b><br>
 Full poäng ges i faktorernas historiskt bästa intervall. Utanför intervallet faller poängen mjukt mot noll. Ett extremt högt trendvärde ger därför inte automatiskt högre poäng.</div>
 <div id="whitePlateauRules" class="plateau-grid"></div>
+<div class="rowcard"><b>Användarvänlig sortering i Översikt</b><br>
+Översikten använder samma system som Utveckling. Blå, Vit, Snitt, deras dagliga förändringar, kursutveckling, RSI och bolagsnamn är klickbara. Första klicket visar högst/bäst överst och ett nytt klick på samma rubrik visar lägst/sämst överst. Ordningen kan också väljas i en tydlig rullista.</div>
 <div class="rowcard"><b>Användarvänlig sortering i Utveckling</b><br>
 Utveckling visar daglig poängförändring för Blå, Vit och Snitt. Alla viktiga kolumnrubriker är klickbara. Första klicket sorterar högst/bäst överst; ett nytt klick på samma rubrik växlar till lägst/sämst överst. Samma val kan göras tydligt i rullistan Ordning.</div>
 <div class="rowcard"><b>Nytt kvartal – låsning</b><br>
@@ -1621,17 +1629,25 @@ function dailyPriceText(v){
   return `${v>0?'+':''}${v.toFixed(2).replace('.',',')} %`
 }
 
+function dashboardSortModel(sort,fallbackModel){
+  if(sort==='scoreBlue'||sort==='deltaBlue')return 'blue';
+  if(sort==='scoreWhite'||sort==='deltaWhite')return 'white';
+  if(sort==='scoreAverage'||sort==='deltaAverage')return 'average';
+  return fallbackModel
+}
 function renderDashboard(){
   const table=document.getElementById('dashboardTable');if(!table)return;
   const q=(document.getElementById('dashboardSearch')?.value||'').toLowerCase();
-  const model=document.getElementById('dashboardModel')?.value||'average';
+  const selectedModel=document.getElementById('dashboardModel')?.value||'average';
   const filter=document.getElementById('dashboardFilter')?.value||'all';
   const market=document.getElementById('dashboardMarket')?.value||'all';
-  const sort=document.getElementById('dashboardSort')?.value||'score';
+  const sort=document.getElementById('dashboardSort')?.value||'scoreAverage';
+  const direction=document.getElementById('dashboardDirection')?.value||'desc';
+  const statusModel=dashboardSortModel(sort,selectedModel);
 
   let list=rows.map((r,i)=>{
     const blue=calc(r),white=whiteCalc(r),average=averageScoreFromResults(blue,white);
-    const s=selectedModelValues(r,model),m=developmentMetrics(r);
+    const s=selectedModelValues(r,statusModel),m=developmentMetrics(r);
     return{r,i,s,h:holdings(r),m,blue,white,average,deltas:dailyScoreDeltas(r,blue,white,average)}
   });
 
@@ -1641,47 +1657,71 @@ function renderDashboard(){
   if(filter==='owned')list=list.filter(x=>x.h.shares>0);
   if(filter==='strong')list=list.filter(x=>x.s.dataReady&&x.s.score>=80);
 
+  const numericValue=(x,key)=>{
+    if(key==='scoreBlue')return x.blue.total;
+    if(key==='scoreWhite')return x.white.total;
+    if(key==='scoreAverage')return x.average;
+    if(key==='deltaBlue')return x.deltas.blue;
+    if(key==='deltaWhite')return x.deltas.white;
+    if(key==='deltaAverage')return x.deltas.average;
+    if(key==='price1')return x.m.price1;
+    if(key==='rsi')return num(x.r.rsi14);
+    return NaN
+  };
+  const multiplier=direction==='asc'?1:-1;
+
   list.sort((a,b)=>{
-    const descending=(bv,av)=>(Number.isFinite(bv)?bv:-Infinity)-(Number.isFinite(av)?av:-Infinity);
-    if(sort==='company')return (a.r.company||'').localeCompare(b.r.company||'','sv');
-    if(sort==='rsi')return descending(num(b.r.rsi14),num(a.r.rsi14));
-    if(sort==='deltaBlue')return descending(b.deltas.blue,a.deltas.blue);
-    if(sort==='deltaWhite')return descending(b.deltas.white,a.deltas.white);
-    if(sort==='deltaAverage')return descending(b.deltas.average,a.deltas.average);
-    if(sort==='price1')return descending(b.m.price1,a.m.price1);
-    return descending(b.s.score,a.s.score)
+    if(sort==='company'){
+      const cmp=(a.r.company||'').localeCompare(b.r.company||'','sv');
+      return direction==='asc'?cmp:-cmp
+    }
+    const av=numericValue(a,sort),bv=numericValue(b,sort);
+    const aValid=Number.isFinite(av),bValid=Number.isFinite(bv);
+    if(aValid&&!bValid)return -1;
+    if(!aValid&&bValid)return 1;
+    if(!aValid&&!bValid)return 0;
+    return (av-bv)*multiplier
   });
 
-  const settings=loadMarketSettings(),modelName=model==='blue'?'Blå':model==='white'?'Vit':'Snitt';
+  const settings=loadMarketSettings();
+  const statusName=statusModel==='blue'?'Blå':statusModel==='white'?'Vit':'Snitt';
+  const orderName=direction==='asc'?'Sämst/lägst överst':'Bäst/högst överst';
   document.getElementById('dashboardSummary').innerHTML=[
-    ['Blå kvalificerade',rows.filter(r=>calc(r).qualified).length],
-    ['Vit med underlag',rows.filter(r=>whiteCalc(r).dataReady).length],
-    ['Snitt med underlag',rows.filter(r=>selectedModelValues(r,'average').dataReady).length],
-    [modelName+' underlag saknas',rows.filter(r=>!selectedModelValues(r,model).dataReady).length],
+    ['Visade bolag',list.length],
+    ['Status/radfärg från',statusName],
+    ['Ordning',orderName],
+    ['Blå upp idag',list.filter(x=>x.deltas.blue>0).length],
+    ['Vit upp idag',list.filter(x=>x.deltas.white>0).length],
+    ['Snitt upp idag',list.filter(x=>x.deltas.average>0).length],
     ['Senaste marknadsdata',settings.lastUpdate?new Date(settings.lastUpdate).toLocaleString('sv-SE'):'Aldrig']
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b style="${typeof b==='string'?'font-size:15px':''}">${b}</b></div>`).join('');
 
-  table.innerHTML='<tr>'+[
-    'Ticker','Bolag','Börs',
-    '🔵 Blå','Δ🔵 dag',
-    '⚪ Vit','Δ⚪ dag',
-    '🟣 Snitt','Δ🟣 dag',
-    'Status','Kurs','1 dag %','RSI','Ägs','Marknadsdata'
-  ].map(x=>`<th>${x}</th>`).join('')+'</tr>'+
+  const active=s=>sort===s?' active-sort'+(direction==='asc'?' sort-asc':''):'';
+  table.innerHTML='<tr>'+
+    `<th>Ticker</th>
+     <th class="sortable-head${active('company')}" data-dashboard-sort="company">Bolag</th>
+     <th>Börs</th>
+     <th class="sortable-head${active('scoreBlue')}" data-dashboard-sort="scoreBlue">🔵 Blå</th>
+     <th class="sortable-head${active('deltaBlue')}" data-dashboard-sort="deltaBlue">Δ🔵 dag</th>
+     <th class="sortable-head${active('scoreWhite')}" data-dashboard-sort="scoreWhite">⚪ Vit</th>
+     <th class="sortable-head${active('deltaWhite')}" data-dashboard-sort="deltaWhite">Δ⚪ dag</th>
+     <th class="sortable-head${active('scoreAverage')}" data-dashboard-sort="scoreAverage">🟣 Snitt</th>
+     <th class="sortable-head${active('deltaAverage')}" data-dashboard-sort="deltaAverage">Δ🟣 dag</th>
+     <th>Status</th><th>Kurs</th>
+     <th class="sortable-head${active('price1')}" data-dashboard-sort="price1">1 dag %</th>
+     <th class="sortable-head${active('rsi')}" data-dashboard-sort="rsi">RSI</th>
+     <th>Ägs</th><th>Marknadsdata</th>
+    </tr>`+
   list.map(x=>`<tr class="dashboard-row ${scoreRowClass(x.s.score,x.s.dataReady)}" data-i="${x.i}">
     <td>${x.r.ticker||''}</td>
     <td>${x.r.company||''}</td>
     <td>${marketLabel(x.r.market||'SE')}</td>
-
     <td class="model-blue">${blueScoreHtml(x.blue.total,true)}</td>
     <td class="${classByValue(x.deltas.blue)}"><b>${dailyDeltaText(x.deltas.blue)}</b></td>
-
     <td class="model-white">${whiteScoreHtml(x.white.total,x.white.dataReady,true)}</td>
     <td class="${classByValue(x.deltas.white)}"><b>${dailyDeltaText(x.deltas.white)}</b></td>
-
     <td>${modelScoreHtml(x.average,'average',x.white.dataReady,true)}</td>
     <td class="${classByValue(x.deltas.average)}"><b>${dailyDeltaText(x.deltas.average)}</b></td>
-
     <td class="${scoreStatusClass(x.s.score,x.s.dataReady)}">${x.s.rating}</td>
     <td>${fmt(num(x.r.price))}</td>
     <td class="${classByValue(x.m.price1)}"><b>${dailyPriceText(x.m.price1)}</b></td>
@@ -1690,6 +1730,20 @@ function renderDashboard(){
     <td class="${ageClass(x.r.marketUpdatedAt||x.r.technicalSourceDate)}">${ageText(x.r.marketUpdatedAt||x.r.technicalSourceDate)}</td>
   </tr>`).join('');
 
+  table.querySelectorAll('[data-dashboard-sort]').forEach(th=>{
+    th.onclick=e=>{
+      e.stopPropagation();
+      const select=document.getElementById('dashboardSort');
+      const directionSelect=document.getElementById('dashboardDirection');
+      if(select.value===th.dataset.dashboardSort){
+        directionSelect.value=directionSelect.value==='desc'?'asc':'desc'
+      }else{
+        select.value=th.dataset.dashboardSort;
+        directionSelect.value='desc'
+      }
+      renderDashboard()
+    }
+  });
   document.querySelectorAll('.dashboard-row').forEach(tr=>tr.onclick=()=>openDetail(Number(tr.dataset.i)));
 }
 function render(){
@@ -5140,6 +5194,7 @@ document.getElementById('developmentSearch').oninput=renderDevelopment;
 document.getElementById('dashboardSearch').oninput=renderDashboard;document.getElementById('dashboardModel').onchange=renderDashboard;
 document.getElementById('dashboardFilter').onchange=renderDashboard;document.getElementById('dashboardMarket').onchange=renderDashboard;
 document.getElementById('dashboardSort').onchange=renderDashboard;
+document.getElementById('dashboardDirection').onchange=renderDashboard;
 document.getElementById('input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&e.target.tagName==='INPUT'){e.preventDefault();save()}});
 
 document.getElementById('developmentOwnership').onchange=renderDevelopment;document.getElementById('developmentQualification').onchange=renderDevelopment;
