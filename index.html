@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v19.2</title>
+<title>MomentumScore v19.3</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -187,6 +187,9 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .portfolio-card{padding:12px;border:1px solid var(--line);border-radius:12px;margin:8px 0;background:rgba(255,255,255,.025)}
 .development-mode-switch{display:flex;gap:8px;flex-wrap:wrap}
 .development-mode-switch button.active{box-shadow:0 0 0 2px rgba(157,124,255,.55) inset}
+.quarter-locked{opacity:.68;background:rgba(255,255,255,.035)!important;cursor:not-allowed}
+.quarter-open{box-shadow:0 0 0 2px rgba(72,214,151,.28) inset}
+
 .portfolio-row{cursor:pointer}
 .portfolio-row:hover{background:rgba(255,255,255,.045)}
 
@@ -196,7 +199,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v19.2 – daglig översikt</h1>
+<h1>MomentumScore v19.3 – säkert kvartalsläge</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -287,8 +290,8 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 <button class="secondary hidden" id="newQuarter">Nytt kvartal</button>
 <button class="secondary" id="clearForm">Rensa formulär</button>
 </div>
-<div id="quarterModeNotice" class="note hidden"><b>Nytt kvartal:</b> aktiekurs, Kurs/MA200 och MA200-trender hämtas från sparad marknadsdata och kan inte skrivas över här.</div>
-<p class="note">Vanligt bolag använder omsättning Q1–Q4. Investmentbolag använder EK Tillväxt Y-Y och EK Tillväxt 3 år. Vinst Q1–Q4 används för båda. Vid Nytt kvartal bevaras aktiekurs, Kurs/MA200 och MA200-trender automatiskt från den egna marknadsdatan. Ändringen blir permanent först när du sparar.</p>
+<div id="quarterModeNotice" class="note hidden"><b>Nytt kvartal:</b> alla fält ovanför Omsättningstillväxt 3 år är låsta. I kvartalsdelen är Q1–Q3 låsta och endast det nya Q4-värdet för omsättning och vinst/EPS är öppet. Övriga rapportfält från Omsättningstillväxt 3 år och nedåt kan fyllas i.</div>
+<p class="note">Vid Nytt kvartal flyttas de tidigare kvartalen automatiskt ett steg bakåt. Q1–Q3 visas låsta och du fyller endast i det nya Q4-värdet för omsättning och vinst/EPS. Fälten från Omsättningstillväxt 3 år och nedåt är fortsatt öppna för rapportens övriga nyckeltal.</p>
 </div>
 </section>
 
@@ -1123,7 +1126,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v19.2 – regler och analys</h2>
+<h2>MomentumScore v19.3 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -1161,6 +1164,8 @@ Kursens avstånd till MA200: max 33,33 p · MA50:s avstånd till MA200: max 33,3
 <div class="rowcard"><b>Vit – platåprincip</b><br>
 Full poäng ges i faktorernas historiskt bästa intervall. Utanför intervallet faller poängen mjukt mot noll. Ett extremt högt trendvärde ger därför inte automatiskt högre poäng.</div>
 <div id="whitePlateauRules" class="plateau-grid"></div>
+<div class="rowcard"><b>Nytt kvartal – låsning</b><br>
+När Nytt kvartal aktiveras låses ticker, bolag, börs, Yahoo-symbol, kurs och samtliga MA-fält. Från Omsättningstillväxt 3 år och nedåt är rapportfälten öppna. De gamla kvartalen Q1–Q3 flyttas automatiskt och låses; endast nya Q4 för omsättning och vinst/EPS kan skrivas in.</div>
 <div class="rowcard"><b>Daglig översikt</b><br>
 Översikten visar Blå, Vit och Snitt tillsammans med respektive poängförändring mot föregående sparade handelsdag. Kursutvecklingen senaste handelsdagen visas i procent. Själva siffran är grön över noll, röd under noll och neutral vid exakt noll. Kurs/MA200 och MA200-trend 3 månader visas inte längre i översikten.</div>
 <div class="rowcard"><b>Portföljläge i Utveckling</b><br>
@@ -2197,17 +2202,43 @@ function deduplicateRows(input){
 }
 
 const technicalFormIds=['price','ma200','ma1w','ma1m','ma3m'];
-function setQuarterMode(active){
-  quarterMode=Boolean(active);
-  technicalFormIds.forEach(id=>{
-    const el=document.getElementById(id);
-    if(!el)return;
-    el.readOnly=quarterMode;
-    el.title=quarterMode?'Värdet kommer från sparad marknadsdata':'';
-  });
-  document.getElementById('quarterModeNotice')?.classList.toggle('hidden',!quarterMode);
+const quarterTopLockedIds=['ticker','company','market','yahooSymbol','price','ma200','ma1w','ma1m','ma3m'];
+const quarterHistoricalIds=['rev1','rev2','rev3','eps1','eps2','eps3'];
+const quarterLatestIds=['rev4','eps4'];
+
+function setQuarterFieldState(id,locked){
+  const el=document.getElementById(id);
+  if(!el)return;
+  if(el.tagName==='SELECT')el.disabled=locked;
+  else el.readOnly=locked;
+  el.classList.toggle('quarter-locked',locked);
+  el.title=locked?'Låst i läget Nytt kvartal':'';
 }
 
+function setQuarterMode(active){
+  quarterMode=Boolean(active);
+
+  quarterTopLockedIds.forEach(id=>setQuarterFieldState(id,quarterMode));
+  quarterHistoricalIds.forEach(id=>setQuarterFieldState(id,quarterMode));
+
+  quarterLatestIds.forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    el.readOnly=false;
+    el.disabled=false;
+    el.classList.remove('quarter-locked');
+    el.classList.toggle('quarter-open',quarterMode);
+    el.title=quarterMode?'Fyll i det nya kvartalets värde':'';
+  });
+
+  document.querySelectorAll('.type-choice').forEach(btn=>{
+    btn.disabled=quarterMode;
+    btn.classList.toggle('quarter-locked',quarterMode);
+    btn.title=quarterMode?'Bolagstypen är låst i läget Nytt kvartal':'';
+  });
+
+  document.getElementById('quarterModeNotice')?.classList.toggle('hidden',!quarterMode);
+}
 function save(){
   const r=formRow();
   r.yahooSymbol=r.yahooSymbol||inferYahooSymbol(r.ticker,r.market);
@@ -2223,7 +2254,8 @@ function save(){
   }else{
     const old=rows[editing];
     if(quarterMode){
-      technicalFormIds.forEach(id=>r[id]=old[id]??'');
+      quarterTopLockedIds.forEach(id=>r[id]=old[id]??'');
+      r.companyType=old.companyType||r.companyType;
       r.ma200Level=old.ma200Level??'';
       r.rsi14=old.rsi14??'';
       r.priceHistory=old.priceHistory||[];
@@ -2244,8 +2276,8 @@ function quarter(){
   if(editing===null)return;
   const g=id=>document.getElementById(id);
   const saved=rows[editing];
-  setQuarterMode(true);
   const investment=g('companyType').value==='investment';
+
   if(investment){
     g('ekYoy').value='';
     g('ek3y').value='';
@@ -2256,14 +2288,22 @@ function quarter(){
     g('rev4').value='';
     g('rev3y').value='';
   }
+
   g('eps1').value=g('eps2').value;
   g('eps2').value=g('eps3').value;
   g('eps3').value=g('eps4').value;
   g('eps4').value='';
+
   ['eps3y','pe','pe3','pe5','roe','debt','fcf'].forEach(id=>g(id).value='');
-  technicalFormIds.forEach(id=>g(id).value=saved[id]??'');
+
+  quarterTopLockedIds.forEach(id=>{
+    if(id==='market')g(id).value=saved[id]||'SE';
+    else g(id).value=saved[id]??''
+  });
+
+  setQuarterMode(true);
   renderPreview();
-  toast('Teknisk data behålls från marknadshistoriken')
+  toast('Fyll i nytt Q4 och rapportens övriga nyckeltal')
 }
 
 let lastLaboratoryResult=null;
