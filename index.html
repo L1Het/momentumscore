@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v19.3</title>
+<title>MomentumScore v19.4</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -159,6 +159,9 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .sortable-head{cursor:pointer;user-select:none}
 .sortable-head:hover{text-decoration:underline}
 .sortable-head.active-sort::after{content:' ↓';font-size:11px}
+.sortable-head.active-sort.sort-asc::after{content:' ↑'}
+.sort-direction-note{font-size:12px;color:var(--muted)}
+
 
 
 
@@ -199,7 +202,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v19.3 – säkert kvartalsläge</h1>
+<h1>MomentumScore v19.4 – flexibel utvecklingssortering</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -378,18 +381,30 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
           </select>
         </div>
         <div>
-          <label>Sortering</label>
+          <label>Sortera på</label>
           <select id="developmentSort">
             <option value="scoreAverage" selected>🟣 Snittpoäng</option>
             <option value="scoreBlue">🔵 Blå poäng</option>
             <option value="scoreWhite">⚪ Vit poäng</option>
-            <option value="deltaBlue">Δ 🔵 Blå poäng</option>
-            <option value="priceChange">Kursutveckling</option>
+            <option value="deltaBlue">Δ 🔵 Blå dag</option>
+            <option value="deltaWhite">Δ ⚪ Vit dag</option>
+            <option value="deltaAverage">Δ 🟣 Snitt dag</option>
+            <option value="price1">Kurs 1 dag</option>
+            <option value="price7">Kurs 1 vecka</option>
+            <option value="price30">Kurs 1 månad</option>
+            <option value="priceChange">Kurs sedan start</option>
             <option value="maChange">Kurs/MA200-utveckling</option>
             <option value="rsi">RSI</option>
             <option value="rsiChange">RSI-förändring</option>
             <option value="company">Bolag</option>
             <option value="updated">Senast uppdaterad</option>
+          </select>
+        </div>
+        <div>
+          <label>Ordning</label>
+          <select id="developmentDirection">
+            <option value="desc" selected>Högst / bäst överst</option>
+            <option value="asc">Lägst / sämst överst</option>
           </select>
         </div>
       </div>
@@ -416,7 +431,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
       <div class="tablewrap" style="margin-top:12px"><table id="developmentTable"></table></div>
     </div>
 
-    <p class="note">Översikten visar alla bolag samtidigt. Blå och Vit är två separata modeller. Endast Blå har poängförändring tills Vit har fått egen historik. Sortera på aktuell Blå-, Vit- eller Snittpoäng samt Blås poängförändring via menyn eller kolumnrubrikerna.</p>
+    <p class="note">Översikten visar alla bolag samtidigt. Du kan sortera på aktuell Blå-, Vit- eller Snittpoäng, daglig förändring i alla tre modellerna samt kurs- och teknikmått. Välj Högst/bäst eller Lägst/sämst överst. Klickar du på samma kolumnrubrik igen växlar ordningen automatiskt.</p>
   </div>
 
   <div id="developmentPortfoliosView" class="hidden">
@@ -1126,7 +1141,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v19.3 – regler och analys</h2>
+<h2>MomentumScore v19.4 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -1164,6 +1179,8 @@ Kursens avstånd till MA200: max 33,33 p · MA50:s avstånd till MA200: max 33,3
 <div class="rowcard"><b>Vit – platåprincip</b><br>
 Full poäng ges i faktorernas historiskt bästa intervall. Utanför intervallet faller poängen mjukt mot noll. Ett extremt högt trendvärde ger därför inte automatiskt högre poäng.</div>
 <div id="whitePlateauRules" class="plateau-grid"></div>
+<div class="rowcard"><b>Användarvänlig sortering i Utveckling</b><br>
+Utveckling visar daglig poängförändring för Blå, Vit och Snitt. Alla viktiga kolumnrubriker är klickbara. Första klicket sorterar högst/bäst överst; ett nytt klick på samma rubrik växlar till lägst/sämst överst. Samma val kan göras tydligt i rullistan Ordning.</div>
 <div class="rowcard"><b>Nytt kvartal – låsning</b><br>
 När Nytt kvartal aktiveras låses ticker, bolag, börs, Yahoo-symbol, kurs och samtliga MA-fält. Från Omsättningstillväxt 3 år och nedåt är rapportfälten öppna. De gamla kvartalen Q1–Q3 flyttas automatiskt och låses; endast nya Q4 för omsättning och vinst/EPS kan skrivas in.</div>
 <div class="rowcard"><b>Daglig översikt</b><br>
@@ -2050,7 +2067,7 @@ function openDevelopmentPortfolio(index){
 
 function developmentSortModel(sort){
   if(sort==='scoreBlue'||sort==='deltaBlue')return 'blue';
-  if(sort==='scoreWhite')return 'white';
+  if(sort==='scoreWhite'||sort==='deltaWhite')return 'white';
   return 'average'
 }
 function renderDevelopment(){
@@ -2060,15 +2077,14 @@ function renderDevelopment(){
   const qual=document.getElementById('developmentQualification')?.value||'all';
   const histMin=Number(document.getElementById('developmentHistoryFilter')?.value||0);
   const sort=document.getElementById('developmentSort')?.value||'scoreAverage';
+  const direction=document.getElementById('developmentDirection')?.value||'desc';
   const statusModel=developmentSortModel(sort);
 
   let list=rows.map((r,i)=>{
     const blue=calc(r),white=whiteCalc(r),average=averageScoreFromResults(blue,white);
     const s=selectedModelValues(r,statusModel),m=developmentMetrics(r);
-    return{
-      r,i,s,h:holdings(r),m,blue,white,average,
-      deltaBlue:modelHistoryDelta(r,'blue',blue.total)
-    }
+    const deltas=dailyScoreDeltas(r,blue,white,average);
+    return{r,i,s,h:holdings(r),m,blue,white,average,deltas}
   });
 
   if(q)list=list.filter(x=>`${x.r.ticker||''} ${x.r.company||''}`.toLowerCase().includes(q));
@@ -2078,38 +2094,68 @@ function renderDevelopment(){
   if(qual==='unqualified')list=list.filter(x=>!x.s.qualified&&x.s.dataReady);
   if(histMin)list=list.filter(x=>x.m.points>=histMin);
 
+  const numericValue=(x,key)=>{
+    if(key==='scoreBlue')return x.blue.total;
+    if(key==='scoreWhite')return x.white.total;
+    if(key==='scoreAverage')return x.average;
+    if(key==='deltaBlue')return x.deltas.blue;
+    if(key==='deltaWhite')return x.deltas.white;
+    if(key==='deltaAverage')return x.deltas.average;
+    if(key==='price1')return x.m.price1;
+    if(key==='price7')return x.m.price7;
+    if(key==='price30')return x.m.price30;
+    if(key==='priceChange')return x.m.priceAll;
+    if(key==='maChange')return x.m.maAll;
+    if(key==='rsi')return x.m.currentRsi;
+    if(key==='rsiChange')return x.m.rsiAll;
+    if(key==='updated')return new Date(x.r.updatedAt||0).getTime();
+    return NaN
+  };
+  const multiplier=direction==='asc'?1:-1;
+
   list.sort((a,b)=>{
-    if(sort==='company')return (a.r.company||'').localeCompare(b.r.company||'','sv');
-    if(sort==='updated')return new Date(b.r.updatedAt)-new Date(a.r.updatedAt);
-    if(sort==='scoreBlue')return b.blue.total-a.blue.total;
-    if(sort==='scoreWhite')return (Number.isFinite(b.white.total)?b.white.total:-Infinity)-(Number.isFinite(a.white.total)?a.white.total:-Infinity);
-    if(sort==='scoreAverage')return (Number.isFinite(b.average)?b.average:-Infinity)-(Number.isFinite(a.average)?a.average:-Infinity);
-    if(sort==='deltaBlue')return (Number.isFinite(b.deltaBlue)?b.deltaBlue:-Infinity)-(Number.isFinite(a.deltaBlue)?a.deltaBlue:-Infinity);
-    const map={priceChange:'priceAll',maChange:'maAll',rsi:'currentRsi',rsiChange:'rsiAll'};
-    const key=map[sort]||'priceAll';
-    return (Number.isFinite(b.m[key])?b.m[key]:-Infinity)-(Number.isFinite(a.m[key])?a.m[key]:-Infinity)
+    if(sort==='company'){
+      const cmp=(a.r.company||'').localeCompare(b.r.company||'','sv');
+      return direction==='asc'?cmp:-cmp
+    }
+    const av=numericValue(a,sort),bv=numericValue(b,sort);
+    const aValid=Number.isFinite(av),bValid=Number.isFinite(bv);
+    if(aValid&&!bValid)return -1;
+    if(!aValid&&bValid)return 1;
+    if(!aValid&&!bValid)return 0;
+    return (av-bv)*multiplier
   });
 
   const statusName=statusModel==='blue'?'Blå':statusModel==='white'?'Vit':'Snitt';
+  const orderName=direction==='asc'?'Sämst/lägst överst':'Bäst/högst överst';
   document.getElementById('developmentOverviewSummary').innerHTML=[
     ['Visade bolag',list.length],
     ['Status/radfärg från',statusName],
-    ['Blå poäng upp',list.filter(x=>x.deltaBlue>0).length],
-    ['Kurs upp 1 dag',list.filter(x=>x.m.price1>0).length],
-    ['Kurs upp sedan start',list.filter(x=>x.m.priceAll>0).length]
+    ['Ordning',orderName],
+    ['Blå upp idag',list.filter(x=>x.deltas.blue>0).length],
+    ['Vit upp idag',list.filter(x=>x.deltas.white>0).length],
+    ['Snitt upp idag',list.filter(x=>x.deltas.average>0).length]
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
 
-  const active=s=>sort===s?' active-sort':'';
+  const active=s=>sort===s?' active-sort'+(direction==='asc'?' sort-asc':''):'';
   table.innerHTML='<tr>'+
     `<th>Ticker</th><th>Bolag</th>
      <th class="sortable-head${active('scoreBlue')}" data-dev-sort="scoreBlue">🔵 Blå</th>
      <th class="sortable-head${active('scoreWhite')}" data-dev-sort="scoreWhite">⚪ Vit</th>
      <th class="sortable-head${active('scoreAverage')}" data-dev-sort="scoreAverage">🟣 Snitt</th>
      <th>Status</th>
-     <th class="sortable-head${active('deltaBlue')}" data-dev-sort="deltaBlue">Δ 🔵 Blå</th>
+     <th class="sortable-head${active('deltaBlue')}" data-dev-sort="deltaBlue">Δ 🔵 dag</th>
+     <th class="sortable-head${active('deltaWhite')}" data-dev-sort="deltaWhite">Δ ⚪ dag</th>
+     <th class="sortable-head${active('deltaAverage')}" data-dev-sort="deltaAverage">Δ 🟣 dag</th>
      <th>Kurs</th>
-     <th>1 dag</th><th>1 vecka</th><th>1 månad</th><th>Sedan start</th>
-     <th>Kurs/MA200</th><th>MA200-utv.</th><th>RSI 14</th><th>Datapunkter</th><th>Senast uppdaterad</th>
+     <th class="sortable-head${active('price1')}" data-dev-sort="price1">1 dag</th>
+     <th class="sortable-head${active('price7')}" data-dev-sort="price7">1 vecka</th>
+     <th class="sortable-head${active('price30')}" data-dev-sort="price30">1 månad</th>
+     <th class="sortable-head${active('priceChange')}" data-dev-sort="priceChange">Sedan start</th>
+     <th>Kurs/MA200</th>
+     <th class="sortable-head${active('maChange')}" data-dev-sort="maChange">MA200-utv.</th>
+     <th class="sortable-head${active('rsi')}" data-dev-sort="rsi">RSI 14</th>
+     <th>Datapunkter</th><th>Senast uppdaterad</th>
     </tr>`+
   list.map(x=>`<tr class="development-row ${scoreRowClass(x.s.score,x.s.dataReady)}" data-i="${x.i}" style="cursor:pointer">
       <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td>
@@ -2117,9 +2163,11 @@ function renderDevelopment(){
       <td class="model-white">${whiteScoreHtml(x.white.total,x.white.dataReady,true)}</td>
       <td>${modelScoreHtml(x.average,'average',x.white.dataReady,true)}</td>
       <td class="${scoreStatusClass(x.s.score,x.s.dataReady)}">${x.s.rating}</td>
-      <td class="${classByValue(x.deltaBlue)}"><b>${signed(x.deltaBlue,' p')}</b></td>
+      <td class="${classByValue(x.deltas.blue)}"><b>${dailyDeltaText(x.deltas.blue)}</b></td>
+      <td class="${classByValue(x.deltas.white)}"><b>${dailyDeltaText(x.deltas.white)}</b></td>
+      <td class="${classByValue(x.deltas.average)}"><b>${dailyDeltaText(x.deltas.average)}</b></td>
       <td>${fmt(x.m.currentPrice)}</td>
-      <td class="${classByValue(x.m.price1)}">${signed(x.m.price1,' %')}</td>
+      <td class="${classByValue(x.m.price1)}">${dailyPriceText(x.m.price1)}</td>
       <td class="${classByValue(x.m.price7)}">${signed(x.m.price7,' %')}</td>
       <td class="${classByValue(x.m.price30)}">${signed(x.m.price30,' %')}</td>
       <td class="${classByValue(x.m.priceAll)}"><b>${signed(x.m.priceAll,' %')}</b></td>
@@ -2132,13 +2180,19 @@ function renderDevelopment(){
   table.querySelectorAll('[data-dev-sort]').forEach(th=>{
     th.onclick=e=>{
       e.stopPropagation();
-      document.getElementById('developmentSort').value=th.dataset.devSort;
+      const select=document.getElementById('developmentSort');
+      const directionSelect=document.getElementById('developmentDirection');
+      if(select.value===th.dataset.devSort){
+        directionSelect.value=directionSelect.value==='desc'?'asc':'desc'
+      }else{
+        select.value=th.dataset.devSort;
+        directionSelect.value='desc'
+      }
       renderDevelopment()
     }
   });
   document.querySelectorAll('.development-row').forEach(row=>row.onclick=()=>openDevelopmentDetail(Number(row.dataset.i)));
 }
-
 function openDevelopmentDetail(i){
   const r=rows[i];
   if(!r)return;
@@ -5091,6 +5145,7 @@ document.getElementById('input').addEventListener('keydown',e=>{if(e.key==='Ente
 document.getElementById('developmentOwnership').onchange=renderDevelopment;document.getElementById('developmentQualification').onchange=renderDevelopment;
 document.getElementById('developmentHistoryFilter').onchange=renderDevelopment;
 document.getElementById('developmentSort').onchange=renderDevelopment;
+document.getElementById('developmentDirection').onchange=renderDevelopment;
 document.getElementById('closeDevelopmentDetail').onclick=()=>document.getElementById('developmentDetail').classList.add('hidden');document.getElementById('closeDetail').onclick=()=>document.getElementById('detailModal').classList.remove('open');document.getElementById('detailEdit').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex)};document.getElementById('detailNewQuarter').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex);quarter()};document.getElementById('detailPeUpdate').onclick=()=>document.getElementById('peTool').classList.remove('hidden');document.getElementById('cancelPeUpdate').onclick=()=>document.getElementById('peTool').classList.add('hidden');document.getElementById('newPrice').oninput=pePreview;document.getElementById('savePeUpdate').onclick=savePe;document.getElementById('txType').onchange=reasonUI;document.getElementById('saveTx').onclick=saveTx;document.getElementById('wipe').onclick=()=>{if(confirm('Radera allt?')){rows=[];persist();render()}};async function exportBackup(){
   const suggested='Levande-aktier-'+new Date().toISOString().slice(0,10)+'.json';
   const content=JSON.stringify({
