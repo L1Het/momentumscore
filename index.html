@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v19.6</title>
+<title>MomentumScore v19.7</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -211,12 +211,21 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .score-history-table td,.score-history-table th{text-align:right}
 .score-history-table td:first-child,.score-history-table th:first-child{text-align:left}
 .score-history-close{min-width:90px}
+.score-history-modal h3{margin-top:4px}
+.score-history-modal .summary{margin:10px 0 14px}
+@media(max-width:700px){
+  .score-history-overlay{padding:0}
+  .score-history-modal{width:100vw;max-height:100vh;height:100vh;border-radius:0;padding:14px}
+  .score-history-head{top:-14px}
+  .score-history-grid{grid-template-columns:1fr}
+}
+
 
 </style>
 </head>
 <body>
 <header>
-<h1>MomentumScore v19.6 – klickbar poänghistorik</h1>
+<h1>MomentumScore v19.7 – stabil poänghistorik</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -1161,7 +1170,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v19.6 – regler och analys</h2>
+<h2>MomentumScore v19.7 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -1200,7 +1209,7 @@ Kursens avstånd till MA200: max 33,33 p · MA50:s avstånd till MA200: max 33,3
 Full poäng ges i faktorernas historiskt bästa intervall. Utanför intervallet faller poängen mjukt mot noll. Ett extremt högt trendvärde ger därför inte automatiskt högre poäng.</div>
 <div id="whitePlateauRules" class="plateau-grid"></div>
 <div class="rowcard"><b>Klickbar poänghistorik</b><br>
-Alla aktuella Blå-, Vit- och Snittpoäng i huvudvyerna är klickbara. Ett klick öppnar en panel med dagens tre poäng, förändring för vald modell över 1 dag, 1 vecka och 1 månad, kursutveckling, diagram och full sparad historik. Panelen kan stängas med Stäng, klick utanför eller Escape.</div>
+Alla aktuella Blå-, Vit- och Snittpoäng i huvudvyerna är klickbara. Historikpanelen skapas innan JavaScript initieras och alla händelser binds med säkerhetskontroller, så ett saknat element kan inte stoppa resten av programmet. Panelen visar dagens tre poäng, förändring över 1 dag, 1 vecka och 1 månad, kursutveckling, diagram och full sparad historik.</div>
 <div class="rowcard"><b>Användarvänlig sortering i Översikt</b><br>
 Översikten använder samma system som Utveckling. Blå, Vit, Snitt, deras dagliga förändringar, kursutveckling, RSI och bolagsnamn är klickbara. Första klicket visar högst/bäst överst och ett nytt klick på samma rubrik visar lägst/sämst överst. Ordningen kan också väljas i en tydlig rullista.</div>
 <div class="rowcard"><b>Användarvänlig sortering i Utveckling</b><br>
@@ -1262,6 +1271,26 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
 <div class="card"><h3>Affärshistorik</h3><div id="txList"></div></div>
 </div></div>
 
+<div id="scoreHistoryOverlay" class="score-history-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="scoreHistoryTitle">
+  <div class="score-history-modal">
+    <div class="score-history-head">
+      <div>
+        <h2 id="scoreHistoryTitle" style="margin:0">Poänghistorik</h2>
+        <div id="scoreHistorySubtitle" class="note"></div>
+      </div>
+      <button id="closeScoreHistory" class="secondary score-history-close">Stäng</button>
+    </div>
+    <div id="scoreHistorySummary" class="summary"></div>
+    <div class="score-history-grid">
+      <div class="score-history-chart"><h3>Blå, Vit och Snitt</h3><div id="scoreHistoryChart"></div></div>
+      <div class="score-history-chart"><h3>Kursutveckling</h3><div id="scoreHistoryPriceChart"></div></div>
+    </div>
+    <div class="card tablewrap" style="margin-top:12px">
+      <h3>Historik</h3>
+      <table id="scoreHistoryTable" class="score-history-table"></table>
+    </div>
+  </div>
+</div>
 <script>
 const ids=['companyType','ticker','company','market','yahooSymbol','price','ma200','ma1w','ma1m','ma3m','rev1','rev2','rev3','rev4','rev3y','ekYoy','ek3y','eps1','eps2','eps3','eps4','eps3y','pe','pe3','pe5','roe','debt','fcf'];
 const numericIds=['price','ma200','ma1w','ma1m','ma3m','rev1','rev2','rev3','rev4','rev3y','ekYoy','ek3y','eps1','eps2','eps3','eps4','eps3y','pe','pe3','pe5','roe','debt','fcf'], storageKey='momentumScore_v4_rows', backupKey='momentumScore_v4_rows_backup_before_update', oldKeys=['momentumScore_v3_rows','momentumRows'];
@@ -1966,7 +1995,9 @@ function scorePriceChart(points){
 }
 function modelLabel(model){return model==='blue'?'Blå':model==='white'?'Vit':'Snitt'}
 function openScoreHistory(index,focusModel='average'){
-  const r=rows[index];if(!r)return;
+  const r=rows[index];
+  const overlay=document.getElementById('scoreHistoryOverlay');
+  if(!r||!overlay)return;
   const blue=calc(r),white=whiteCalc(r),average=averageScoreFromResults(blue,white);
   const points=scoreHistoryByDay(r);
   const current={blue:blue.total,white:white.total,average};
@@ -1979,16 +2010,16 @@ function openScoreHistory(index,focusModel='average'){
   document.getElementById('scoreHistoryTitle').textContent=`${r.ticker||''} ${r.company||''}`.trim();
   document.getElementById('scoreHistorySubtitle').textContent=`Fokus: ${modelLabel(key)} · ${points.length} sparade handelsdagar`;
   document.getElementById('scoreHistorySummary').innerHTML=[
-    ['🔵 Blå',modelScoreText(blue.total,'blue')],
-    ['⚪ Vit',modelScoreText(white.total,'white')],
-    ['🟣 Snitt',modelScoreText(average,'average')],
-    [`Δ ${modelLabel(key)} 1 dag`,dailyDeltaText(d1)],
-    [`Δ ${modelLabel(key)} 1 vecka`,dailyDeltaText(d7)],
-    [`Δ ${modelLabel(key)} 1 månad`,dailyDeltaText(d30)],
-    ['Kurs 1 dag',dailyPriceText(m.price1)],
-    ['Kurs 1 vecka',signed(m.price7,' %')],
-    ['Kurs 1 månad',signed(m.price30,' %')]
-  ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
+    ['🔵 Blå',modelScoreHtml(blue.total,'blue',true,true),''],
+    ['⚪ Vit',modelScoreHtml(white.total,'white',white.dataReady,true),''],
+    ['🟣 Snitt',modelScoreHtml(average,'average',white.dataReady,true),''],
+    [`Δ ${modelLabel(key)} 1 dag`,dailyDeltaText(d1),classByValue(d1)],
+    [`Δ ${modelLabel(key)} 1 vecka`,dailyDeltaText(d7),classByValue(d7)],
+    [`Δ ${modelLabel(key)} 1 månad`,dailyDeltaText(d30),classByValue(d30)],
+    ['Kurs 1 dag',dailyPriceText(m.price1),classByValue(m.price1)],
+    ['Kurs 1 vecka',signed(m.price7,' %'),classByValue(m.price7)],
+    ['Kurs 1 månad',signed(m.price30,' %'),classByValue(m.price30)]
+  ].map(([a,b,cls])=>`<div class="metric"><small>${a}</small><b class="${cls||''}">${b}</b></div>`).join('');
 
   document.getElementById('scoreHistoryChart').innerHTML=multiLineScoreChart(points);
   document.getElementById('scoreHistoryPriceChart').innerHTML=scorePriceChart(points);
@@ -2002,10 +2033,13 @@ function openScoreHistory(index,focusModel='average'){
       <td>${fmt(p.price)}</td>
     </tr>`).join('');
 
-  document.getElementById('scoreHistoryOverlay').classList.remove('hidden')
+  overlay.classList.remove('hidden');
+  document.body.style.overflow='hidden';
+  document.getElementById('closeScoreHistory')?.focus()
 }
 function closeScoreHistory(){
-  document.getElementById('scoreHistoryOverlay')?.classList.add('hidden')
+  document.getElementById('scoreHistoryOverlay')?.classList.add('hidden');
+  document.body.style.overflow=''
 }
 
 function renderTop(){
@@ -5335,8 +5369,13 @@ document.getElementById('dashboardFilter').onchange=renderDashboard;document.get
 document.getElementById('dashboardSort').onchange=renderDashboard;
 document.getElementById('dashboardDirection').onchange=renderDashboard;
 
-document.getElementById('closeScoreHistory').onclick=closeScoreHistory;
-document.getElementById('scoreHistoryOverlay').onclick=e=>{if(e.target.id==='scoreHistoryOverlay')closeScoreHistory()};
+function initializeScoreHistoryUI(){
+  const closeButton=document.getElementById('closeScoreHistory');
+  const overlay=document.getElementById('scoreHistoryOverlay');
+  if(closeButton)closeButton.onclick=closeScoreHistory;
+  if(overlay)overlay.onclick=e=>{if(e.target===overlay)closeScoreHistory()};
+}
+initializeScoreHistoryUI();
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeScoreHistory()});
 
 document.getElementById('input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&e.target.tagName==='INPUT'){e.preventDefault();save()}});
@@ -5560,25 +5599,4 @@ try{
 }catch(e){console.error('Laboratoriets startkontroll misslyckades',e)}
 setTimeout(maybeAutoUpdate,600);
 </script>
-<div id="scoreHistoryOverlay" class="score-history-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="scoreHistoryTitle">
-  <div class="score-history-modal">
-    <div class="score-history-head">
-      <div>
-        <h2 id="scoreHistoryTitle" style="margin:0">Poänghistorik</h2>
-        <div id="scoreHistorySubtitle" class="note"></div>
-      </div>
-      <button id="closeScoreHistory" class="secondary score-history-close">Stäng</button>
-    </div>
-    <div id="scoreHistorySummary" class="summary"></div>
-    <div class="score-history-grid">
-      <div class="score-history-chart"><h3>Blå, Vit och Snitt</h3><div id="scoreHistoryChart"></div></div>
-      <div class="score-history-chart"><h3>Kursutveckling</h3><div id="scoreHistoryPriceChart"></div></div>
-    </div>
-    <div class="card tablewrap" style="margin-top:12px">
-      <h3>Historik</h3>
-      <table id="scoreHistoryTable" class="score-history-table"></table>
-    </div>
-  </div>
-</div>
-
 </body></html>
