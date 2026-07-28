@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.0.1</title>
+<title>MomentumScore v20.0.2</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -236,7 +236,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.0.1 – stabil utveckling och veckoportföljer</h1>
+<h1>MomentumScore v20.0.2 – stabil utveckling och veckoportföljer</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -408,14 +408,25 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
     <div id="developmentBenchmarkReference" class="analysis-reference"></div>
     <div id="developmentOverviewSummary" class="summary"></div>
     <div class="card tablewrap"><table id="developmentOverviewTable" class="analysis-table"></table></div>
-    <p class="note">Välj Kursutveckling, Poängutveckling eller Teknisk data. Tabellen visar dag, vecka, månad och år samtidigt. Fokusperioden styr sortering och sammanfattning. OMXSPI visas som referens för samma perioder.</p>
+    <p class="note">Välj Kursutveckling, Poängutveckling eller Teknisk data. Tabellen visar dag, vecka, månad och år samtidigt. Fokusperioden styr sortering och sammanfattning. OMXSPI visas som referens och relativ utveckling visas separat för dag, vecka, månad och år.</p>
   </div>
 
   <div id="developmentPortfoliosView" class="hidden">
     <div class="card">
       <div class="searchbar">
         <div><label>Modell</label><select id="devPortfolioModel"><option value="all" selected>Alla tre</option><option value="blue">🔵 Blå</option><option value="white">⚪ Vit</option><option value="average">🟣 Snitt</option></select></div>
-        <div><label>Sortering</label><select id="devPortfolioSort"><option value="week" selected>Nyaste vecka</option><option value="return">Högst portföljavkastning</option><option value="excess">Högst överavkastning</option><option value="winners">Flest vinnare</option></select></div>
+        <div><label>Sortering</label><select id="devPortfolioSort">
+          <option value="week" selected>Nyaste vecka</option>
+          <option value="day">Högst idag</option>
+          <option value="weekReturn">Högst senaste veckan</option>
+          <option value="month">Högst senaste månaden</option>
+          <option value="return">Högst sedan start</option>
+          <option value="excessDay">Bäst mot OMX idag</option>
+          <option value="excessWeek">Bäst mot OMX veckan</option>
+          <option value="excessMonth">Bäst mot OMX månaden</option>
+          <option value="excess">Bäst mot OMX sedan start</option>
+          <option value="winners">Flest vinnare</option>
+        </select></div>
       </div>
     </div>
     <div id="devPortfolioSummary" class="summary"></div>
@@ -428,7 +439,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
       <div id="devPortfolioDetailSummary" class="summary"></div>
       <div class="tablewrap" style="margin-top:12px"><table id="devPortfolioMembersTable"></table></div>
     </div>
-    <p class="note">Varje rad är en fryst Top 10-portfölj från en viss vecka. Klicka på raden för att se de tio aktiernas utveckling och utfallet mot index.</p>
+    <p class="note">Varje rad visar dag, vecka, månad och utveckling sedan start för en fryst Top 10-portfölj, plus relativ utveckling mot OMX för samma perioder. Klicka på raden för innehaven.</p>
   </div>
 </section>
 
@@ -1076,7 +1087,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v20.0.1 – regler och analys</h2>
+<h2>MomentumScore v20.0.2 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -2198,12 +2209,26 @@ function developmentPortfolioRows(){
       const best=valid.slice().sort((a,b)=>b.returnPct-a.returnPct)[0]||null;
       const worst=valid.slice().sort((a,b)=>a.returnPct-b.returnPct)[0]||null;
       const excess=Number.isFinite(result.value)&&Number.isFinite(indexReturn)?result.value-indexReturn:NaN;
-      out.push({snapshot,model,result,indexReturn,excess,winners,best,worst})
+      const periods=['day','week','month','start'];
+      const returns=Object.fromEntries(periods.map(p=>[p,portfolioPeriodReturn(snapshot,model,p)]));
+      const indexReturns=Object.fromEntries(periods.map(p=>[p,benchmarkReturnForSnapshot(snapshot,p)]));
+      const excessReturns=Object.fromEntries(periods.map(p=>[
+        p,
+        Number.isFinite(returns[p])&&Number.isFinite(indexReturns[p])?returns[p]-indexReturns[p]:NaN
+      ]));
+      out.push({snapshot,model,result,indexReturn,excess,winners,best,worst,returns,indexReturns,excessReturns})
     }
   }
   out.sort((a,b)=>{
-    if(sort==='return')return (Number.isFinite(b.result.value)?b.result.value:-Infinity)-(Number.isFinite(a.result.value)?a.result.value:-Infinity);
-    if(sort==='excess')return (Number.isFinite(b.excess)?b.excess:-Infinity)-(Number.isFinite(a.excess)?a.excess:-Infinity);
+    const diff=(bv,av)=>(Number.isFinite(bv)?bv:-Infinity)-(Number.isFinite(av)?av:-Infinity);
+    if(sort==='day')return diff(b.returns.day,a.returns.day);
+    if(sort==='weekReturn')return diff(b.returns.week,a.returns.week);
+    if(sort==='month')return diff(b.returns.month,a.returns.month);
+    if(sort==='return')return diff(b.returns.start,a.returns.start);
+    if(sort==='excessDay')return diff(b.excessReturns.day,a.excessReturns.day);
+    if(sort==='excessWeek')return diff(b.excessReturns.week,a.excessReturns.week);
+    if(sort==='excessMonth')return diff(b.excessReturns.month,a.excessReturns.month);
+    if(sort==='excess')return diff(b.excessReturns.start,a.excessReturns.start);
     if(sort==='winners')return b.winners-a.winners;
     return String(b.snapshot.savedAt).localeCompare(String(a.snapshot.savedAt))
   });
@@ -2239,22 +2264,14 @@ function renderDevelopmentPortfolios(){
     ['Bästa hittills',best?`${portfolioModelName(best.model)} ${signed(best.ret,' %')}`:'–']
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
 
-  table.innerHTML='<tr><th>Vecka</th><th>Modell</th><th>Start</th><th>Dagar</th><th>Portfölj</th><th>Index</th><th>Över/under</th><th>Vinnare</th><th>Bäst</th><th>Sämst</th></tr>'+
-    data.map((x,i)=>{
-      const days=Math.max(0,Math.floor((Date.now()-new Date(x.snapshot.savedAt).getTime())/86400000));
-      return `<tr class="portfolio-row" data-portfolio-index="${i}">
-        <td><b>${x.snapshot.weekKey}</b></td>
+  table.innerHTML='<tr><th>Vecka</th><th>Modell</th><th>Dag</th><th>Vecka</th><th>Månad</th><th>Sedan start</th><th>Mot OMX dag</th><th>Mot OMX vecka</th><th>Mot OMX månad</th><th>Mot OMX start</th><th>Vinnare</th></tr>'+
+    data.map((x,i)=>`<tr class="portfolio-row" data-portfolio-index="${i}">
+        <td><b>${x.snapshot.weekKey}</b><br><small>${dateFmt(x.snapshot.savedAt)}</small></td>
         <td>${portfolioModelName(x.model)}</td>
-        <td>${dateFmt(x.snapshot.savedAt)}</td>
-        <td>${days}</td>
-        <td class="${portfolioReturnClass(x.result.value)}">${signed(x.result.value,' %')}</td>
-        <td class="${portfolioReturnClass(x.indexReturn)}">${signed(x.indexReturn,' %')}</td>
-        <td class="${portfolioReturnClass(x.excess)}"><b>${signed(x.excess,' p.e.')}</b></td>
+        ${['day','week','month','start'].map(p=>`<td class="${portfolioReturnClass(x.returns[p])}"><b>${signed(x.returns[p],' %')}</b></td>`).join('')}
+        ${['day','week','month','start'].map(p=>`<td class="${portfolioReturnClass(x.excessReturns[p])}"><b>${signed(x.excessReturns[p],' p.e.')}</b></td>`).join('')}
         <td>${x.winners}/${x.result.available}</td>
-        <td>${x.best?`${x.best.ticker} ${signed(x.best.returnPct,' %')}`:'–'}</td>
-        <td>${x.worst?`${x.worst.ticker} ${signed(x.worst.returnPct,' %')}`:'–'}</td>
-      </tr>`
-    }).join('');
+      </tr>`).join('');
 
   table.querySelectorAll('.portfolio-row').forEach(row=>{
     row.onclick=()=>openDevelopmentPortfolio(Number(row.dataset.portfolioIndex))
@@ -2271,24 +2288,32 @@ function openDevelopmentPortfolio(index){
     ?(medianReturns.length%2?medianReturns[(medianReturns.length-1)/2]:(medianReturns[medianReturns.length/2-1]+medianReturns[medianReturns.length/2])/2)
     :NaN;
   document.getElementById('devPortfolioDetailSummary').innerHTML=[
-    ['Portfölj',signed(x.result.value,' %')],
-    ['Index',signed(x.indexReturn,' %')],
-    ['Över/under',signed(x.excess,' p.e.')],
+    ['Portfölj idag',signed(x.returns.day,' %')],
+    ['Mot OMX idag',signed(x.excessReturns.day,' p.e.')],
+    ['Portfölj vecka',signed(x.returns.week,' %')],
+    ['Mot OMX vecka',signed(x.excessReturns.week,' p.e.')],
+    ['Portfölj månad',signed(x.returns.month,' %')],
+    ['Mot OMX månad',signed(x.excessReturns.month,' p.e.')],
+    ['Sedan start',signed(x.returns.start,' %')],
+    ['Mot OMX start',signed(x.excessReturns.start,' p.e.')],
     ['Vinnare',`${x.winners}/${x.result.available}`],
-    ['Medianaktie',signed(median,' %')],
-    ['Startdatum',dateFmt(x.snapshot.savedAt)]
+    ['Medianaktie',signed(median,' %')]
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
 
   document.getElementById('devPortfolioMembersTable').innerHTML=
-    '<tr><th>Rank</th><th>Ticker</th><th>Bolag</th><th>Startkurs</th><th>Nuvarande</th><th>Avkastning</th><th>Blå</th><th>Vit</th><th>Snitt</th></tr>'+
-    x.result.memberReturns.slice().sort((a,b)=>(Number.isFinite(b.returnPct)?b.returnPct:-Infinity)-(Number.isFinite(a.returnPct)?a.returnPct:-Infinity)).map(m=>`<tr>
-      <td>${m.rank}</td><td><b>${m.ticker}</b></td><td>${m.company}</td>
-      <td>${fmt(m.startPrice)}</td><td>${fmt(m.currentPrice)}</td>
-      <td class="${portfolioReturnClass(m.returnPct)}"><b>${signed(m.returnPct,' %')}</b></td>
-      <td>${scoreLinkHtml(rowIndexForMember(m),m.blueScore,'blue',Number.isFinite(m.blueScore),false)}</td>
-      <td>${scoreLinkHtml(rowIndexForMember(m),m.whiteScore,'white',Number.isFinite(m.whiteScore),false)}</td>
-      <td>${scoreLinkHtml(rowIndexForMember(m),m.averageScore,'average',Number.isFinite(m.averageScore),false)}</td>
-    </tr>`).join('');
+    '<tr><th>Rank</th><th>Ticker</th><th>Bolag</th><th>Dag</th><th>Vecka</th><th>Månad</th><th>Sedan start</th><th>Mot OMX start</th><th>Blå</th><th>Vit</th><th>Snitt</th></tr>'+
+    x.result.memberReturns.slice().sort((a,b)=>(Number.isFinite(b.returnPct)?b.returnPct:-Infinity)-(Number.isFinite(a.returnPct)?a.returnPct:-Infinity)).map(m=>{
+      const vals=Object.fromEntries(['day','week','month','start'].map(p=>[p,holdingPeriodReturn(m,p)]));
+      const relative=Number.isFinite(vals.start)&&Number.isFinite(x.indexReturns.start)?vals.start-x.indexReturns.start:NaN;
+      return `<tr>
+        <td>${m.rank}</td><td><b>${m.ticker}</b></td><td>${m.company}</td>
+        ${['day','week','month','start'].map(p=>`<td class="${portfolioReturnClass(vals[p])}"><b>${signed(vals[p],' %')}</b></td>`).join('')}
+        <td class="${portfolioReturnClass(relative)}"><b>${signed(relative,' p.e.')}</b></td>
+        <td>${scoreLinkHtml(rowIndexForMember(m),m.blueScore,'blue',Number.isFinite(m.blueScore),false)}</td>
+        <td>${scoreLinkHtml(rowIndexForMember(m),m.whiteScore,'white',Number.isFinite(m.whiteScore),false)}</td>
+        <td>${scoreLinkHtml(rowIndexForMember(m),m.averageScore,'average',Number.isFinite(m.averageScore),false)}</td>
+      </tr>`
+    }).join('');
   bindScoreHistoryLinks(detail);detail.scrollIntoView({behavior:'smooth',block:'start'})
 }
 
@@ -2405,8 +2430,9 @@ function developmentSortValue(x,key,period,benchmark){
     return num(x.r.ma200)
   }
   if(key==='rsi')return num(x.r.rsi14);
-  if(key==='excess'){
-    const value=x.values[period],index=benchmark[period];
+  if(key.startsWith('excess-')){
+    const excessPeriod=key.slice(7);
+    const value=x.values[excessPeriod],index=benchmark[excessPeriod];
     return Number.isFinite(value)&&Number.isFinite(index)?value-index:NaN
   }
   if(['day','week','month','year'].includes(key))return x.values[key];
@@ -2455,7 +2481,16 @@ function renderDevelopment(){
   });
 
   document.getElementById('developmentBenchmarkReference').innerHTML=benchmarkReferenceHtml('SE',benchmark);
-  const sortName={company:'Bolag',current:developmentAnalysisMode==='price'?'Kurs idag':developmentAnalysisMode==='score'?'Poäng idag':'Kurs/MA200',day:'Dag',week:'Vecka',month:'Månad',year:'År',excess:'Mot OMXSPI',rsi:'RSI'}[developmentActiveSort]||periodLabel(period);
+  const sortName={
+    company:'Bolag',
+    current:developmentAnalysisMode==='price'?'Kurs idag':developmentAnalysisMode==='score'?'Poäng idag':'Kurs/MA200',
+    day:'Dag',week:'Vecka',month:'Månad',year:'År',
+    'excess-day':'Mot OMXSPI dag',
+    'excess-week':'Mot OMXSPI vecka',
+    'excess-month':'Mot OMXSPI månad',
+    'excess-year':'Mot OMXSPI år',
+    rsi:'RSI'
+  }[developmentActiveSort]||periodLabel(period);
   document.getElementById('developmentOverviewSummary').innerHTML=[
     ['Vy',developmentAnalysisMode==='price'?'Kursutveckling':developmentAnalysisMode==='score'?'Poängutveckling':'Teknisk data'],
     ['Sortering',sortName],
@@ -2468,13 +2503,23 @@ function renderDevelopment(){
   const th=(key,label)=>`<th class="sortable-head${active(key)}" data-development-sort="${key}">${label}</th>`;
   const valueText=v=>developmentAnalysisMode==='score'?dailyDeltaText(v):signed(v,developmentAnalysisMode==='technical'?' p.e.':' %');
   const currentHeader=developmentAnalysisMode==='price'?'Kurs idag':developmentAnalysisMode==='score'?`${modelLabel(model)} idag`:'Kurs/MA200 idag';
-  table.innerHTML='<tr>'+th('company','Bolag')+'<th>Ticker</th>'+th('current',currentHeader)+th('day','Dag')+th('week','Vecka')+th('month','Månad')+th('year','År')+(developmentAnalysisMode==='price'?th('excess','Mot OMXSPI '+periodLabel(period)):'')+th('rsi','RSI')+'</tr>'+list.map(x=>{
+  const excessHeaders=developmentAnalysisMode==='price'
+    ?['day','week','month','year'].map(p=>th('excess-'+p,'Mot OMX '+periodLabel(p))).join('')
+    :'';
+  table.innerHTML='<tr>'+th('company','Bolag')+'<th>Ticker</th>'+th('current',currentHeader)+th('day','Dag')+th('week','Vecka')+th('month','Månad')+th('year','År')+excessHeaders+th('rsi','RSI')+'</tr>'+list.map(x=>{
       const current=developmentAnalysisMode==='price'?fmt(num(x.r.price)):developmentAnalysisMode==='score'?modelScoreText(x.selected,model):`${fmt(num(x.r.ma200))} %`;
-      const excess=developmentAnalysisMode==='price'&&Number.isFinite(x.values[period])&&Number.isFinite(benchmark[period])?x.values[period]-benchmark[period]:NaN;
+      const excessValues=Object.fromEntries(['day','week','month','year'].map(p=>[
+        p,
+        developmentAnalysisMode==='price'&&Number.isFinite(x.values[p])&&Number.isFinite(benchmark[p])
+          ?x.values[p]-benchmark[p]
+          :NaN
+      ]));
       return `<tr class="development-row" data-i="${x.i}">
         <td>${x.r.company||''}</td><td>${x.r.ticker||''}</td><td><b>${current}</b></td>
         ${['day','week','month','year'].map(p=>`<td class="${classByValue(x.values[p])}"><b>${valueText(x.values[p])}</b></td>`).join('')}
-        ${developmentAnalysisMode==='price'?`<td class="${classByValue(excess)}"><b>${signed(excess,' p.e.')}</b></td>`:''}
+        ${developmentAnalysisMode==='price'
+          ?['day','week','month','year'].map(p=>`<td class="${classByValue(excessValues[p])}"><b>${signed(excessValues[p],' p.e.')}</b></td>`).join('')
+          :''}
         <td class="${rsiClass(num(x.r.rsi14))}">${fmt(num(x.r.rsi14))}</td>
       </tr>`
     }).join('');
@@ -5277,10 +5322,16 @@ function renderWeeklyResultMode(s){
   }));
   const indexVals=Object.fromEntries(periods.map(p=>[p,benchmarkReturnForSnapshot(s,p)]));
   rowsOut.push({name:`📈 ${s.benchmarkSymbol}`,vals:indexVals,index:true});
-  table.innerHTML='<tr><th>Modell</th><th>Dag</th><th>Vecka</th><th>Månad</th><th>Sedan start</th><th>Över/under index sedan start</th></tr>'+
+  table.innerHTML='<tr><th>Modell</th><th>Dag</th><th>Vecka</th><th>Månad</th><th>Sedan start</th><th>Mot OMX dag</th><th>Mot OMX vecka</th><th>Mot OMX månad</th><th>Mot OMX start</th></tr>'+
     rowsOut.map(x=>{
-      const excess=x.index?NaN:x.vals.start-indexVals.start;
-      return `<tr class="${x.index?'benchmark-row':''}"><td>${x.name}</td>${periods.map(p=>`<td class="${classByValue(x.vals[p])}">${signed(x.vals[p],' %')}</td>`).join('')}<td class="${classByValue(excess)}">${x.index?'–':signed(excess,' p.e.')}</td></tr>`
+      const excessVals=Object.fromEntries(periods.map(p=>[
+        p,
+        x.index||!Number.isFinite(x.vals[p])||!Number.isFinite(indexVals[p])?NaN:x.vals[p]-indexVals[p]
+      ]));
+      return `<tr class="${x.index?'benchmark-row':''}"><td>${x.name}</td>
+        ${periods.map(p=>`<td class="${classByValue(x.vals[p])}">${signed(x.vals[p],' %')}</td>`).join('')}
+        ${periods.map(p=>`<td class="${classByValue(excessVals[p])}">${x.index?'–':signed(excessVals[p],' p.e.')}</td>`).join('')}
+      </tr>`
     }).join('');
   document.getElementById('weeklyDetail').innerHTML='<p class="note">Resultat visar portföljernas egen utveckling och OMXSPI för samma perioder. Sista kolumnen visar över- eller underavkastning sedan portföljstart.</p>'
 }
