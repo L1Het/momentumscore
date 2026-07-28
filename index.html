@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.0</title>
+<title>MomentumScore v20.1</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -232,11 +232,21 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .analysis-table th:nth-child(2),.analysis-table td:nth-child(2){text-align:left}
 .benchmark-row{background:rgba(157,124,255,.08);font-weight:800}
 
+
+.app-health-banner{margin:10px 14px;padding:10px 12px;border:1px solid var(--red);border-radius:10px;background:rgba(255,90,90,.10);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.app-health-banner.hidden{display:none}
+.app-health-banner span{flex:1;min-width:240px}
+.app-health-banner button{padding:6px 10px}
 </style>
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.0 – utveckling och indexjämförelse</h1>
+<h1>MomentumScore v20.1 – stabiliserad kodbas</h1>
+<div id="appHealthBanner" class="app-health-banner hidden" role="status">
+  <b id="appHealthTitle">Programvarning</b>
+  <span id="appHealthText"></span>
+  <button type="button" id="dismissAppHealth" class="secondary">Dölj</button>
+</div>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -1076,7 +1086,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v20.0 – regler och analys</h2>
+<h2>MomentumScore v20.1 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -1114,6 +1124,8 @@ Kursens avstånd till MA200: max 33,33 p · MA50:s avstånd till MA200: max 33,3
 <div class="rowcard"><b>Vit – platåprincip</b><br>
 Full poäng ges i faktorernas historiskt bästa intervall. Utanför intervallet faller poängen mjukt mot noll. Ett extremt högt trendvärde ger därför inte automatiskt högre poäng.</div>
 <div id="whitePlateauRules" class="plateau-grid"></div>
+<div class="rowcard"><b>Stabiliserad kodbas v20.1</b><br>
+Alla händelser kopplas genom en gemensam säker bindningsfunktion. Saknade eller borttagna element kan inte längre stoppa hela appen. Startvyer renderas isolerat, globala fel visas diskret och databaskontrollen granskar HTML-id:n, kärnelement och aktiva UI-bindningar. Föråldrad Utveckling-detaljkod har tagits bort.</div>
 <div class="rowcard"><b>Ny Utveckling</b><br>
 Utveckling delas i Kursutveckling, Poängutveckling och Teknisk data. Varje vy visar dag, vecka, månad och år samtidigt. Fokusperioden styr sorteringen. OMXSPI visas som fast referens och kursvyn visar varje akties över- eller underavkastning mot index.</div>
 <div class="rowcard"><b>Veckoportföljer mot OMXSPI</b><br>
@@ -1580,6 +1592,14 @@ function databaseHealth(){
   const missingRsi=rows.filter(r=>!Number.isFinite(num(r.rsi14))).map(r=>r.ticker||r.company);
   return{companies,histories,marketPoints,transactions,priceDays,storageBytes,missingSymbols,shortHistory,missingRsi};
 }
+
+function codeHealthAudit(){
+  const allIds=[...document.querySelectorAll('[id]')].map(el=>el.id);
+  const duplicateIds=[...new Set(allIds.filter((id,index)=>allIds.indexOf(id)!==index))];
+  const missingCore=['dashboardTable','scoreTable','topTable','developmentOverviewTable','weeklyAnalysisTable','detailModal','input','marketStatus'].filter(id=>!byId(id));
+  return{duplicateIds,missingCore,bindings:uiBindingRegistry.length,ok:duplicateIds.length===0&&missingCore.length===0}
+}
+
 function renderDatabaseHealth(){
   const h=databaseHealth();
   const line=(ok,text)=>`${ok?'✅':'⚠️'} ${text}`;
@@ -1591,7 +1611,16 @@ function renderDatabaseHealth(){
     line(true,`${h.transactions} transaktioner`),line(h.storageBytes<4200000,`Databasstorlek ${(h.storageBytes/1024/1024).toFixed(2)} MB`),
     line(!h.missingSymbols.length,h.missingSymbols.length?`${h.missingSymbols.length} bolag saknar Yahoo-symbol: ${h.missingSymbols.join(', ')}`:'Alla bolag har Yahoo-symbol'),
     line(!h.shortHistory.length,h.shortHistory.length?`${h.shortHistory.length} bolag har ännu inte 263 handelsdagar`:'Alla bolag har tillräcklig historik för MA200-trend'),
-    line(!h.missingRsi.length,h.missingRsi.length?`${h.missingRsi.length} bolag saknar RSI`:'Alla bolag har RSI')
+    line(!h.missingRsi.length,h.missingRsi.length?`${h.missingRsi.length} bolag saknar RSI`:'Alla bolag har RSI'),
+    ...(()=>{
+      const c=codeHealthAudit();
+      return[
+        line(c.ok,`Kodkontroll: ${c.ok?'OK':'varningar finns'}`),
+        line(!c.duplicateIds.length,c.duplicateIds.length?`Dubbla HTML-id:n: ${c.duplicateIds.join(', ')}`:'Inga dubbla HTML-id:n'),
+        line(!c.missingCore.length,c.missingCore.length?`Saknade kärnelement: ${c.missingCore.join(', ')}`:'Alla kärnelement finns'),
+        line(true,`${c.bindings} säkra UI-bindningar aktiva`)
+      ]
+    })()
   ].join('<br>');
 }
 function restoreLocalBackup(){
@@ -2454,35 +2483,6 @@ function renderDevelopment(){
     }).join('');
   document.querySelectorAll('.development-row').forEach(row=>row.onclick=()=>openDetail(Number(row.dataset.i)));
 }
-function openDevelopmentDetail(i){
-  const r=rows[i];
-  if(!r)return;
-  const hist=developmentHistory(r),m=developmentMetrics(r);
-  document.getElementById('developmentDetail').classList.remove('hidden');
-  document.getElementById('developmentDetailTitle').textContent=`${r.ticker||''} ${r.company||''}`.trim();
-  document.getElementById('developmentDetailSummary').innerHTML=[
-    ['Datapunkter',m.points],
-    ['Kursutveckling',signed(m.priceAll,' %')],
-    ['Kurs/MA200 förändring',signed(m.maAll,' p.e.')],
-    ['Poängförändring',signed(m.scoreAll,' p')],['RSI 14',fmt(m.currentRsi)],['RSI-förändring',signed(m.rsiAll,' p')]
-  ].map(([a,b],idx)=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
-  document.getElementById('priceChart').innerHTML=miniChart(hist,'price');
-  document.getElementById('ma200Chart').innerHTML=miniChart(hist,'ma200');
-  document.getElementById('scoreChart').innerHTML=miniChart(hist,'score');
-  document.getElementById('rsiChart').innerHTML=miniChart(hist,'rsi14');
-  document.getElementById('developmentTable').innerHTML='<tr><th>Datum</th><th>Kurs</th><th>Kursförändring</th><th>Kurs/MA200</th><th>MA200-förändring</th><th>RSI 14</th><th>RSI-förändring</th><th>Poäng</th><th>Poängförändring</th></tr>'+
-    hist.slice().reverse().map((x,revIndex)=>{
-      const originalIndex=hist.length-1-revIndex;
-      const prev=originalIndex>0?hist[originalIndex-1]:null;
-      const pCh=prev?changePct(num(prev.price),num(x.price)):NaN;
-      const mCh=prev?num(x.ma200)-num(prev.ma200):NaN;
-      const sCh=prev?num(x.score)-num(prev.score):NaN;
-      const rCh=prev?num(x.rsi14)-num(prev.rsi14):NaN;
-      return `<tr><td>${new Date(x.savedAt).toLocaleString('sv-SE')}</td><td>${fmt(num(x.price))}</td><td class="${classByValue(pCh)}">${signed(pCh,' %')}</td><td>${fmt(num(x.ma200))} %</td><td class="${classByValue(mCh)}">${signed(mCh,' p.e.')}</td><td class="${rsiClass(num(x.rsi14))}">${fmt(num(x.rsi14))}</td><td class="${classByValue(rCh)}">${signed(rCh,' p')}</td><td>${fmt(num(x.score))}</td><td class="${classByValue(sCh)}">${signed(sCh,' p')}</td></tr>`;
-    }).join('');
-  document.getElementById('developmentDetail').scrollIntoView({behavior:'smooth',block:'start'});
-}
-
 function normalizedIdentity(value){
   return String(value||'')
     .trim()
@@ -5356,7 +5356,8 @@ async function updateBenchmarksForMarkets(markets,status){
 }
 
 async function updateAllPrices(silent=false){
-  const btn=document.getElementById('updatePrices'),status=document.getElementById('marketStatus');
+  const btn=byId('updatePrices'),status=byId('marketStatus');
+  if(!btn||!status)return;
   btn.disabled=true;status.textContent='Förbereder uppdatering av '+rows.length+' bolag…';await new Promise(resolve=>setTimeout(resolve,50));
   const beforeAll=cloneJson(rows);
   const localBackupCreated=savePreUpdateBackup();
@@ -5416,41 +5417,121 @@ function maybeAutoUpdate(){
   if(!last||Date.now()-last>=hours*3600000)updateAllPrices(true);
 }
 
-document.querySelectorAll('.type-choice').forEach(b=>b.onclick=()=>setCompanyType(b.dataset.companyType));
-setCompanyType(document.getElementById('companyType').value||'regular');
-document.querySelectorAll('.tab[data-tab]').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));ids.forEach(k=>document.getElementById(k).addEventListener('input',renderPreview));
-function refreshAutoYahooSymbol(){document.getElementById('yahooSymbol').value=inferYahooSymbol(document.getElementById('ticker').value,document.getElementById('market').value)}
-document.getElementById('ticker').addEventListener('input',refreshAutoYahooSymbol);
-document.getElementById('market').addEventListener('change',refreshAutoYahooSymbol);document.getElementById('save').onclick=save;document.getElementById('clearForm').onclick=clearForm;document.getElementById('newQuarter').onclick=quarter;document.getElementById('searchAll').oninput=render;document.getElementById('ownershipFilter').onchange=render;document.getElementById('modelFilter').onchange=render;document.getElementById('scoreMarketFilter').onchange=render;document.getElementById('sortField').onchange=render;
-document.getElementById('simpleScoreView').onclick=()=>{scoreView='simple';document.getElementById('simpleScoreView').classList.add('active');document.getElementById('analysisScoreView').classList.remove('active');render()};
-document.getElementById('analysisScoreView').onclick=()=>{scoreView='analysis';document.getElementById('analysisScoreView').classList.add('active');document.getElementById('simpleScoreView').classList.remove('active');render()};document.getElementById('topFilter').onchange=renderTop;document.getElementById('topModel').onchange=renderTop;document.getElementById('developmentStocksMode').onclick=()=>setDevelopmentMode('stocks');
-document.getElementById('developmentPortfoliosMode').onclick=()=>setDevelopmentMode('portfolios');
-document.getElementById('devPortfolioModel').onchange=renderDevelopmentPortfolios;
-document.getElementById('devPortfolioSort').onchange=renderDevelopmentPortfolios;
-document.getElementById('closeDevPortfolioDetail').onclick=()=>document.getElementById('devPortfolioDetail').classList.add('hidden');
-document.getElementById('developmentSearch').oninput=renderDevelopment;
-document.getElementById('dashboardSearch').oninput=renderDashboard;document.getElementById('dashboardModel').onchange=renderDashboard;
-document.getElementById('dashboardFilter').onchange=renderDashboard;document.getElementById('dashboardMarket').onchange=renderDashboard;
-document.getElementById('dashboardSort').onchange=renderDashboard;
-document.getElementById('dashboardDirection').onchange=renderDashboard;
 
-function initializeScoreHistoryUI(){
-  const closeButton=document.getElementById('closeScoreHistory');
-  const overlay=document.getElementById('scoreHistoryOverlay');
-  if(closeButton)closeButton.onclick=closeScoreHistory;
-  if(overlay)overlay.onclick=e=>{if(e.target===overlay)closeScoreHistory()};
+const uiBindingRegistry=[];
+function byId(id){return document.getElementById(id)}
+function bindUI(id,event,handler,options){
+  const el=byId(id);
+  if(!el){
+    console.warn(`[UI] Element saknas: #${id} för ${event}`);
+    return false
+  }
+  el.addEventListener(event,handler,options);
+  uiBindingRegistry.push({id,event});
+  return true
 }
-initializeScoreHistoryUI();
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeScoreHistory()});
+function bindSelector(selector,event,handler){
+  const elements=[...document.querySelectorAll(selector)];
+  elements.forEach(el=>el.addEventListener(event,handler));
+  return elements.length
+}
+function reportAppIssue(area,error){
+  const banner=byId('appHealthBanner'),title=byId('appHealthTitle'),text=byId('appHealthText');
+  if(!banner||!text)return;
+  if(title)title.textContent='En del av appen kunde inte köras';
+  text.textContent=`${area}: ${error?.message||error||'okänt fel'}. Övriga delar fortsätter fungera.`;
+  banner.classList.remove('hidden')
+}
+function safeCall(name,fn){
+  try{return fn()}
+  catch(error){
+    console.error(`[${name}]`,error);
+    reportAppIssue(name,error);
+    return undefined
+  }
+}
+function refreshAutoYahooSymbol(){
+  const yahoo=byId('yahooSymbol'),ticker=byId('ticker'),market=byId('market');
+  if(yahoo&&ticker&&market)yahoo.value=inferYahooSymbol(ticker.value,market.value)
+}
+function initializeScoreHistoryUI(){
+  bindUI('closeScoreHistory','click',closeScoreHistory);
+  bindUI('scoreHistoryOverlay','click',e=>{if(e.target===e.currentTarget)closeScoreHistory()})
+}
+function initializeApplicationUI(){
+  bindSelector('.type-choice','click',e=>setCompanyType(e.currentTarget.dataset.companyType));
+  bindSelector('.tab[data-tab]','click',e=>showTab(e.currentTarget.dataset.tab));
+  ids.forEach(id=>bindUI(id,'input',renderPreview));
 
-document.getElementById('input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&e.target.tagName==='INPUT'){e.preventDefault();save()}});
+  bindUI('ticker','input',refreshAutoYahooSymbol);
+  bindUI('market','change',refreshAutoYahooSymbol);
+  bindUI('save','click',save);
+  bindUI('clearForm','click',clearForm);
+  bindUI('newQuarter','click',quarter);
+  bindUI('searchAll','input',render);
+  bindUI('ownershipFilter','change',render);
+  bindUI('modelFilter','change',render);
+  bindUI('scoreMarketFilter','change',render);
+  bindUI('sortField','change',render);
 
-document.getElementById('developmentOwnership').onchange=renderDevelopment;document.getElementById('developmentQualification').onchange=renderDevelopment;
-document.getElementById('developmentDirection').onchange=renderDevelopment;
-document.getElementById('developmentPeriod').onchange=renderDevelopment;
-document.getElementById('developmentAnalysisModel').onchange=renderDevelopment;
-document.querySelectorAll('.dev-analysis-choice').forEach(b=>b.onclick=()=>setDevelopmentAnalysisMode(b.dataset.devAnalysis));
-document.getElementById('closeDevelopmentDetail').onclick=()=>document.getElementById('developmentDetail').classList.add('hidden');document.getElementById('closeDetail').onclick=()=>document.getElementById('detailModal').classList.remove('open');document.getElementById('detailEdit').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex)};document.getElementById('detailNewQuarter').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex);quarter()};document.getElementById('detailPeUpdate').onclick=()=>document.getElementById('peTool').classList.remove('hidden');document.getElementById('cancelPeUpdate').onclick=()=>document.getElementById('peTool').classList.add('hidden');document.getElementById('newPrice').oninput=pePreview;document.getElementById('savePeUpdate').onclick=savePe;document.getElementById('txType').onchange=reasonUI;document.getElementById('saveTx').onclick=saveTx;document.getElementById('wipe').onclick=()=>{if(confirm('Radera allt?')){rows=[];persist();render()}};async function exportBackup(){
+  bindUI('simpleScoreView','click',()=>{
+    scoreView='simple';
+    byId('simpleScoreView')?.classList.add('active');
+    byId('analysisScoreView')?.classList.remove('active');
+    render()
+  });
+  bindUI('analysisScoreView','click',()=>{
+    scoreView='analysis';
+    byId('analysisScoreView')?.classList.add('active');
+    byId('simpleScoreView')?.classList.remove('active');
+    render()
+  });
+
+  bindUI('topFilter','change',renderTop);
+  bindUI('topModel','change',renderTop);
+  bindUI('developmentStocksMode','click',()=>setDevelopmentMode('stocks'));
+  bindUI('developmentPortfoliosMode','click',()=>setDevelopmentMode('portfolios'));
+  bindUI('devPortfolioModel','change',renderDevelopmentPortfolios);
+  bindUI('devPortfolioSort','change',renderDevelopmentPortfolios);
+  bindUI('closeDevPortfolioDetail','click',()=>byId('devPortfolioDetail')?.classList.add('hidden'));
+  bindUI('developmentSearch','input',renderDevelopment);
+  bindUI('developmentOwnership','change',renderDevelopment);
+  bindUI('developmentQualification','change',renderDevelopment);
+  bindUI('developmentDirection','change',renderDevelopment);
+  bindUI('developmentPeriod','change',renderDevelopment);
+  bindUI('developmentAnalysisModel','change',renderDevelopment);
+  bindSelector('.dev-analysis-choice','click',e=>setDevelopmentAnalysisMode(e.currentTarget.dataset.devAnalysis));
+
+  bindUI('dashboardSearch','input',renderDashboard);
+  bindUI('dashboardModel','change',renderDashboard);
+  bindUI('dashboardFilter','change',renderDashboard);
+  bindUI('dashboardMarket','change',renderDashboard);
+  bindUI('dashboardSort','change',renderDashboard);
+  bindUI('dashboardDirection','change',renderDashboard);
+
+  initializeScoreHistoryUI();
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeScoreHistory()});
+  bindUI('input','keydown',e=>{
+    if(e.key==='Enter'&&!e.shiftKey&&e.target.tagName==='INPUT'){
+      e.preventDefault();
+      save()
+    }
+  });
+
+  bindUI('closeDetail','click',()=>byId('detailModal')?.classList.remove('open'));
+  bindUI('detailEdit','click',()=>{byId('detailModal')?.classList.remove('open');editRow(detailIndex)});
+  bindUI('detailNewQuarter','click',()=>{byId('detailModal')?.classList.remove('open');editRow(detailIndex);quarter()});
+  bindUI('detailPeUpdate','click',()=>byId('peTool')?.classList.remove('hidden'));
+  bindUI('cancelPeUpdate','click',()=>byId('peTool')?.classList.add('hidden'));
+  bindUI('newPrice','input',pePreview);
+  bindUI('savePeUpdate','click',savePe);
+  bindUI('txType','change',reasonUI);
+  bindUI('saveTx','click',saveTx);
+  bindUI('wipe','click',()=>{if(confirm('Radera allt?')){rows=[];persist();render()}});
+  bindUI('dismissAppHealth','click',()=>byId('appHealthBanner')?.classList.add('hidden'))
+}
+
+async function exportBackup(){
   const suggested='Levande-aktier-'+new Date().toISOString().slice(0,10)+'.json';
   const content=JSON.stringify({
     format:'MomentumScoreBackup',
@@ -5482,7 +5563,6 @@ document.getElementById('closeDevelopmentDetail').onclick=()=>document.getElemen
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
   toast('Säkerhetskopian laddades ner');
 }
-document.getElementById('exportBtn').onclick=exportBackup;
 
 function extractImportedRows(parsed){
   if(Array.isArray(parsed))return parsed;
@@ -5591,64 +5671,85 @@ async function importSelectedFile(file){
   setImportStatus(`Import klar: ${rows.length} bolag. ${Object.keys(benchmarkHistories).length?'Jämförelseindex följde med.':'Jämförelseindex saknas – kör kursuppdatering för full uppföljning.'} ${weeklyPortfolios.length?weeklyPortfolios.length+' veckoportföljer återställdes. ':''}${result.skipped.length?result.skipped.length+' dubbletter hoppades över. ':''}${uiErrors.length?'Visningsvarning: '+uiErrors.join(' · '):''}`,uiErrors.length>0);
   toast(`Import klar: ${rows.length} bolag`);
 }
-document.getElementById('saveWeeklyNow').onclick=()=>createWeeklySnapshot(false,false);
-document.getElementById('exportWeeklyCsv').onclick=exportWeeklyPortfoliosCsv;
-document.getElementById('deleteWeeklySnapshot').onclick=deleteSelectedWeeklySnapshot;
-document.getElementById('weeklySnapshotSelect').onchange=renderWeeklyPortfolios;
-document.getElementById('weeklyPeriod').onchange=renderWeeklyPortfolios;
-document.getElementById('weeklyHoldingsModel').onchange=renderWeeklyPortfolios;
-document.querySelectorAll('.weekly-analysis-choice').forEach(b=>b.onclick=()=>setWeeklyAnalysisMode(b.dataset.weeklyAnalysis));
-document.getElementById('weeklyBenchmarkMarket').onchange=()=>{weeklyPersist();renderWeeklyPortfolios()};
-document.getElementById('weeklyAutoSave').onchange=weeklyPersist;
-document.getElementById('chooseImportFile').onclick=()=>document.getElementById('importFile').click();
-document.getElementById('importFile').addEventListener('change',async e=>{
-  const input=e.target,file=input.files?.[0];
-  if(!file)return;
-  try{
-    await importSelectedFile(file);
-  }catch(err){
-    setImportStatus('Importen misslyckades: '+(err.message||'okänt fel'),true);
-    alert('Importen misslyckades: '+(err.message||'okänt fel'));
-    console.error(err);
-  }finally{
-    input.value='';
-  }
-});
-const oldPipelineButton=document.getElementById('runFullPipeline');
-if(oldPipelineButton)oldPipelineButton.onclick=runFullPipeline;
-document.getElementById('applyIntervalsToWhite').onclick=updateWhitePlateausFromIntervals;
-document.getElementById('resetWhitePlateaus').onclick=resetWhitePlateaus;
-document.getElementById('runOneEngine').onclick=runOneEngine;
-document.getElementById('exportOneEngine').onclick=exportOneEngine;
-document.getElementById('resetOneEngine').onclick=resetOneEngine;
-const oldExportPipeline=document.getElementById('exportPipelineBundle'); if(oldExportPipeline)oldExportPipeline.onclick=exportPipelineBundle;
-const oldClearPipeline=document.getElementById('clearPipelineCache'); if(oldClearPipeline)oldClearPipeline.onclick=clearPipelineCache;
-document.getElementById('runVit3Optimizer').onclick=runVit3Optimizer;
-document.getElementById('exportVit3Json').onclick=exportVit3Json;
-document.getElementById('buildVit3Draft').onclick=buildVit3Draft;
-document.getElementById('runCurveOptimizer').onclick=runCurveOptimizer;
-document.getElementById('exportCurveJson').onclick=exportCurveJson;
-document.getElementById('buildCurveDraft').onclick=buildCurveDraft;
-document.getElementById('runIntervalOptimizer').onclick=runIntervalOptimizer;
-document.getElementById('exportIntervalJson').onclick=exportIntervalJson;
-document.getElementById('buildIntervalDraft').onclick=buildIntervalDraft;
-document.getElementById('runOptimizer').onclick=runOptimizer;
-document.getElementById('exportOptimizerJson').onclick=exportOptimizerJson;
-document.getElementById('applyOptimizerDraft').onclick=buildOptimizerDraft;
-document.getElementById('runAutoLab').onclick=runAutoLab;
-document.getElementById('exportAutoLabJson').onclick=exportAutoLabJson;
-document.getElementById('exportAutoLabCsv').onclick=exportAutoLabCsv;
-document.getElementById('labMode').onchange=toggleLaboratoryMode;
-document.getElementById('runLaboratory').onclick=runLaboratory;
-document.getElementById('exportLaboratoryCsv').onclick=exportLaboratoryCsv;
-document.getElementById('saveSettings').onclick=saveMarketSettings;document.getElementById('checkDatabase').onclick=renderDatabaseHealth;document.getElementById('restoreLocalBackup').onclick=restoreLocalBackup;document.getElementById('updatePrices').onclick=()=>updateAllPrices(false);for(const [name,fn] of [
+
+function initializeFeatureBindings(){
+  bindUI('exportBtn','click',exportBackup);
+  bindUI('saveWeeklyNow','click',()=>createWeeklySnapshot(false,false));
+  bindUI('exportWeeklyCsv','click',exportWeeklyPortfoliosCsv);
+  bindUI('deleteWeeklySnapshot','click',deleteSelectedWeeklySnapshot);
+  bindUI('weeklySnapshotSelect','change',renderWeeklyPortfolios);
+  bindUI('weeklyPeriod','change',renderWeeklyPortfolios);
+  bindUI('weeklyHoldingsModel','change',renderWeeklyPortfolios);
+  bindSelector('.weekly-analysis-choice','click',e=>setWeeklyAnalysisMode(e.currentTarget.dataset.weeklyAnalysis));
+  bindUI('weeklyBenchmarkMarket','change',()=>{weeklyPersist();renderWeeklyPortfolios()});
+  bindUI('weeklyAutoSave','change',weeklyPersist);
+
+  bindUI('chooseImportFile','click',()=>byId('importFile')?.click());
+  bindUI('importFile','change',async e=>{
+    const input=e.target,file=input.files?.[0];
+    if(!file)return;
+    try{await importSelectedFile(file)}
+    catch(err){
+      setImportStatus('Importen misslyckades: '+(err.message||'okänt fel'),true);
+      alert('Importen misslyckades: '+(err.message||'okänt fel'));
+      console.error(err)
+    }finally{input.value=''}
+  });
+
+  bindUI('runFullPipeline','click',runFullPipeline);
+  bindUI('applyIntervalsToWhite','click',updateWhitePlateausFromIntervals);
+  bindUI('resetWhitePlateaus','click',resetWhitePlateaus);
+  bindUI('runOneEngine','click',runOneEngine);
+  bindUI('exportOneEngine','click',exportOneEngine);
+  bindUI('resetOneEngine','click',resetOneEngine);
+  bindUI('exportPipelineBundle','click',exportPipelineBundle);
+  bindUI('clearPipelineCache','click',clearPipelineCache);
+  bindUI('runVit3Optimizer','click',runVit3Optimizer);
+  bindUI('exportVit3Json','click',exportVit3Json);
+  bindUI('buildVit3Draft','click',buildVit3Draft);
+  bindUI('runCurveOptimizer','click',runCurveOptimizer);
+  bindUI('exportCurveJson','click',exportCurveJson);
+  bindUI('buildCurveDraft','click',buildCurveDraft);
+  bindUI('runIntervalOptimizer','click',runIntervalOptimizer);
+  bindUI('exportIntervalJson','click',exportIntervalJson);
+  bindUI('buildIntervalDraft','click',buildIntervalDraft);
+  bindUI('runOptimizer','click',runOptimizer);
+  bindUI('exportOptimizerJson','click',exportOptimizerJson);
+  bindUI('applyOptimizerDraft','click',buildOptimizerDraft);
+  bindUI('runAutoLab','click',runAutoLab);
+  bindUI('exportAutoLabJson','click',exportAutoLabJson);
+  bindUI('exportAutoLabCsv','click',exportAutoLabCsv);
+  bindUI('labMode','change',toggleLaboratoryMode);
+  bindUI('runLaboratory','click',runLaboratory);
+  bindUI('exportLaboratoryCsv','click',exportLaboratoryCsv);
+
+  bindUI('saveSettings','click',saveMarketSettings);
+  bindUI('checkDatabase','click',renderDatabaseHealth);
+  bindUI('restoreLocalBackup','click',restoreLocalBackup);
+  bindUI('updatePrices','click',()=>updateAllPrices(false))
+}
+function initializeApplication(){
+  initializeApplicationUI();
+  initializeFeatureBindings();
+  safeCall('Bolagstyp',()=>setCompanyType(byId('companyType')?.value||'regular'));
+  safeCall('Utvecklingsläge',()=>setDevelopmentAnalysisMode('price'));
+  safeCall('Veckoanalys',()=>setWeeklyAnalysisMode('result'))
+}
+initializeApplication();
+
+window.addEventListener('error',event=>reportAppIssue('JavaScript',event.error||event.message));
+window.addEventListener('unhandledrejection',event=>reportAppIssue('Asynkron funktion',event.reason));
+
+for(const [name,fn] of [
   ['Poäng/översikt',()=>render()],
   ['Förhandsvisning',()=>renderPreview()],
   ['Inställningar',()=>renderMarketSettings()],
   ['Dashboard',()=>renderDashboard()],
-  ['Databaskontroll',()=>renderDatabaseHealth()]
+  ['Databaskontroll',()=>renderDatabaseHealth()],
+  ['Utveckling',()=>renderDevelopment()],
+  ['Veckoportföljer',()=>renderWeeklyPortfolios()]
 ]){
-  try{fn()}catch(e){console.error('Startfel i '+name,e)}
+  safeCall(name,fn)
 }
 try{
   const cachedEngine=(()=>{try{return JSON.parse(localStorage.getItem(ONE_ENGINE_CACHE_KEY)||'null')}catch{return null}})();
