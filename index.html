@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v19.9</title>
+<title>MomentumScore v20.0</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -221,11 +221,22 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 }
 
 
+
+.analysis-switch{display:flex;gap:8px;flex-wrap:wrap}
+.analysis-switch button.active{box-shadow:0 0 0 2px rgba(157,124,255,.55) inset;background:rgba(157,124,255,.12)}
+.analysis-reference{border:1px solid var(--line);border-radius:12px;padding:12px;background:rgba(255,255,255,.025)}
+.analysis-reference h3{margin:0 0 8px}
+.analysis-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.analysis-table th,.analysis-table td{text-align:right}
+.analysis-table th:nth-child(1),.analysis-table td:nth-child(1),
+.analysis-table th:nth-child(2),.analysis-table td:nth-child(2){text-align:left}
+.benchmark-row{background:rgba(157,124,255,.08);font-weight:800}
+
 </style>
 </head>
 <body>
 <header>
-<h1>MomentumScore v19.9 – korrekt P/E-startbas</h1>
+<h1>MomentumScore v20.0 – utveckling och indexjämförelse</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -379,120 +390,36 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 
   <div id="developmentStocksView">
     <div class="card">
-      <div class="searchbar">
-        <div>
-          <label>Sök bolag</label>
-          <input id="developmentSearch" type="search" autocomplete="off" placeholder="Bolagsnamn eller ticker...">
-        </div>
-        <div>
-          <label>Ägande</label>
-          <select id="developmentOwnership">
-            <option value="all">Alla</option>
-            <option value="owned">Ägs nu</option>
-            <option value="notOwned">Ägs inte</option>
-          </select>
-        </div>
-        <div>
-          <label>Grundregler</label>
-          <select id="developmentQualification">
-            <option value="all">Alla</option>
-            <option value="qualified">Kvalificerade</option>
-            <option value="unqualified">Ej kvalificerade</option>
-          </select>
-        </div>
-        <div>
-          <label>Historik</label>
-          <select id="developmentHistoryFilter">
-            <option value="all">Alla</option>
-            <option value="2">Minst 2 datapunkter</option>
-            <option value="7">Minst 7 datapunkter</option>
-            <option value="30">Minst 30 datapunkter</option>
-          </select>
-        </div>
-        <div>
-          <label>Sortera på</label>
-          <select id="developmentSort">
-            <option value="scoreAverage" selected>🟣 Snittpoäng</option>
-            <option value="scoreBlue">🔵 Blå poäng</option>
-            <option value="scoreWhite">⚪ Vit poäng</option>
-            <option value="deltaBlue">Δ 🔵 Blå dag</option>
-            <option value="deltaWhite">Δ ⚪ Vit dag</option>
-            <option value="deltaAverage">Δ 🟣 Snitt dag</option>
-            <option value="price1">Kurs 1 dag</option>
-            <option value="price7">Kurs 1 vecka</option>
-            <option value="price30">Kurs 1 månad</option>
-            <option value="priceChange">Kurs sedan start</option>
-            <option value="maChange">Kurs/MA200-utveckling</option>
-            <option value="rsi">RSI</option>
-            <option value="rsiChange">RSI-förändring</option>
-            <option value="company">Bolag</option>
-            <option value="updated">Senast uppdaterad</option>
-          </select>
-        </div>
-        <div>
-          <label>Ordning</label>
-          <select id="developmentDirection">
-            <option value="desc" selected>Högst / bäst överst</option>
-            <option value="asc">Lägst / sämst överst</option>
-          </select>
-        </div>
+      <div class="analysis-switch">
+        <button type="button" class="secondary dev-analysis-choice active" data-dev-analysis="price">Kursutveckling</button>
+        <button type="button" class="secondary dev-analysis-choice" data-dev-analysis="score">Poängutveckling</button>
+        <button type="button" class="secondary dev-analysis-choice" data-dev-analysis="technical">Teknisk data</button>
+      </div>
+      <div class="searchbar" style="margin-top:12px">
+        <div><label>Sök bolag</label><input id="developmentSearch" type="search" autocomplete="off" placeholder="Bolagsnamn eller ticker..."></div>
+        <div><label>Ägande</label><select id="developmentOwnership"><option value="all">Alla</option><option value="owned">Ägs nu</option><option value="notOwned">Ägs inte</option></select></div>
+        <div><label>Grundregler</label><select id="developmentQualification"><option value="all">Alla</option><option value="qualified">Kvalificerade</option><option value="unqualified">Ej kvalificerade</option></select></div>
+        <div id="developmentModelWrap" class="hidden"><label>Poängmodell</label><select id="developmentAnalysisModel"><option value="blue">🔵 Blå</option><option value="white">⚪ Vit</option><option value="average" selected>🟣 Snitt</option></select></div>
+        <div><label>Fokusperiod</label><select id="developmentPeriod"><option value="day">Dag</option><option value="week">Vecka</option><option value="month" selected>Månad</option><option value="year">År</option></select></div>
+        <div><label>Ordning</label><select id="developmentDirection"><option value="desc" selected>Högst / bäst överst</option><option value="asc">Lägst / sämst överst</option></select></div>
       </div>
     </div>
 
+    <div id="developmentBenchmarkReference" class="analysis-reference"></div>
     <div id="developmentOverviewSummary" class="summary"></div>
-
-    <div class="card tablewrap">
-      <table id="developmentOverviewTable"></table>
-    </div>
-
-    <div id="developmentDetail" class="card hidden">
-      <div class="actions" style="justify-content:space-between;align-items:center">
-        <h2 id="developmentDetailTitle" style="margin:0">Utvecklingsdetaljer</h2>
-        <button class="secondary" id="closeDevelopmentDetail">Stäng</button>
-      </div>
-      <div id="developmentDetailSummary" class="summary"></div>
-      <div class="dev-grid">
-        <div class="chartbox"><h3>Kursutveckling</h3><div id="priceChart"></div></div>
-        <div class="chartbox"><h3>Kurs / MA200-utveckling</h3><div id="ma200Chart"></div></div>
-        <div class="chartbox"><h3>Poängutveckling</h3><div id="scoreChart"></div></div>
-        <div class="chartbox"><h3>RSI 14-utveckling</h3><div id="rsiChart"></div></div>
-      </div>
-      <div class="tablewrap" style="margin-top:12px"><table id="developmentTable"></table></div>
-    </div>
-
-    <p class="note">Översikten visar alla bolag samtidigt. Du kan sortera på aktuell Blå-, Vit- eller Snittpoäng, daglig förändring i alla tre modellerna samt kurs- och teknikmått. Välj Högst/bäst eller Lägst/sämst överst. Klickar du på samma kolumnrubrik igen växlar ordningen automatiskt.</p>
+    <div class="card tablewrap"><table id="developmentOverviewTable" class="analysis-table"></table></div>
+    <p class="note">Välj Kursutveckling, Poängutveckling eller Teknisk data. Tabellen visar dag, vecka, månad och år samtidigt. Fokusperioden styr sortering och sammanfattning. OMXSPI visas som referens för samma perioder.</p>
   </div>
 
   <div id="developmentPortfoliosView" class="hidden">
     <div class="card">
       <div class="searchbar">
-        <div>
-          <label>Modell</label>
-          <select id="devPortfolioModel">
-            <option value="all" selected>Alla tre</option>
-            <option value="blue">🔵 Blå</option>
-            <option value="white">⚪ Vit</option>
-            <option value="average">🟣 Snitt</option>
-          </select>
-        </div>
-        <div>
-          <label>Sortering</label>
-          <select id="devPortfolioSort">
-            <option value="week" selected>Nyaste vecka</option>
-            <option value="return">Högst portföljavkastning</option>
-            <option value="excess">Högst överavkastning</option>
-            <option value="winners">Flest vinnare</option>
-          </select>
-        </div>
+        <div><label>Modell</label><select id="devPortfolioModel"><option value="all" selected>Alla tre</option><option value="blue">🔵 Blå</option><option value="white">⚪ Vit</option><option value="average">🟣 Snitt</option></select></div>
+        <div><label>Sortering</label><select id="devPortfolioSort"><option value="week" selected>Nyaste vecka</option><option value="return">Högst portföljavkastning</option><option value="excess">Högst överavkastning</option><option value="winners">Flest vinnare</option></select></div>
       </div>
     </div>
-
     <div id="devPortfolioSummary" class="summary"></div>
-
-    <div class="card tablewrap">
-      <table id="devPortfolioTable"></table>
-    </div>
-
+    <div class="card tablewrap"><table id="devPortfolioTable"></table></div>
     <div id="devPortfolioDetail" class="card hidden">
       <div class="actions" style="justify-content:space-between;align-items:center">
         <h2 id="devPortfolioDetailTitle" style="margin:0">Portföljdetaljer</h2>
@@ -501,8 +428,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
       <div id="devPortfolioDetailSummary" class="summary"></div>
       <div class="tablewrap" style="margin-top:12px"><table id="devPortfolioMembersTable"></table></div>
     </div>
-
-    <p class="note">Varje rad är en fryst Top 10-portfölj från en viss vecka. Klicka på raden för att se de tio aktiernas utveckling, bästa och sämsta innehav samt utfallet mot index.</p>
+    <p class="note">Varje rad är en fryst Top 10-portfölj från en viss vecka. Klicka på raden för att se de tio aktiernas utveckling och utfallet mot index.</p>
   </div>
 </section>
 
@@ -510,50 +436,30 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 
 <section id="weekly" class="panel">
   <div class="card">
-    <h2>Veckoportföljer – Top 10</h2>
-    <p class="note">En likaviktad Top 10-portfölj sparas för Blå, Vit och Snitt en gång per kalendervecka. Innehaven låses på sparningsdagen och följs därefter mot valt börsindex.</p>
-    <div class="searchbar">
-      <div>
-        <label>Jämförelseindex</label>
-        <select id="weeklyBenchmarkMarket">
-          <option value="SE" selected>Stockholm – OMXSPI</option>
-          <option value="DK">Köpenhamn – OMXC25</option>
-          <option value="NO">Oslo – OSEAX</option>
-          <option value="FI">Helsingfors – OMXHPI</option>
-          <option value="IS">Reykjavik – OMXIPI</option>
-        </select>
-      </div>
-      <div>
-        <label>Visa vecka</label>
-        <select id="weeklySnapshotSelect"></select>
-      </div>
-      <div>
-        <label>Automatisk veckosparning</label>
-        <select id="weeklyAutoSave">
-          <option value="on" selected>På – efter kursuppdatering</option>
-          <option value="off">Av</option>
-        </select>
-      </div>
+    <div class="analysis-switch">
+      <button type="button" class="secondary weekly-analysis-choice active" data-weekly-analysis="result">Resultat</button>
+      <button type="button" class="secondary weekly-analysis-choice" data-weekly-analysis="comparison">Modelljämförelse</button>
+      <button type="button" class="secondary weekly-analysis-choice" data-weekly-analysis="holdings">Innehav</button>
+    </div>
+    <div class="searchbar" style="margin-top:12px">
+      <div><label>Jämförelseindex</label><select id="weeklyBenchmarkMarket"><option value="SE" selected>Stockholm – OMXSPI</option><option value="DK">Köpenhamn – OMXC25</option><option value="NO">Oslo – OSEAX</option><option value="FI">Helsingfors – OMXHPI</option><option value="IS">Reykjavik – OMXIPI</option></select></div>
+      <div><label>Visa vecka</label><select id="weeklySnapshotSelect"></select></div>
+      <div id="weeklyModelWrap" class="hidden"><label>Visa innehav</label><select id="weeklyHoldingsModel"><option value="blue">🔵 Blå</option><option value="white">⚪ Vit</option><option value="average" selected>🟣 Snitt</option></select></div>
+      <div><label>Fokusperiod</label><select id="weeklyPeriod"><option value="day">Dag</option><option value="week">Vecka</option><option value="month" selected>Månad</option><option value="start">Sedan start</option></select></div>
+      <div><label>Automatisk veckosparning</label><select id="weeklyAutoSave"><option value="on" selected>På – efter kursuppdatering</option><option value="off">Av</option></select></div>
     </div>
     <div class="actions" style="margin-top:12px">
       <button id="saveWeeklyNow">Spara veckans Top 10 nu</button>
       <button class="secondary" id="exportWeeklyCsv">Exportera uppföljning CSV</button>
       <button class="secondary" id="deleteWeeklySnapshot">Radera vald vecka</button>
     </div>
-    <div id="weeklyStatus" class="note" style="margin-top:8px">Ingen veckoportfölj sparad ännu.</div>
+    <div id="weeklyStatus" class="note" style="margin-top:8px"></div>
   </div>
 
+  <div id="weeklyBenchmarkReference" class="analysis-reference"></div>
   <div id="weeklySummary" class="summary"></div>
-
-  <div class="card tablewrap">
-    <h3>Historisk uppföljning mot börsen</h3>
-    <table id="weeklyHistoryTable"></table>
-  </div>
-
-  <div class="card">
-    <h3 id="weeklyDetailTitle">Vald vecka</h3>
-    <div id="weeklyDetail"></div>
-  </div>
+  <div class="card tablewrap"><table id="weeklyAnalysisTable" class="analysis-table"></table></div>
+  <div class="card"><h3 id="weeklyDetailTitle">Vald vecka</h3><div id="weeklyDetail"></div></div>
 </section>
 
 <section id="laboratory" class="panel">
@@ -1170,7 +1076,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v19.9 – regler och analys</h2>
+<h2>MomentumScore v20.0 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -1208,6 +1114,10 @@ Kursens avstånd till MA200: max 33,33 p · MA50:s avstånd till MA200: max 33,3
 <div class="rowcard"><b>Vit – platåprincip</b><br>
 Full poäng ges i faktorernas historiskt bästa intervall. Utanför intervallet faller poängen mjukt mot noll. Ett extremt högt trendvärde ger därför inte automatiskt högre poäng.</div>
 <div id="whitePlateauRules" class="plateau-grid"></div>
+<div class="rowcard"><b>Ny Utveckling</b><br>
+Utveckling delas i Kursutveckling, Poängutveckling och Teknisk data. Varje vy visar dag, vecka, månad och år samtidigt. Fokusperioden styr sorteringen. OMXSPI visas som fast referens och kursvyn visar varje akties över- eller underavkastning mot index.</div>
+<div class="rowcard"><b>Veckoportföljer mot OMXSPI</b><br>
+Veckoportföljer delas i Resultat, Modelljämförelse och Innehav. Resultat visar Blå, Vit, Snitt och OMXSPI för dag, vecka, månad och sedan start. Modelljämförelse visar träffprocent och genomsnittlig överavkastning mot OMXSPI. Innehav visar varje akties egen utveckling och relativa utveckling mot index.</div>
 <div class="rowcard"><b>Automatiskt aktuellt P/E</b><br>
 När ett P/E-tal sparas lagras samtidigt aktiekursen som P/E-bas. För äldre bolag hämtas startbasen från befintligt P/E och kursen vid den senaste manuella inmatningen av samma P/E-tal i historiken – inte från dagens kurs. Därefter räknas aktuellt P/E som bas-P/E × aktuell kurs / baskurs. Det beräknade värdet används i Blås P/E-poäng, grundregel och Snittpoäng, men visas endast när aktien öppnas.</div>
 <div class="rowcard"><b>Klickbar poänghistorik</b><br>
@@ -1567,6 +1477,8 @@ function updateWhitePlateausFromIntervals(){
   saveWhitePlateaus(cfg);
   renderAll();
   renderWhitePlateauRules();
+  setDevelopmentAnalysisMode('price');
+  setWeeklyAnalysisMode('result');
   renderWeeklyPortfolios();
   alert('Vit-platåerna har uppdaterats. Faktorer och vikter är fortfarande fasta 1:1:1.')
 }
@@ -2380,6 +2292,105 @@ function openDevelopmentPortfolio(index){
   bindScoreHistoryLinks(detail);detail.scrollIntoView({behavior:'smooth',block:'start'})
 }
 
+
+let developmentAnalysisMode='price';
+let weeklyAnalysisMode='result';
+
+function setDevelopmentAnalysisMode(mode){
+  developmentAnalysisMode=['price','score','technical'].includes(mode)?mode:'price';
+  document.querySelectorAll('.dev-analysis-choice').forEach(b=>b.classList.toggle('active',b.dataset.devAnalysis===developmentAnalysisMode));
+  document.getElementById('developmentModelWrap')?.classList.toggle('hidden',developmentAnalysisMode!=='score');
+  renderDevelopment()
+}
+function setWeeklyAnalysisMode(mode){
+  weeklyAnalysisMode=['result','comparison','holdings'].includes(mode)?mode:'result';
+  document.querySelectorAll('.weekly-analysis-choice').forEach(b=>b.classList.toggle('active',b.dataset.weeklyAnalysis===weeklyAnalysisMode));
+  document.getElementById('weeklyModelWrap')?.classList.toggle('hidden',weeklyAnalysisMode!=='holdings');
+  renderWeeklyPortfolios()
+}
+function historyCloseAtOffset(history,offset){
+  const h=(Array.isArray(history)?history:[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  if(!h.length)return NaN;
+  const idx=Math.max(0,h.length-1-offset);
+  return num(h[idx]?.close)
+}
+function benchmarkPeriodReturns(market){
+  const h=benchmarkHistories[market]||[];
+  return{
+    day:returnAtOffset(h,1),
+    week:returnAtOffset(h,5),
+    month:returnAtOffset(h,21),
+    year:returnAtOffset(h,252)
+  }
+}
+function scoreAtDaysAgo(r,model,days){
+  const points=scoreHistoryByDay(r);
+  if(!points.length)return NaN;
+  const latest=new Date(points[points.length-1].date+'T12:00:00').getTime();
+  const target=latest-days*86400000;
+  let found=null;
+  for(const p of points){
+    if(new Date(p.date+'T12:00:00').getTime()<=target)found=p;
+    else break
+  }
+  return found?num(found[model]):NaN
+}
+function scorePeriodChanges(r,model,current){
+  const change=days=>{
+    const old=scoreAtDaysAgo(r,model,days);
+    return Number.isFinite(old)&&Number.isFinite(current)?current-old:NaN
+  };
+  return{day:change(1),week:change(7),month:change(30),year:change(365)}
+}
+function pricePeriodReturns(r){
+  const h=Array.isArray(r.priceHistory)?r.priceHistory:[];
+  return{day:returnAtOffset(h,1),week:returnAtOffset(h,5),month:returnAtOffset(h,21),year:returnAtOffset(h,252)}
+}
+function technicalPeriodChanges(r){
+  const hist=developmentHistory(r),current=num(r.ma200);
+  const oldAt=days=>{
+    if(!hist.length)return NaN;
+    const latest=new Date(hist[hist.length-1].savedAt).getTime(),target=latest-days*86400000;
+    let p=null;
+    for(const x of hist){if(new Date(x.savedAt).getTime()<=target)p=x;else break}
+    return p?num(p.ma200):NaN
+  };
+  const change=days=>{const old=oldAt(days);return Number.isFinite(current)&&Number.isFinite(old)?current-old:NaN};
+  return{day:change(1),week:change(7),month:change(30),year:change(365)}
+}
+function periodLabel(key){return({day:'Dag',week:'Vecka',month:'Månad',year:'År',start:'Sedan start'}[key]||key)}
+function benchmarkReferenceHtml(market,periods){
+  return `<h3>📈 ${benchmarkSymbol(market)} som referens</h3><div class="analysis-grid">${[
+    ['Dag',periods.day],['Vecka',periods.week],['Månad',periods.month],['År',periods.year]
+  ].map(([a,b])=>`<div class="metric"><small>${a}</small><b class="${classByValue(b)}">${signed(b,' %')}</b></div>`).join('')}</div>`
+}
+function rowReturnAtPeriod(r,period){
+  const vals=pricePeriodReturns(r);return vals[period]
+}
+function portfolioPeriodReturn(snapshot,model,period){
+  if(period==='start')return weeklyPortfolioReturn(snapshot,model).value;
+  const members=snapshot.portfolios?.[model]?.members||[];
+  const vals=members.map(m=>{
+    const row=rows.find(r=>(r.ticker||'').toUpperCase()===(m.ticker||'').toUpperCase()&&(r.market||'SE')===(m.market||'SE'));
+    return row?rowReturnAtPeriod(row,period):NaN
+  }).filter(Number.isFinite);
+  return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:NaN
+}
+function benchmarkReturnForSnapshot(snapshot,period){
+  if(period==='start')return weeklyBenchmarkReturn(snapshot);
+  const market=snapshot.benchmarkMarket||'SE';
+  return benchmarkPeriodReturns(market)[period]
+}
+function holdingPeriodReturn(m,period){
+  const row=rows.find(r=>(r.ticker||'').toUpperCase()===(m.ticker||'').toUpperCase()&&(r.market||'SE')===(m.market||'SE'));
+  if(!row)return NaN;
+  if(period==='start'){
+    const current=num(row.price);
+    return Number.isFinite(current)&&Number.isFinite(num(m.startPrice))&&num(m.startPrice)!==0?(current/num(m.startPrice)-1)*100:NaN
+  }
+  return rowReturnAtPeriod(row,period)
+}
+
 function developmentSortModel(sort){
   if(sort==='scoreBlue'||sort==='deltaBlue')return 'blue';
   if(sort==='scoreWhite'||sort==='deltaWhite')return 'white';
@@ -2390,123 +2401,58 @@ function renderDevelopment(){
   const q=(document.getElementById('developmentSearch')?.value||'').toLowerCase();
   const own=document.getElementById('developmentOwnership')?.value||'all';
   const qual=document.getElementById('developmentQualification')?.value||'all';
-  const histMin=Number(document.getElementById('developmentHistoryFilter')?.value||0);
-  const sort=document.getElementById('developmentSort')?.value||'scoreAverage';
+  const period=document.getElementById('developmentPeriod')?.value||'month';
   const direction=document.getElementById('developmentDirection')?.value||'desc';
-  const statusModel=developmentSortModel(sort);
+  const model=document.getElementById('developmentAnalysisModel')?.value||'average';
+  const benchmark=benchmarkPeriodReturns('SE');
 
   let list=rows.map((r,i)=>{
     const blue=calc(r),white=whiteCalc(r),average=averageScoreFromResults(blue,white);
-    const s=selectedModelValues(r,statusModel),m=developmentMetrics(r);
-    const deltas=dailyScoreDeltas(r,blue,white,average);
-    return{r,i,s,h:holdings(r),m,blue,white,average,deltas}
+    const selected=model==='blue'?blue.total:model==='white'?white.total:average;
+    const values=developmentAnalysisMode==='price'
+      ?pricePeriodReturns(r)
+      :developmentAnalysisMode==='score'
+        ?scorePeriodChanges(r,model,selected)
+        :technicalPeriodChanges(r);
+    return{r,i,blue,white,average,selected,values,h:holdings(r)}
   });
-
   if(q)list=list.filter(x=>`${x.r.ticker||''} ${x.r.company||''}`.toLowerCase().includes(q));
   if(own==='owned')list=list.filter(x=>x.h.shares>0);
   if(own==='notOwned')list=list.filter(x=>x.h.shares<=0);
-  if(qual==='qualified')list=list.filter(x=>x.s.qualified);
-  if(qual==='unqualified')list=list.filter(x=>!x.s.qualified&&x.s.dataReady);
-  if(histMin)list=list.filter(x=>x.m.points>=histMin);
+  if(qual==='qualified')list=list.filter(x=>x.blue.qualified);
+  if(qual==='unqualified')list=list.filter(x=>!x.blue.qualified);
 
-  const numericValue=(x,key)=>{
-    if(key==='scoreBlue')return x.blue.total;
-    if(key==='scoreWhite')return x.white.total;
-    if(key==='scoreAverage')return x.average;
-    if(key==='deltaBlue')return x.deltas.blue;
-    if(key==='deltaWhite')return x.deltas.white;
-    if(key==='deltaAverage')return x.deltas.average;
-    if(key==='price1')return x.m.price1;
-    if(key==='price7')return x.m.price7;
-    if(key==='price30')return x.m.price30;
-    if(key==='priceChange')return x.m.priceAll;
-    if(key==='maChange')return x.m.maAll;
-    if(key==='rsi')return x.m.currentRsi;
-    if(key==='rsiChange')return x.m.rsiAll;
-    if(key==='updated')return new Date(x.r.updatedAt||0).getTime();
-    return NaN
-  };
-  const multiplier=direction==='asc'?1:-1;
-
+  const mult=direction==='asc'?1:-1;
   list.sort((a,b)=>{
-    if(sort==='company'){
-      const cmp=(a.r.company||'').localeCompare(b.r.company||'','sv');
-      return direction==='asc'?cmp:-cmp
-    }
-    const av=numericValue(a,sort),bv=numericValue(b,sort);
-    const aValid=Number.isFinite(av),bValid=Number.isFinite(bv);
-    if(aValid&&!bValid)return -1;
-    if(!aValid&&bValid)return 1;
-    if(!aValid&&!bValid)return 0;
-    return (av-bv)*multiplier
+    const av=a.values[period],bv=b.values[period];
+    if(Number.isFinite(av)&&!Number.isFinite(bv))return -1;
+    if(!Number.isFinite(av)&&Number.isFinite(bv))return 1;
+    if(!Number.isFinite(av)&&!Number.isFinite(bv))return 0;
+    return (av-bv)*mult
   });
 
-  const statusName=statusModel==='blue'?'Blå':statusModel==='white'?'Vit':'Snitt';
-  const orderName=direction==='asc'?'Sämst/lägst överst':'Bäst/högst överst';
+  document.getElementById('developmentBenchmarkReference').innerHTML=benchmarkReferenceHtml('SE',benchmark);
   document.getElementById('developmentOverviewSummary').innerHTML=[
+    ['Vy',developmentAnalysisMode==='price'?'Kursutveckling':developmentAnalysisMode==='score'?'Poängutveckling':'Teknisk data'],
+    ['Fokusperiod',periodLabel(period)],
     ['Visade bolag',list.length],
-    ['Status/radfärg från',statusName],
-    ['Ordning',orderName],
-    ['Blå upp idag',list.filter(x=>x.deltas.blue>0).length],
-    ['Vit upp idag',list.filter(x=>x.deltas.white>0).length],
-    ['Snitt upp idag',list.filter(x=>x.deltas.average>0).length]
+    ['Över OMXSPI',developmentAnalysisMode==='price'?list.filter(x=>Number.isFinite(x.values[period])&&Number.isFinite(benchmark[period])&&x.values[period]>benchmark[period]).length:'–']
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
 
-  const active=s=>sort===s?' active-sort'+(direction==='asc'?' sort-asc':''):'';
-  table.innerHTML='<tr>'+
-    `<th>Ticker</th><th>Bolag</th>
-     <th class="sortable-head${active('scoreBlue')}" data-dev-sort="scoreBlue">🔵 Blå</th>
-     <th class="sortable-head${active('scoreWhite')}" data-dev-sort="scoreWhite">⚪ Vit</th>
-     <th class="sortable-head${active('scoreAverage')}" data-dev-sort="scoreAverage">🟣 Snitt</th>
-     <th>Status</th>
-     <th class="sortable-head${active('deltaBlue')}" data-dev-sort="deltaBlue">Δ 🔵 dag</th>
-     <th class="sortable-head${active('deltaWhite')}" data-dev-sort="deltaWhite">Δ ⚪ dag</th>
-     <th class="sortable-head${active('deltaAverage')}" data-dev-sort="deltaAverage">Δ 🟣 dag</th>
-     <th>Kurs</th>
-     <th class="sortable-head${active('price1')}" data-dev-sort="price1">1 dag</th>
-     <th class="sortable-head${active('price7')}" data-dev-sort="price7">1 vecka</th>
-     <th class="sortable-head${active('price30')}" data-dev-sort="price30">1 månad</th>
-     <th class="sortable-head${active('priceChange')}" data-dev-sort="priceChange">Sedan start</th>
-     <th>Kurs/MA200</th>
-     <th class="sortable-head${active('maChange')}" data-dev-sort="maChange">MA200-utv.</th>
-     <th class="sortable-head${active('rsi')}" data-dev-sort="rsi">RSI 14</th>
-     <th>Datapunkter</th><th>Senast uppdaterad</th>
-    </tr>`+
-  list.map(x=>`<tr class="development-row ${scoreRowClass(x.s.score,x.s.dataReady)}" data-i="${x.i}" style="cursor:pointer">
-      <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td>
-      <td class="model-blue">${scoreLinkHtml(x.i,x.blue.total,'blue',true,true)}</td>
-      <td class="model-white">${scoreLinkHtml(x.i,x.white.total,'white',x.white.dataReady,true)}</td>
-      <td>${scoreLinkHtml(x.i,x.average,'average',x.white.dataReady,true)}</td>
-      <td class="${scoreStatusClass(x.s.score,x.s.dataReady)}">${x.s.rating}</td>
-      <td class="${classByValue(x.deltas.blue)}"><b>${dailyDeltaText(x.deltas.blue)}</b></td>
-      <td class="${classByValue(x.deltas.white)}"><b>${dailyDeltaText(x.deltas.white)}</b></td>
-      <td class="${classByValue(x.deltas.average)}"><b>${dailyDeltaText(x.deltas.average)}</b></td>
-      <td>${fmt(x.m.currentPrice)}</td>
-      <td class="${classByValue(x.m.price1)}">${dailyPriceText(x.m.price1)}</td>
-      <td class="${classByValue(x.m.price7)}">${signed(x.m.price7,' %')}</td>
-      <td class="${classByValue(x.m.price30)}">${signed(x.m.price30,' %')}</td>
-      <td class="${classByValue(x.m.priceAll)}"><b>${signed(x.m.priceAll,' %')}</b></td>
-      <td>${fmt(x.m.currentMa)} %</td>
-      <td class="${classByValue(x.m.maAll)}">${signed(x.m.maAll,' p.e.')}</td>
-      <td class="${rsiClass(x.m.currentRsi)}"><b>${fmt(x.m.currentRsi)}</b></td>
-      <td>${x.m.points}</td><td>${dateFmt(x.r.updatedAt)}</td>
-    </tr>`).join('');
-
-  table.querySelectorAll('[data-dev-sort]').forEach(th=>{
-    th.onclick=e=>{
-      e.stopPropagation();
-      const select=document.getElementById('developmentSort');
-      const directionSelect=document.getElementById('developmentDirection');
-      if(select.value===th.dataset.devSort){
-        directionSelect.value=directionSelect.value==='desc'?'asc':'desc'
-      }else{
-        select.value=th.dataset.devSort;
-        directionSelect.value='desc'
-      }
-      renderDevelopment()
-    }
-  });
-  document.querySelectorAll('.development-row').forEach(row=>row.onclick=()=>openDevelopmentDetail(Number(row.dataset.i)));bindScoreHistoryLinks(document.getElementById('developmentOverviewTable'));
+  const valueText=v=>developmentAnalysisMode==='score'?dailyDeltaText(v):signed(v,developmentAnalysisMode==='technical'?' p.e.':' %');
+  const currentHeader=developmentAnalysisMode==='price'?'Kurs':developmentAnalysisMode==='score'?`${modelLabel(model)} idag`:'Kurs/MA200';
+  table.innerHTML=`<tr><th>Ticker</th><th>Bolag</th><th>${currentHeader}</th><th>Dag</th><th>Vecka</th><th>Månad</th><th>År</th>${developmentAnalysisMode==='price'?'<th>Mot OMXSPI '+periodLabel(period)+'</th>':''}<th>RSI</th></tr>`+
+    list.map(x=>{
+      const current=developmentAnalysisMode==='price'?fmt(num(x.r.price)):developmentAnalysisMode==='score'?modelScoreText(x.selected,model):`${fmt(num(x.r.ma200))} %`;
+      const excess=developmentAnalysisMode==='price'&&Number.isFinite(x.values[period])&&Number.isFinite(benchmark[period])?x.values[period]-benchmark[period]:NaN;
+      return `<tr class="development-row" data-i="${x.i}">
+        <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td><td><b>${current}</b></td>
+        ${['day','week','month','year'].map(p=>`<td class="${classByValue(x.values[p])}"><b>${valueText(x.values[p])}</b></td>`).join('')}
+        ${developmentAnalysisMode==='price'?`<td class="${classByValue(excess)}"><b>${signed(excess,' p.e.')}</b></td>`:''}
+        <td class="${rsiClass(num(x.r.rsi14))}">${fmt(num(x.r.rsi14))}</td>
+      </tr>`
+    }).join('');
+  document.querySelectorAll('.development-row').forEach(row=>row.onclick=()=>openDetail(Number(row.dataset.i)));
 }
 function openDevelopmentDetail(i){
   const r=rows[i];
@@ -5279,80 +5225,98 @@ function renderWeeklyPortfolios(){
     :'<option value="">Ingen sparad vecka</option>';
   if(old&&weeklyPortfolios.some(s=>s.id===old))select.value=old;
 
-  const status=document.getElementById('weeklyStatus');
-  status.textContent=weeklyPortfolios.length
-    ?`${weeklyPortfolios.length} veckor sparade. Ny vecka sparas automatiskt efter första lyckade kursuppdateringen.`
+  document.getElementById('weeklyStatus').textContent=weeklyPortfolios.length
+    ?`${weeklyPortfolios.length} veckor sparade. OMXSPI och portföljerna visas med egen utveckling och relativ utveckling.`
     :'Ingen veckoportfölj sparad ännu.';
 
-  const modelRows=[];
-  for(const s of weeklyPortfolios){
-    const indexRet=weeklyBenchmarkReturn(s);
-    for(const model of ['blue','white','average']){
-      const p=weeklyPortfolioReturn(s,model);
-      modelRows.push({s,model,p,indexRet,excess:Number.isFinite(p.value)&&Number.isFinite(indexRet)?p.value-indexRet:NaN})
-    }
+  const s=weeklyPortfolios.find(x=>x.id===select.value)||weeklyPortfolios[0];
+  const period=document.getElementById('weeklyPeriod')?.value||'month';
+  const market=s?.benchmarkMarket||benchmark.value||'SE';
+  const bench=benchmarkPeriodReturns(market);
+  document.getElementById('weeklyBenchmarkReference').innerHTML=benchmarkReferenceHtml(market,bench);
+
+  if(!s){
+    document.getElementById('weeklySummary').innerHTML='';
+    document.getElementById('weeklyAnalysisTable').innerHTML='';
+    document.getElementById('weeklyDetail').innerHTML='<div class="note">Ingen vecka sparad.</div>';
+    return
   }
-  document.getElementById('weeklyHistoryTable').innerHTML=
-    '<tr><th>Vecka</th><th>Modell</th><th>Start</th><th>Portfölj</th><th>Index</th><th>Över/under index</th><th>Kurser tillgängliga</th></tr>'+
-    modelRows.map(x=>`<tr>
-      <td>${x.s.weekKey}</td>
-      <td><b>${x.model==='blue'?'🔵 Blå':x.model==='white'?'⚪ Vit':'🟣 Snitt'}</b></td>
-      <td>${dateFmt(x.s.savedAt)}</td>
-      <td class="${portfolioReturnClass(x.p.value)}">${signed(x.p.value,' %')}</td>
-      <td class="${portfolioReturnClass(x.indexRet)}">${signed(x.indexRet,' %')}</td>
-      <td class="${portfolioReturnClass(x.excess)}">${signed(x.excess,' p.e.')}</td>
-      <td>${x.p.available}/${x.p.total}</td>
-    </tr>`).join('');
 
-  const latest=weeklyPortfolios[0];
-  if(latest){
-    const values=['blue','white','average'].map(model=>weeklyPortfolioReturn(latest,model).value);
-    const indexRet=weeklyBenchmarkReturn(latest);
-    document.getElementById('weeklySummary').innerHTML=[
-      ['Sparade veckor',weeklyPortfolios.length],
-      ['Senaste vecka',latest.weekKey],
-      ['Blå sedan start',signed(values[0],' %')],
-      ['Vit sedan start',signed(values[1],' %')],
-      ['Snitt sedan start',signed(values[2],' %')],
-      ['Index sedan start',signed(indexRet,' %')]
-    ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('')
-  }else document.getElementById('weeklySummary').innerHTML='';
+  document.getElementById('weeklyDetailTitle').textContent=`${s.weekKey} – sparad ${dateFmt(s.savedAt)} – ${s.benchmarkSymbol}`;
+  document.getElementById('weeklySummary').innerHTML=[
+    ['Analys',weeklyAnalysisMode==='result'?'Resultat':weeklyAnalysisMode==='comparison'?'Modelljämförelse':'Innehav'],
+    ['Fokusperiod',periodLabel(period)],
+    ['Vald vecka',s.weekKey],
+    ['Index',s.benchmarkSymbol]
+  ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
 
-  renderWeeklyDetail();
+  if(weeklyAnalysisMode==='result')renderWeeklyResultMode(s);
+  else if(weeklyAnalysisMode==='comparison')renderWeeklyComparisonMode();
+  else renderWeeklyHoldingsMode(s);
+
+  bindScoreHistoryLinks(document.getElementById('weeklyDetail'));
   if(developmentMode==='portfolios')renderDevelopmentPortfolios()
 }
-function renderWeeklyDetail(){
-  const id=document.getElementById('weeklySnapshotSelect')?.value;
-  const s=weeklyPortfolios.find(x=>x.id===id)||weeklyPortfolios[0];
-  const el=document.getElementById('weeklyDetail');
-  if(!el)return;
-  if(!s){document.getElementById('weeklyDetailTitle').textContent='Vald vecka';el.innerHTML='<div class="note">Ingen vecka sparad.</div>';return}
-  document.getElementById('weeklyDetailTitle').textContent=`${s.weekKey} – sparad ${dateFmt(s.savedAt)} – jämförelse ${s.benchmarkSymbol}`;
-  const indexRet=weeklyBenchmarkReturn(s);
-  el.innerHTML=['blue','white','average'].map(model=>{
-    const p=weeklyPortfolioReturn(s,model);
-    const excess=Number.isFinite(p.value)&&Number.isFinite(indexRet)?p.value-indexRet:NaN;
-    return `<div class="portfolio-card portfolio-model-${model}">
-      <h3>${model==='blue'?'🔵 Blå':model==='white'?'⚪ Vit':'🟣 Snitt'} Top 10</h3>
-      <div class="summary">
-        <div class="metric"><small>Portfölj</small><b class="${portfolioReturnClass(p.value)}">${signed(p.value,' %')}</b></div>
-        <div class="metric"><small>Index</small><b class="${portfolioReturnClass(indexRet)}">${signed(indexRet,' %')}</b></div>
-        <div class="metric"><small>Över/under index</small><b class="${portfolioReturnClass(excess)}">${signed(excess,' p.e.')}</b></div>
-      </div>
-      <div class="tablewrap"><table>
-        <tr><th>Rank</th><th>Ticker</th><th>Bolag</th><th>Startkurs</th><th>Nuvarande kurs</th><th>Avkastning</th><th>Blå</th><th>Vit</th><th>Snitt</th></tr>
-        ${p.memberReturns.map(m=>`<tr>
-          <td>${m.rank}</td><td>${m.ticker}</td><td>${m.company}</td>
-          <td>${fmt(m.startPrice)}</td><td>${fmt(m.currentPrice)}</td>
-          <td class="${portfolioReturnClass(m.returnPct)}">${signed(m.returnPct,' %')}</td>
-          <td>${scoreLinkHtml(rowIndexForMember(m),m.blueScore,'blue',Number.isFinite(m.blueScore),false)}</td>
-          <td>${scoreLinkHtml(rowIndexForMember(m),m.whiteScore,'white',Number.isFinite(m.whiteScore),false)}</td>
-          <td>${scoreLinkHtml(rowIndexForMember(m),m.averageScore,'average',Number.isFinite(m.averageScore),false)}</td>
-        </tr>`).join('')}
-      </table></div>
-    </div>`
-  }).join('')
+function renderWeeklyResultMode(s){
+  const table=document.getElementById('weeklyAnalysisTable');
+  const periods=['day','week','month','start'];
+  const rowsOut=['blue','white','average'].map(model=>({
+    name:portfolioModelName(model),
+    vals:Object.fromEntries(periods.map(p=>[p,portfolioPeriodReturn(s,model,p)]))
+  }));
+  const indexVals=Object.fromEntries(periods.map(p=>[p,benchmarkReturnForSnapshot(s,p)]));
+  rowsOut.push({name:`📈 ${s.benchmarkSymbol}`,vals:indexVals,index:true});
+  table.innerHTML='<tr><th>Modell</th><th>Dag</th><th>Vecka</th><th>Månad</th><th>Sedan start</th><th>Över/under index sedan start</th></tr>'+
+    rowsOut.map(x=>{
+      const excess=x.index?NaN:x.vals.start-indexVals.start;
+      return `<tr class="${x.index?'benchmark-row':''}"><td>${x.name}</td>${periods.map(p=>`<td class="${classByValue(x.vals[p])}">${signed(x.vals[p],' %')}</td>`).join('')}<td class="${classByValue(excess)}">${x.index?'–':signed(excess,' p.e.')}</td></tr>`
+    }).join('');
+  document.getElementById('weeklyDetail').innerHTML='<p class="note">Resultat visar portföljernas egen utveckling och OMXSPI för samma perioder. Sista kolumnen visar över- eller underavkastning sedan portföljstart.</p>'
 }
+function renderWeeklyComparisonMode(){
+  const table=document.getElementById('weeklyAnalysisTable');
+  const models=['blue','white','average'];
+  const stats=models.map(model=>{
+    const obs=weeklyPortfolios.map(s=>{
+      const ret=portfolioPeriodReturn(s,model,'start');
+      const idx=benchmarkReturnForSnapshot(s,'start');
+      return{ret,excess:Number.isFinite(ret)&&Number.isFinite(idx)?ret-idx:NaN}
+    }).filter(x=>Number.isFinite(x.ret));
+    const excessObs=obs.filter(x=>Number.isFinite(x.excess));
+    return{
+      model,
+      count:obs.length,
+      avg:obs.length?obs.reduce((a,b)=>a+b.ret,0)/obs.length:NaN,
+      avgExcess:excessObs.length?excessObs.reduce((a,b)=>a+b.excess,0)/excessObs.length:NaN,
+      beat:excessObs.filter(x=>x.excess>0).length,
+      hit:excessObs.length?100*excessObs.filter(x=>x.excess>0).length/excessObs.length:NaN,
+      best:obs.length?Math.max(...obs.map(x=>x.ret)):NaN,
+      worst:obs.length?Math.min(...obs.map(x=>x.ret)):NaN
+    }
+  });
+  table.innerHTML='<tr><th>Modell</th><th>Veckor</th><th>Snittavkastning</th><th>Snitt mot OMXSPI</th><th>Slagit OMXSPI</th><th>Träff %</th><th>Bäst</th><th>Sämst</th></tr>'+
+    stats.map(x=>`<tr><td>${portfolioModelName(x.model)}</td><td>${x.count}</td><td class="${classByValue(x.avg)}">${signed(x.avg,' %')}</td><td class="${classByValue(x.avgExcess)}">${signed(x.avgExcess,' p.e.')}</td><td>${x.beat}/${x.count}</td><td>${Number.isFinite(x.hit)?x.hit.toFixed(1).replace('.',',')+' %':'–'}</td><td class="${classByValue(x.best)}">${signed(x.best,' %')}</td><td class="${classByValue(x.worst)}">${signed(x.worst,' %')}</td></tr>`).join('');
+  document.getElementById('weeklyDetail').innerHTML='<p class="note">Modelljämförelsen använder alla sparade veckor och visar hur ofta respektive modell har slagit OMXSPI.</p>'
+}
+function renderWeeklyHoldingsMode(s){
+  const model=document.getElementById('weeklyHoldingsModel')?.value||'average';
+  const members=s.portfolios?.[model]?.members||[];
+  const periods=['day','week','month','start'];
+  const idxVals=Object.fromEntries(periods.map(p=>[p,benchmarkReturnForSnapshot(s,p)]));
+  document.getElementById('weeklyAnalysisTable').innerHTML='<tr><th>Rank</th><th>Ticker</th><th>Bolag</th><th>Dag</th><th>Vecka</th><th>Månad</th><th>Sedan start</th><th>Mot OMXSPI sedan start</th></tr>'+
+    members.map(m=>{
+      const vals=Object.fromEntries(periods.map(p=>[p,holdingPeriodReturn(m,p)]));
+      const excess=Number.isFinite(vals.start)&&Number.isFinite(idxVals.start)?vals.start-idxVals.start:NaN;
+      return `<tr><td>${m.rank}</td><td>${m.ticker}</td><td>${m.company}</td>${periods.map(p=>`<td class="${classByValue(vals[p])}">${signed(vals[p],' %')}</td>`).join('')}<td class="${classByValue(excess)}">${signed(excess,' p.e.')}</td></tr>`
+    }).join('');
+  document.getElementById('weeklyDetail').innerHTML=`<div class="summary">
+    <div class="metric"><small>Portfölj</small><b>${portfolioModelName(model)}</b></div>
+    <div class="metric"><small>OMXSPI sedan start</small><b>${signed(idxVals.start,' %')}</b></div>
+    <div class="metric"><small>Antal innehav</small><b>${members.length}</b></div>
+  </div>`
+}
+function renderWeeklyDetail(){renderWeeklyPortfolios()}
+
 function deleteSelectedWeeklySnapshot(){
   const id=document.getElementById('weeklySnapshotSelect')?.value;
   if(!id)return;
@@ -5482,9 +5446,10 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeScoreHistory()}
 document.getElementById('input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&e.target.tagName==='INPUT'){e.preventDefault();save()}});
 
 document.getElementById('developmentOwnership').onchange=renderDevelopment;document.getElementById('developmentQualification').onchange=renderDevelopment;
-document.getElementById('developmentHistoryFilter').onchange=renderDevelopment;
-document.getElementById('developmentSort').onchange=renderDevelopment;
 document.getElementById('developmentDirection').onchange=renderDevelopment;
+document.getElementById('developmentPeriod').onchange=renderDevelopment;
+document.getElementById('developmentAnalysisModel').onchange=renderDevelopment;
+document.querySelectorAll('.dev-analysis-choice').forEach(b=>b.onclick=()=>setDevelopmentAnalysisMode(b.dataset.devAnalysis));
 document.getElementById('closeDevelopmentDetail').onclick=()=>document.getElementById('developmentDetail').classList.add('hidden');document.getElementById('closeDetail').onclick=()=>document.getElementById('detailModal').classList.remove('open');document.getElementById('detailEdit').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex)};document.getElementById('detailNewQuarter').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex);quarter()};document.getElementById('detailPeUpdate').onclick=()=>document.getElementById('peTool').classList.remove('hidden');document.getElementById('cancelPeUpdate').onclick=()=>document.getElementById('peTool').classList.add('hidden');document.getElementById('newPrice').oninput=pePreview;document.getElementById('savePeUpdate').onclick=savePe;document.getElementById('txType').onchange=reasonUI;document.getElementById('saveTx').onclick=saveTx;document.getElementById('wipe').onclick=()=>{if(confirm('Radera allt?')){rows=[];persist();render()}};async function exportBackup(){
   const suggested='Levande-aktier-'+new Date().toISOString().slice(0,10)+'.json';
   const content=JSON.stringify({
@@ -5629,7 +5594,10 @@ async function importSelectedFile(file){
 document.getElementById('saveWeeklyNow').onclick=()=>createWeeklySnapshot(false,false);
 document.getElementById('exportWeeklyCsv').onclick=exportWeeklyPortfoliosCsv;
 document.getElementById('deleteWeeklySnapshot').onclick=deleteSelectedWeeklySnapshot;
-document.getElementById('weeklySnapshotSelect').onchange=renderWeeklyDetail;
+document.getElementById('weeklySnapshotSelect').onchange=renderWeeklyPortfolios;
+document.getElementById('weeklyPeriod').onchange=renderWeeklyPortfolios;
+document.getElementById('weeklyHoldingsModel').onchange=renderWeeklyPortfolios;
+document.querySelectorAll('.weekly-analysis-choice').forEach(b=>b.onclick=()=>setWeeklyAnalysisMode(b.dataset.weeklyAnalysis));
 document.getElementById('weeklyBenchmarkMarket').onchange=()=>{weeklyPersist();renderWeeklyPortfolios()};
 document.getElementById('weeklyAutoSave').onchange=weeklyPersist;
 document.getElementById('chooseImportFile').onclick=()=>document.getElementById('importFile').click();
