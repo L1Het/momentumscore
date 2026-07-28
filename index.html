@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v19.7</title>
+<title>MomentumScore v19.9</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -225,7 +225,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v19.7 – stabil poänghistorik</h1>
+<h1>MomentumScore v19.9 – korrekt P/E-startbas</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -1170,7 +1170,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v19.7 – regler och analys</h2>
+<h2>MomentumScore v19.9 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -1208,6 +1208,8 @@ Kursens avstånd till MA200: max 33,33 p · MA50:s avstånd till MA200: max 33,3
 <div class="rowcard"><b>Vit – platåprincip</b><br>
 Full poäng ges i faktorernas historiskt bästa intervall. Utanför intervallet faller poängen mjukt mot noll. Ett extremt högt trendvärde ger därför inte automatiskt högre poäng.</div>
 <div id="whitePlateauRules" class="plateau-grid"></div>
+<div class="rowcard"><b>Automatiskt aktuellt P/E</b><br>
+När ett P/E-tal sparas lagras samtidigt aktiekursen som P/E-bas. För äldre bolag hämtas startbasen från befintligt P/E och kursen vid den senaste manuella inmatningen av samma P/E-tal i historiken – inte från dagens kurs. Därefter räknas aktuellt P/E som bas-P/E × aktuell kurs / baskurs. Det beräknade värdet används i Blås P/E-poäng, grundregel och Snittpoäng, men visas endast när aktien öppnas.</div>
 <div class="rowcard"><b>Klickbar poänghistorik</b><br>
 Alla aktuella Blå-, Vit- och Snittpoäng i huvudvyerna är klickbara. Historikpanelen skapas innan JavaScript initieras och alla händelser binds med säkerhetskontroller, så ett saknat element kan inte stoppa resten av programmet. Panelen visar dagens tre poäng, förändring över 1 dag, 1 vecka och 1 månad, kursutveckling, diagram och full sparad historik.</div>
 <div class="rowcard"><b>Användarvänlig sortering i Översikt</b><br>
@@ -1252,7 +1254,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
   <div class="actions"><button class="secondary" id="checkDatabase">Kontrollera databas</button><button class="secondary" id="restoreLocalBackup">Återställ lokal backup</button></div>
   <div id="databaseHealth" class="note" style="margin-top:10px">Ingen kontroll har körts.</div>
 </div>
-<p class="note"><b>Uppdateras:</b> aktiekurs, MA200-nivå, avstånd till MA200, MA200-trend 1 vecka, 1 månad och 3 månader samt RSI 14. Trenderna räknas från verkliga dagliga stängningskurser. P/E och rapportdata ändras inte. Kurs, Kurs/MA200, RSI 14 samt Blå och Vit poäng sparas i historiken vid varje lyckad uppdatering. Jämförelseindex uppdateras före aktierna. Inför varje massuppdatering används alltid en säkerhetskopia i arbetsminnet. En extra lokal backup skapas bara om webbläsarens lagringsutrymme räcker. Versionsmigrering lägger bara till saknade fält och bevarar befintliga listor, och uppdateringen avbryts automatiskt om någon äldre historik skulle saknas. Automatisk uppdatering sker endast när sidan är öppen eller öppnas – en lokal HTML-fil kan inte arbeta i bakgrunden när den är stängd.</p>
+<p class="note"><b>Uppdateras:</b> aktiekurs, MA200-nivå, avstånd till MA200, MA200-trend 1 vecka, 1 månad och 3 månader samt RSI 14. Trenderna räknas från verkliga dagliga stängningskurser. Aktuellt P/E beräknas automatiskt i bakgrunden från P/E-basen och kursförändringen; basvärdet och övrig rapportdata skrivs inte över. Kurs, Kurs/MA200, RSI 14 samt Blå och Vit poäng sparas i historiken vid varje lyckad uppdatering. Jämförelseindex uppdateras före aktierna. Inför varje massuppdatering används alltid en säkerhetskopia i arbetsminnet. En extra lokal backup skapas bara om webbläsarens lagringsutrymme räcker. Versionsmigrering lägger bara till saknade fält och bevarar befintliga listor, och uppdateringen avbryts automatiskt om någon äldre historik skulle saknas. Automatisk uppdatering sker endast när sidan är öppen eller öppnas – en lokal HTML-fil kan inte arbeta i bakgrunden när den är stängd.</p>
 <p class="note">Sverige är standard. Välj Danmark, Norge, Finland eller Island när du matar in ett nordiskt bolag. Yahoo-symbolen får då rätt suffix automatiskt, exempelvis NOVO B → NOVO-B.CO, EQNR → EQNR.OL och NOKIA → NOKIA.HE. När ett bolag saknar minst 263 handelsdagar hämtar Yahoo två års grundhistorik. Därefter begär appen ett mycket litet femdagarsfönster men sparar bara den senaste tillgängliga kursen och slår ihop den med den lokala historiken. Appen lagrar de senaste 400 handelsdagarna och räknar själv MA200 och MA200-trenderna. Om Yahoos sista dagscandle är null används meta.regularMarketPrice som den senaste avslutade handelsdagens kurs och läggs till i samma serie. Om ett bolag inte kan hämtas visas det i statusrutan och övriga bolag fortsätter uppdateras.</p>
 </div>
 </section>
@@ -1330,8 +1332,92 @@ function ekCurrentScore(x){
   return 0
 }
 function pePart(pe,a){if(!Number.isFinite(pe)||!Number.isFinite(a)||a<=0)return 0;if(pe<=a)return 10;if(pe<=a*1.1)return 7;if(pe<=a*1.2)return 3;return 0}
+
+
+function historicalPeInputBase(r){
+  const currentPe=num(r?.pe);
+  const entries=(Array.isArray(r?.history)?r.history:[])
+    .filter(h=>h&&h.raw&&Number.isFinite(num(h.raw.pe))&&Number.isFinite(num(h.raw.price))&&num(h.raw.price)>0)
+    .slice()
+    .sort((a,b)=>new Date(a.savedAt||0)-new Date(b.savedAt||0));
+
+  const manualEntries=entries.filter(h=>!String(h.kind||'').toLowerCase().includes('automatisk kursuppdatering'));
+  const candidates=manualEntries.length?manualEntries:entries;
+
+  if(Number.isFinite(currentPe)){
+    const matching=candidates.filter(h=>Math.abs(num(h.raw.pe)-currentPe)<0.000001);
+    if(matching.length){
+      const latest=matching[matching.length-1];
+      return{pe:currentPe,price:num(latest.raw.price),date:latest.savedAt||r.fundamentalUpdatedAt||r.updatedAt||''}
+    }
+  }
+
+  if(candidates.length){
+    const latest=candidates[candidates.length-1];
+    return{pe:num(latest.raw.pe),price:num(latest.raw.price),date:latest.savedAt||r.fundamentalUpdatedAt||r.updatedAt||''}
+  }
+
+  return{pe:currentPe,price:NaN,date:r?.fundamentalUpdatedAt||r?.updatedAt||r?.createdAt||''}
+}
+
+function currentPeInfo(r){
+  const inferred=historicalPeInputBase(r);
+  const explicitPe=num(r?.peBase);
+  const explicitPrice=num(r?.peBasePrice);
+  const currentPrice=num(r?.price);
+  const manualPe=num(r?.pe);
+  const explicitUsable=Number.isFinite(explicitPe)&&explicitPe>0&&Number.isFinite(explicitPrice)&&explicitPrice>0;
+  const inferredUsable=Number.isFinite(inferred.pe)&&inferred.pe>0&&Number.isFinite(inferred.price)&&inferred.price>0;
+  const basePe=explicitUsable?explicitPe:inferredUsable?inferred.pe:manualPe;
+  const basePrice=explicitUsable?explicitPrice:inferredUsable?inferred.price:NaN;
+  const usableBase=Number.isFinite(basePe)&&basePe>0&&Number.isFinite(basePrice)&&basePrice>0;
+  const calculated=usableBase&&Number.isFinite(currentPrice)&&currentPrice>0
+    ?basePe*(currentPrice/basePrice)
+    :manualPe;
+  return{
+    basePe,
+    basePrice,
+    currentPrice,
+    calculated,
+    baseDate:explicitUsable?(r?.peBaseDate||r?.fundamentalUpdatedAt||r?.updatedAt||''):(inferred.date||r?.fundamentalUpdatedAt||r?.updatedAt||''),
+    automatic:usableBase&&Number.isFinite(currentPrice)&&currentPrice>0,
+    inferredFromHistory:!explicitUsable&&inferredUsable
+  }
+}
+function establishPeBase(target,peValue,priceValue,dateValue){
+  const pe=num(peValue),price=num(priceValue);
+  if(Number.isFinite(pe)&&pe>0&&Number.isFinite(price)&&price>0){
+    target.peBase=String(peValue).trim();
+    target.peBasePrice=String(priceValue).trim();
+    target.peBaseDate=dateValue||nowISO();
+  }
+  return target
+}
+function peDetailHtml(r,c){
+  const info=currentPeInfo(r);
+  const basePe=Number.isFinite(info.basePe)?fmt(info.basePe):'–';
+  const basePrice=Number.isFinite(info.basePrice)?fmt(info.basePrice):'–';
+  const currentPrice=Number.isFinite(info.currentPrice)?fmt(info.currentPrice):'–';
+  const currentPe=Number.isFinite(info.calculated)?info.calculated.toLocaleString('sv-SE',{maximumFractionDigits:2}):'–';
+  return `<div class="card"><h3>Värdering</h3>
+    <div class="summary">
+      <div class="metric"><small>P/E-bas från rapport</small><b>${basePe}</b></div>
+      <div class="metric"><small>Kurs vid P/E-bas</small><b>${basePrice}</b></div>
+      <div class="metric"><small>Aktuell kurs</small><b>${currentPrice}</b></div>
+      <div class="metric"><small>Beräknat P/E idag</small><b>${currentPe}</b></div>
+      <div class="metric"><small>P/E 3-årssnitt</small><b>${fmt(num(r.pe3))}</b></div>
+      <div class="metric"><small>P/E 5-årssnitt</small><b>${fmt(num(r.pe5))}</b></div>
+      <div class="metric"><small>Värderingspoäng</small><b>${c.peScore}/20</b></div>
+      <div class="metric"><small>Basdatum</small><b style="font-size:15px">${info.baseDate?dateFmt(info.baseDate):'–'}</b></div>
+    </div>
+    <p class="note">Beräknat från oförändrad EPS och aktuell kurs. För äldre bolag används befintligt P/E tillsammans med kursen vid den senaste manuella inmatningen av detta P/E-tal. P/E-basen ersätts när du sparar ett nytt P/E-tal.</p>
+  </div>`
+}
+
 function calc(r){
   const v={};numericIds.forEach(k=>v[k]=num(r[k]));
+  const peInfo=currentPeInfo(r);
+  v.pe=peInfo.calculated;
   const investment=r.companyType==='investment';
   const commonReq=['ma200','ma1w','ma1m','ma3m','eps1','eps2','eps3','eps4','eps3y','pe','pe3','pe5','roe','debt','fcf'];
   const growthReq=investment?['ekYoy','ek3y']:['rev1','rev2','rev3','rev4','rev3y'];
@@ -1369,7 +1455,7 @@ function calc(r){
   if(Number.isFinite(v.pe)&&Number.isFinite(v.pe3)&&Number.isFinite(v.pe5)&&!((v.pe<=v.pe3*1.25)||(v.pe<=v.pe5*1.25))) fail.push('Grundregel 3: P/E är mer än 25 % över både 3- och 5-årssnittet');
   const qualified=complete&&!fail.length;
   const rating=!qualified?'Ej kvalificerad':total>=90?'Mycket stark':total>=80?'Stark':total>=70?'Bevakning':'Avstå';
-  return{trend,revCount:rc,revMomentum,revMedian,revHistory,rev,epsCount:ec,epsMomentum,epsMedian,epsHistory,eps,peScore,roe,debt,fcf,total,qualified,rating,warning:fail.join(' · '),failReasons:fail}
+  return{trend,revCount:rc,revMomentum,revMedian,revHistory,rev,epsCount:ec,epsMomentum,epsMedian,epsHistory,eps,peScore,peCurrent:v.pe,peBase:peInfo.basePe,peBasePrice:peInfo.basePrice,roe,debt,fcf,total,qualified,rating,warning:fail.join(' · '),failReasons:fail}
 }
 
 function benchmarkSymbol(market){
@@ -1507,7 +1593,12 @@ function latestModelDelta(r,key,currentValue){
 }
 
 function snapshot(r,kind){const raw={};ids.forEach(k=>raw[k]=r[k]??'');return{savedAt:nowISO(),kind,raw,score:calc(r)}}
-function normalizeRow(r){const n={...r};n.companyType=n.companyType==='investment'?'investment':'regular';n.market=['SE','DK','NO','FI','IS'].includes(n.market)?n.market:'SE';if(n.ma1&&!n.ma1m)n.ma1m=n.ma1;if(n.ma3&&!n.ma3m)n.ma3m=n.ma3;if(!('ma1w'in n))n.ma1w='';if(!('price'in n))n.price='';n.market=['SE','DK','NO','FI','IS'].includes(n.market)?n.market:'SE';n.yahooSymbol=n.yahooSymbol||inferYahooSymbol(n.ticker||'',n.market);if(!('rev3y'in n))n.rev3y='';if(!('ekYoy'in n))n.ekYoy='';if(!('ek3y'in n))n.ek3y='';if(!('eps3y'in n))n.eps3y='';n.createdAt=n.createdAt||nowISO();n.updatedAt=n.updatedAt||n.createdAt;n.history=Array.isArray(n.history)?n.history:[snapshot(n,'Importerad tidigare version')];n.transactions=Array.isArray(n.transactions)?n.transactions:[];n.marketHistory=Array.isArray(n.marketHistory)?n.marketHistory:[];n.priceHistory=Array.isArray(n.priceHistory)?n.priceHistory:[];if(!('ma200Level'in n))n.ma200Level='';if(!('technicalSource'in n))n.technicalSource='Manuell';if(!('rsi14'in n))n.rsi14='';return n}
+function normalizeRow(r){const n={...r};n.companyType=n.companyType==='investment'?'investment':'regular';n.market=['SE','DK','NO','FI','IS'].includes(n.market)?n.market:'SE';if(n.ma1&&!n.ma1m)n.ma1m=n.ma1;if(n.ma3&&!n.ma3m)n.ma3m=n.ma3;if(!('ma1w'in n))n.ma1w='';if(!('price'in n))n.price='';n.market=['SE','DK','NO','FI','IS'].includes(n.market)?n.market:'SE';n.yahooSymbol=n.yahooSymbol||inferYahooSymbol(n.ticker||'',n.market);if(!('rev3y'in n))n.rev3y='';if(!('ekYoy'in n))n.ekYoy='';if(!('ek3y'in n))n.ek3y='';if(!('eps3y'in n))n.eps3y='';n.createdAt=n.createdAt||nowISO();n.updatedAt=n.updatedAt||n.createdAt;n.history=Array.isArray(n.history)?n.history:[snapshot(n,'Importerad tidigare version')];n.transactions=Array.isArray(n.transactions)?n.transactions:[];n.marketHistory=Array.isArray(n.marketHistory)?n.marketHistory:[];n.priceHistory=Array.isArray(n.priceHistory)?n.priceHistory:[];if(!('ma200Level'in n))n.ma200Level='';if(!('technicalSource'in n))n.technicalSource='Manuell';if(!('rsi14'in n))n.rsi14='';
+const inferredPeBase=historicalPeInputBase(n);
+if(!('peBase'in n)||!Number.isFinite(num(n.peBase)))n.peBase=Number.isFinite(inferredPeBase.pe)?String(inferredPeBase.pe):(n.pe??'');
+if(!('peBasePrice'in n)||!Number.isFinite(num(n.peBasePrice)))n.peBasePrice=Number.isFinite(inferredPeBase.price)?String(inferredPeBase.price):'';
+if(!('peBaseDate'in n)||!n.peBaseDate)n.peBaseDate=inferredPeBase.date||n.fundamentalUpdatedAt||n.updatedAt||n.createdAt||'';
+return n}
 
 function mergePriceHistory(existing,incoming){
   const map=new Map();
@@ -2528,7 +2619,9 @@ function save(){
   }
   const n=nowISO();
   if(editing===null){
-    r.createdAt=n;r.updatedAt=n;r.fundamentalUpdatedAt=n;r.transactions=[];r.history=[snapshot(r,'Första inläggning')];rows.push(r)
+    r.createdAt=n;r.updatedAt=n;r.fundamentalUpdatedAt=n;r.transactions=[];
+    establishPeBase(r,r.pe,r.price,n);
+    r.history=[snapshot(r,'Första inläggning')];rows.push(r)
   }else{
     const old=rows[editing];
     if(quarterMode){
@@ -2543,6 +2636,14 @@ function save(){
       r.technicalSourceDate=old.technicalSourceDate||'';
     }
     const u={...old,...r,createdAt:old.createdAt,updatedAt:n,fundamentalUpdatedAt:n};
+    const peChanged=Number.isFinite(num(r.pe))&&Math.abs(num(r.pe)-num(old.pe))>0.000001;
+    if(quarterMode||peChanged||!Number.isFinite(num(old.peBase))||!Number.isFinite(num(old.peBasePrice))){
+      establishPeBase(u,r.pe,u.price,n);
+    }else{
+      u.peBase=old.peBase??old.pe??'';
+      u.peBasePrice=old.peBasePrice??old.price??'';
+      u.peBaseDate=old.peBaseDate||old.fundamentalUpdatedAt||old.updatedAt||'';
+    }
     u.history=[...(old.history||[]),snapshot(u,quarterMode?'Nytt kvartal':'Uppdatering')];
     rows[editing]=u
   }
@@ -4881,7 +4982,7 @@ function showTab(id){document.querySelectorAll('.panel,.tab').forEach(e=>e.class
 const reasons={'Köp':['Hög totalpoäng','Kvalificerad av filter','Stark vinsttrend','Stark omsättningstrend','Stark teknisk trend','Rimlig värdering'],'Öka':['Förbättrad totalpoäng','Förbättrad vinsttrend','Förbättrad omsättningstrend','Starkare teknisk trend','Lägre värdering','Undervikt i portföljen','Återköp efter minskning'],'Minska':['För stor del av portföljen','Försämrad totalpoäng','Försämrad vinsttrend','Försämrad omsättningstrend','Svagare teknisk trend','P/E närmar sig filter','Bättre kandidat finns','Riskminskning','Delvis vinsthemtagning'],'Sälj':['Under MA200','Negativ 3-månaderstrend','P/E-filter brutet','För låg totalpoäng','Bättre kandidat finns','Riskminskning'],'Utdelning':['Ordinarie utdelning','Extrautdelning']};
 function reasonUI(){const t=document.getElementById('txType').value;document.getElementById('reasonChecks').innerHTML=(reasons[t]||[]).map(x=>`<label class="rowcard"><input type="checkbox" class="reasonBox" value="${x}">${x}</label>`).join('')}
 function openDetail(i){detailIndex=i;const r=rows[i],c=calc(r),h=holdings(r),g=growthLabel(r);document.getElementById('detailTitle').textContent=`${r.ticker||''} ${r.company||''}`.trim();const losses=[['Trend',30-c.trend],['Tillväxt',15-c.rev],['Vinst',20-c.eps],['P/E',20-c.peScore],['ROE',5-c.roe],['Skuld',5-c.debt],['FCF',5-c.fcf]].filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
-document.getElementById('detailCurrent').innerHTML=`<div class="summary"><div class="metric"><small>Blå</small><b>${scoreLinkHtml(i,c.total,'blue',true,true)}</b></div><div class="metric"><small>Vit</small><b>${scoreLinkHtml(i,whiteCalc(r).total,'white',whiteCalc(r).dataReady,true)}</b></div><div class="metric"><small>Snitt</small><b>${scoreLinkHtml(i,averageScoreFromResults(c,whiteCalc(r)),'average',whiteCalc(r).dataReady,true)}</b></div><div class="metric"><small>Status snitt</small><b class="${scoreStatusClass(averageScoreFromResults(c,whiteCalc(r)),whiteCalc(r).dataReady)}">${scoreRating(averageScoreFromResults(c,whiteCalc(r)),whiteCalc(r).dataReady)}</b></div><div class="metric"><small>Börs</small><b style="font-size:15px">${marketLabel(r.market||'SE')}</b></div><div class="metric"><small>Marknadsdata</small><b class="${ageClass(r.marketUpdatedAt||r.technicalSourceDate)}" style="font-size:15px">${ageText(r.marketUpdatedAt||r.technicalSourceDate)}</b></div><div class="metric"><small>Rapportdata</small><b class="${ageClass(r.fundamentalUpdatedAt||r.updatedAt)}" style="font-size:15px">${ageText(r.fundamentalUpdatedAt||r.updatedAt)}</b></div><div class="metric"><small>Inlagd</small><b style="font-size:15px">${dateFmt(r.createdAt)}</b></div></div><div class="status ${c.qualified?'ok':'no'}"><b>🔵 Blå:</b> ${c.qualified?'Alla grundregler är uppfyllda':'Ej kvalificerad: '+c.warning}</div><div class="status ${whiteCalc(r).dataReady?'ok':'no'}"><b>⚪ Vit:</b> ${whiteCalc(r).dataReady?whiteCalc(r).rating:'Underlag saknas'}</div><div class="card"><h3>Nuvarande poäng</h3><div class="summary">${[['Trend',c.trend+'/30'],[g+' momentum',c.revMomentum+'/10'],[g+' historik',c.revHistory+'/5'],[g+' totalt',c.rev+'/15'],['Vinst momentum',c.epsMomentum+'/15'],['Vinst historik',c.epsHistory+'/5'],['Vinst totalt',c.eps+'/20'],['P/E',c.peScore+'/20'],['ROE',c.roe+'/5'],['Skuld',c.debt+'/5'],['FCF',c.fcf+'/5']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('')}</div><h3>Vit platåmodell</h3><div class="summary"><div class="metric"><small>Total Vit</small><b class="${scoreStatusClass(whiteCalc(r).total,whiteCalc(r).dataReady)}">${whiteScoreText(whiteCalc(r).total)} / 100</b></div>${whitePartsHtml(whiteCalc(r))}</div><h3>Poäng som saknas till 100</h3><div class="score-loss">${losses.length?losses.map(([a,b])=>`<div class="loss-item"><small>${a}</small><b>−${b} p</b></div>`).join(''):'<div class="note">Full poäng i samtliga kategorier.</div>'}</div><h3>Historikberäkning</h3><div class="summary"><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt Y-Y':'Median omsättning Q1–Q4'}</small><b>${fmt(c.revMedian)} %</b></div><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt 3 år':'Omsättningstillväxt 3 år'}</small><b>${fmt(num(r.companyType==='investment'?r.ek3y:r.rev3y))} %</b></div><div class="metric"><small>Historikpoäng ${g.toLowerCase()}</small><b>${c.revHistory}/5</b></div><div class="metric"><small>Median vinst Q1–Q4</small><b>${fmt(c.epsMedian)} %</b></div><div class="metric"><small>Vinsttillväxt 3 år</small><b>${fmt(num(r.eps3y))} %</b></div><div class="metric"><small>Historikpoäng vinst</small><b>${c.epsHistory}/5</b></div></div></div>`;document.getElementById('oldPrice').value=r.price||'';document.getElementById('newPrice').value='';document.getElementById('newPe').value='';document.getElementById('peTool').classList.add('hidden');document.getElementById('txDate').value=todayISO();reasonUI();document.getElementById('holdingSummary').innerHTML=[['Antal',fmt(h.shares)],['GAV',fmt(h.avg)],['Realiserat',fmt(h.realized)],['Utdelningar',fmt(h.dividends)],['Courtage',fmt(h.fees)],['Status',h.shares>0?'Ägs':'Ägs inte']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');document.getElementById('historyList').innerHTML=[...(r.history||[])].reverse().map(x=>`<details class="rowcard"><summary><b>${dateFmt(x.savedAt)}</b> · ${x.kind} · ${x.score.total} p</summary><div class="note">${Object.entries(x.raw).map(([k,v])=>`${k}: ${v}`).join(' · ')}</div></details>`).join('')||'Ingen historik';document.getElementById('txList').innerHTML=[...(r.transactions||[])].reverse().map(t=>`<div class="rowcard"><b>${t.date} · ${t.type}</b><br>Antal ${t.qty||'–'} · Pris ${t.price||'–'} · Courtage ${t.fee||'–'} · Utdelning ${t.dividend||'–'}<br><span class="note">${(t.reasons||[]).join(', ')||'–'} · Poäng ${t.scoreAtTransaction?.total??'–'}</span></div>`).join('')||'Inga affärer';document.getElementById('detailModal').classList.add('open')}
+document.getElementById('detailCurrent').innerHTML=`<div class="summary"><div class="metric"><small>Blå</small><b>${scoreLinkHtml(i,c.total,'blue',true,true)}</b></div><div class="metric"><small>Vit</small><b>${scoreLinkHtml(i,whiteCalc(r).total,'white',whiteCalc(r).dataReady,true)}</b></div><div class="metric"><small>Snitt</small><b>${scoreLinkHtml(i,averageScoreFromResults(c,whiteCalc(r)),'average',whiteCalc(r).dataReady,true)}</b></div><div class="metric"><small>Status snitt</small><b class="${scoreStatusClass(averageScoreFromResults(c,whiteCalc(r)),whiteCalc(r).dataReady)}">${scoreRating(averageScoreFromResults(c,whiteCalc(r)),whiteCalc(r).dataReady)}</b></div><div class="metric"><small>Börs</small><b style="font-size:15px">${marketLabel(r.market||'SE')}</b></div><div class="metric"><small>Marknadsdata</small><b class="${ageClass(r.marketUpdatedAt||r.technicalSourceDate)}" style="font-size:15px">${ageText(r.marketUpdatedAt||r.technicalSourceDate)}</b></div><div class="metric"><small>Rapportdata</small><b class="${ageClass(r.fundamentalUpdatedAt||r.updatedAt)}" style="font-size:15px">${ageText(r.fundamentalUpdatedAt||r.updatedAt)}</b></div><div class="metric"><small>Inlagd</small><b style="font-size:15px">${dateFmt(r.createdAt)}</b></div></div><div class="status ${c.qualified?'ok':'no'}"><b>🔵 Blå:</b> ${c.qualified?'Alla grundregler är uppfyllda':'Ej kvalificerad: '+c.warning}</div><div class="status ${whiteCalc(r).dataReady?'ok':'no'}"><b>⚪ Vit:</b> ${whiteCalc(r).dataReady?whiteCalc(r).rating:'Underlag saknas'}</div>${peDetailHtml(r,c)}<div class="card"><h3>Nuvarande poäng</h3><div class="summary">${[['Trend',c.trend+'/30'],[g+' momentum',c.revMomentum+'/10'],[g+' historik',c.revHistory+'/5'],[g+' totalt',c.rev+'/15'],['Vinst momentum',c.epsMomentum+'/15'],['Vinst historik',c.epsHistory+'/5'],['Vinst totalt',c.eps+'/20'],['P/E',c.peScore+'/20'],['ROE',c.roe+'/5'],['Skuld',c.debt+'/5'],['FCF',c.fcf+'/5']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('')}</div><h3>Vit platåmodell</h3><div class="summary"><div class="metric"><small>Total Vit</small><b class="${scoreStatusClass(whiteCalc(r).total,whiteCalc(r).dataReady)}">${whiteScoreText(whiteCalc(r).total)} / 100</b></div>${whitePartsHtml(whiteCalc(r))}</div><h3>Poäng som saknas till 100</h3><div class="score-loss">${losses.length?losses.map(([a,b])=>`<div class="loss-item"><small>${a}</small><b>−${b} p</b></div>`).join(''):'<div class="note">Full poäng i samtliga kategorier.</div>'}</div><h3>Historikberäkning</h3><div class="summary"><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt Y-Y':'Median omsättning Q1–Q4'}</small><b>${fmt(c.revMedian)} %</b></div><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt 3 år':'Omsättningstillväxt 3 år'}</small><b>${fmt(num(r.companyType==='investment'?r.ek3y:r.rev3y))} %</b></div><div class="metric"><small>Historikpoäng ${g.toLowerCase()}</small><b>${c.revHistory}/5</b></div><div class="metric"><small>Median vinst Q1–Q4</small><b>${fmt(c.epsMedian)} %</b></div><div class="metric"><small>Vinsttillväxt 3 år</small><b>${fmt(num(r.eps3y))} %</b></div><div class="metric"><small>Historikpoäng vinst</small><b>${c.epsHistory}/5</b></div></div></div>`;document.getElementById('oldPrice').value=r.price||'';document.getElementById('newPrice').value='';document.getElementById('newPe').value='';document.getElementById('peTool').classList.add('hidden');document.getElementById('txDate').value=todayISO();reasonUI();document.getElementById('holdingSummary').innerHTML=[['Antal',fmt(h.shares)],['GAV',fmt(h.avg)],['Realiserat',fmt(h.realized)],['Utdelningar',fmt(h.dividends)],['Courtage',fmt(h.fees)],['Status',h.shares>0?'Ägs':'Ägs inte']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');document.getElementById('historyList').innerHTML=[...(r.history||[])].reverse().map(x=>`<details class="rowcard"><summary><b>${dateFmt(x.savedAt)}</b> · ${x.kind} · ${x.score.total} p</summary><div class="note">${Object.entries(x.raw).map(([k,v])=>`${k}: ${v}`).join(' · ')}</div></details>`).join('')||'Ingen historik';document.getElementById('txList').innerHTML=[...(r.transactions||[])].reverse().map(t=>`<div class="rowcard"><b>${t.date} · ${t.type}</b><br>Antal ${t.qty||'–'} · Pris ${t.price||'–'} · Courtage ${t.fee||'–'} · Utdelning ${t.dividend||'–'}<br><span class="note">${(t.reasons||[]).join(', ')||'–'} · Poäng ${t.scoreAtTransaction?.total??'–'}</span></div>`).join('')||'Inga affärer';document.getElementById('detailModal').classList.add('open')}
 function saveTx(){const r=rows[detailIndex],t={type:document.getElementById('txType').value,date:document.getElementById('txDate').value||todayISO(),qty:document.getElementById('txQty').value,price:document.getElementById('txPrice').value,fee:document.getElementById('txFee').value,dividend:document.getElementById('txDividend').value,reasons:[...document.querySelectorAll('.reasonBox:checked')].map(x=>x.value),scoreAtTransaction:calc(r),savedAt:nowISO()};r.transactions=[...(r.transactions||[]),t];r.updatedAt=nowISO();persist();render();openDetail(detailIndex)}
 function pePreview(){const r=rows[detailIndex],op=num(r.price),ope=num(r.pe),np=num(document.getElementById('newPrice').value),npe=op>0&&Number.isFinite(ope)&&Number.isFinite(np)?ope*np/op:NaN;document.getElementById('newPe').value=Number.isFinite(npe)?npe.toFixed(2):''}
 function savePe(){const r=rows[detailIndex],np=num(document.getElementById('newPrice').value),npe=num(document.getElementById('newPe').value);if(!Number.isFinite(np)||!Number.isFinite(npe))return alert('Fyll i giltig kurs');const u={...r,price:String(np),pe:String(npe),updatedAt:nowISO(),fundamentalUpdatedAt:nowISO()};u.history=[...(r.history||[]),snapshot(u,'Kursjusterad P/E')];rows[detailIndex]=u;persist();render();openDetail(detailIndex)}
