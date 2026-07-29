@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.0.6</title>
+<title>MomentumScore v20.0.7</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -239,14 +239,13 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.0.6 – stabil utveckling och veckoportföljer</h1>
+<h1>MomentumScore v20.0.7 – automatisk veckohistorik och enhetlig sortering</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
 <button class="tab" data-tab="scores">Poäng</button>
 <button class="tab" data-tab="top">Topplista</button>
 <button class="tab" data-tab="development">Utveckling</button>
-<button class="tab" data-tab="weekly">Veckoportföljer</button>
 <button class="tab" data-tab="laboratory">Analyslaboratorium</button>
 <button class="tab" data-tab="rules">Regler</button>
 <button class="tab" data-tab="settings">Inställningar</button>
@@ -342,14 +341,6 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="scores" class="panel">
-<div class="card">
-<div class="actions" style="margin:0;align-items:end">
-<button class="secondary" id="exportBtn">Spara som…</button>
-<button class="secondary" id="chooseImportFile" type="button">Välj datafil…</button>
-<input type="file" id="importFile" accept=".json,application/json" style="max-width:320px">
-<div id="importStatus" class="note" style="margin-top:8px">Ingen fil vald.</div>
-</div>
-</div>
 <div class="card">
 <div class="toolbar-inline">
   <div><label>Vy</label><div class="view-switch"><button type="button" id="simpleScoreView" class="secondary active">Enkel vy</button><button type="button" id="analysisScoreView" class="secondary">Analysvy</button></div></div>
@@ -1090,7 +1081,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v20.0.6 – regler och analys</h2>
+<h2>MomentumScore v20.0.7 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -1164,6 +1155,15 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
 
 <section id="settings" class="panel">
 <div class="card">
+<h2>Data och säkerhetskopiering</h2>
+<div class="actions" style="margin:0;align-items:end">
+<button class="secondary" id="exportBtn">Spara som…</button>
+<button class="secondary" id="chooseImportFile" type="button">Importera datafil…</button>
+<input type="file" id="importFile" accept=".json,application/json" class="hidden">
+</div>
+<div id="importStatus" class="note" style="margin-top:8px">Ingen fil vald.</div>
+</div>
+<div class="card">
 <h2>Automatisk kursuppdatering</h2>
 <div class="grid">
 <div><label>Datakälla</label><select id="marketSource"><option value="yahoo">Yahoo Finance</option></select></div>
@@ -1173,6 +1173,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
 </div>
 <div class="actions"><button id="updatePrices">🔄 Uppdatera aktiekurser nu</button><button class="secondary" id="saveSettings">Spara inställningar</button></div>
 <div id="marketStatus" class="note" style="margin-top:10px">Ingen uppdatering pågår.</div>
+<p class="note">Veckoportföljer skapas automatiskt från den senaste avslutade fredagens data. Om appen inte öppnas under helgen eller före måndagens börsöppning återskapas saknade veckor automatiskt från sparad kurs- och poänghistorik nästa gång appen öppnas.</p>
 <div class="card" style="margin-top:14px">
   <h3>Databaskontroll</h3>
   <div class="actions"><button class="secondary" id="checkDatabase">Kontrollera databas</button><button class="secondary" id="restoreLocalBackup">Återställ lokal backup</button></div>
@@ -1640,9 +1641,56 @@ document.querySelectorAll('.type-choice').forEach(b=>b.classList.toggle('active'
 }
 function renderPreview(){const r=formRow(),c=calc(r),q=document.getElementById('qualification'),g=growthLabel(r);q.className='status '+(c.qualified?'ok':'no');q.textContent=c.qualified?'Godkänd av hårda filter':'Ej godkänd: '+(c.warning||'Ofullständig inmatning');document.getElementById('livePreview').innerHTML=[['Trend',c.trend],[g+' mom',c.revMomentum],[g+' hist',c.revHistory],['Vinst mom',c.epsMomentum],['Vinst hist',c.epsHistory],['P/E',c.peScore],['ROE',c.roe],['Skuld',c.debt],['FCF',c.fcf],['Total',c.total]].map(([a,b])=>`<div class="metric"><small>${a}</small><b class="${a==='Total'?cls(b):''}">${b}</b></div>`).join('')}
 function searchable(r){const c=calc(r);return[r.ticker,r.company,r.createdAt,r.updatedAt,c.rating,c.warning,...(r.transactions||[]).flatMap(t=>[t.type,t.date,...(t.reasons||[])])].join(' ').toLowerCase()}
+
+let scoreActiveSort='averageScore';
+let scoreSortDirection='desc';
+
+function scoreSortValue(item,key){
+  const average=averageScoreFromResults(item.c,item.w);
+  if(key==='ticker')return String(item.r.ticker||'');
+  if(key==='company')return String(item.r.company||'');
+  if(key==='market')return marketLabel(item.r.market||'SE');
+  if(key==='blueScore')return item.c.total;
+  if(key==='whiteScore')return item.w.total;
+  if(key==='averageScore')return average;
+  if(key==='status')return average;
+  if(key==='price')return num(item.r.price);
+  if(key==='ma200')return num(item.r.ma200);
+  if(key==='ma3m')return num(item.r.ma3m);
+  if(key==='rsi14')return num(item.r.rsi14);
+  if(key==='owned')return item.h.shares>0?1:0;
+  if(key==='marketUpdatedAt')return new Date(item.r.marketUpdatedAt||item.r.technicalSourceDate||0).getTime();
+  if(key==='fundamentalUpdatedAt')return new Date(item.r.fundamentalUpdatedAt||item.r.updatedAt||0).getTime();
+  if(key==='whiteDistance')return num(item.w.parts?.distanceMa200);
+  if(key==='whiteSpread')return num(item.w.parts?.ma50Spread);
+  if(key==='whiteSlope')return num(item.w.parts?.ma200Slope1m);
+  if(key==='createdAt')return new Date(item.r.createdAt||0).getTime();
+  if(key==='updatedAt')return new Date(item.r.updatedAt||0).getTime();
+  return NaN
+}
+function scoreSortableHeading(key,label){
+  return `<th class="sortable-head${scoreActiveSort===key?' active-sort'+(scoreSortDirection==='asc'?' sort-asc':''):''}" data-score-sort="${key}">${label}</th>`
+}
+function bindScoreTableSorting(table){
+  table.querySelectorAll('[data-score-sort]').forEach(header=>{
+    header.onclick=()=>{
+      const key=header.dataset.scoreSort;
+      if(scoreActiveSort===key)scoreSortDirection=scoreSortDirection==='desc'?'asc':'desc';
+      else{
+        scoreActiveSort=key;
+        scoreSortDirection=['ticker','company','market'].includes(key)?'asc':'desc'
+      }
+      const select=document.getElementById('sortField');
+      if(select&&[...select.options].some(option=>option.value===key))select.value=key;
+      render()
+    }
+  })
+}
+
 function listRows(){
   const q=document.getElementById('searchAll').value.toLowerCase(),own=document.getElementById('ownershipFilter').value,
-    model=document.getElementById('modelFilter')?.value||'all',market=document.getElementById('scoreMarketFilter')?.value||'all',field=document.getElementById('sortField').value;
+    model=document.getElementById('modelFilter')?.value||'all',market=document.getElementById('scoreMarketFilter')?.value||'all';
+  if(!scoreActiveSort)scoreActiveSort=document.getElementById('sortField')?.value||'averageScore';
   let l=rows.map((r,i)=>({r,c:calc(r),w:whiteCalc(r),h:holdings(r),i}));
   if(q)l=l.filter(x=>searchable(x.r).includes(q));
   if(market!=='all')l=l.filter(x=>(x.r.market||'SE')===market);
@@ -1651,11 +1699,16 @@ function listRows(){
   if(model==='white')l=l.filter(x=>x.w.qualified);
   if(model==='both')l=l.filter(x=>x.c.qualified&&x.w.qualified);
   l.sort((a,b)=>{
-    if(field==='averageScore')return averageScoreFromResults(b.c,b.w)-averageScoreFromResults(a.c,a.w);
-    if(field==='whiteScore')return b.w.total-a.w.total;
-    if(field==='blueScore')return b.c.total-a.c.total;
-    const av=(a.r[field]||'').toString().toLowerCase(),bv=(b.r[field]||'').toString().toLowerCase();
-    return av<bv?1:av>bv?-1:0
+    const av=scoreSortValue(a,scoreActiveSort),bv=scoreSortValue(b,scoreActiveSort);
+    if(typeof av==='string'||typeof bv==='string'){
+      const comparison=String(av||'').localeCompare(String(bv||''),'sv');
+      return scoreSortDirection==='asc'?comparison:-comparison
+    }
+    const aValid=Number.isFinite(av),bValid=Number.isFinite(bv);
+    if(aValid&&!bValid)return -1;
+    if(!aValid&&bValid)return 1;
+    if(!aValid&&!bValid)return 0;
+    return scoreSortDirection==='asc'?av-bv:bv-av
   });
   return l
 }
@@ -1821,9 +1874,22 @@ function render(){
 
   if(scoreView==='simple'){
     table.className='compact-table';
-    table.innerHTML='<tr>'+[
-      'Ticker','Bolag','Börs','🔵 Blå','⚪ Vit','🟣 Snitt','Status','Kurs','Kurs/MA200','MA200 3m','RSI','Ägs','Marknadsdata','Rapportdata'
-    ].map(x=>`<th>${x}</th>`).join('')+'</tr>'+
+    table.innerHTML='<tr>'+
+      scoreSortableHeading('ticker','Ticker')+
+      scoreSortableHeading('company','Bolag')+
+      scoreSortableHeading('market','Börs')+
+      scoreSortableHeading('blueScore','🔵 Blå')+
+      scoreSortableHeading('whiteScore','⚪ Vit')+
+      scoreSortableHeading('averageScore','🟣 Snitt')+
+      scoreSortableHeading('status','Status')+
+      scoreSortableHeading('price','Kurs')+
+      scoreSortableHeading('ma200','Kurs/MA200')+
+      scoreSortableHeading('ma3m','MA200 3m')+
+      scoreSortableHeading('rsi14','RSI')+
+      scoreSortableHeading('owned','Ägs')+
+      scoreSortableHeading('marketUpdatedAt','Marknadsdata')+
+      scoreSortableHeading('fundamentalUpdatedAt','Rapportdata')+
+      '</tr>'+
       l.map(x=>{
         const average=averageScoreFromResults(x.c,x.w);
         const selected=statusModel==='blue'?x.c.total:statusModel==='white'?x.w.total:average;
@@ -1843,9 +1909,20 @@ function render(){
       }).join('');
   }else{
     table.className='';
-    table.innerHTML='<tr>'+[
-      'Ticker','Bolag','Börs','🔵 Blå','⚪ Vit','🟣 Snitt','Status','Vit Kurs/MA200','Vit MA50/MA200','Vit MA200-trend 1m','Ägs','Marknadsdata'
-    ].map(x=>`<th>${x}</th>`).join('')+'</tr>'+
+    table.innerHTML='<tr>'+
+      scoreSortableHeading('ticker','Ticker')+
+      scoreSortableHeading('company','Bolag')+
+      scoreSortableHeading('market','Börs')+
+      scoreSortableHeading('blueScore','🔵 Blå')+
+      scoreSortableHeading('whiteScore','⚪ Vit')+
+      scoreSortableHeading('averageScore','🟣 Snitt')+
+      scoreSortableHeading('status','Status')+
+      scoreSortableHeading('whiteDistance','Vit Kurs/MA200')+
+      scoreSortableHeading('whiteSpread','Vit MA50/MA200')+
+      scoreSortableHeading('whiteSlope','Vit MA200-trend 1m')+
+      scoreSortableHeading('owned','Ägs')+
+      scoreSortableHeading('marketUpdatedAt','Marknadsdata')+
+      '</tr>'+
       l.map(x=>{
         const average=averageScoreFromResults(x.c,x.w);
         const selected=statusModel==='blue'?x.c.total:statusModel==='white'?x.w.total:average;
@@ -1864,7 +1941,9 @@ function render(){
         </tr>`
       }).join('');
   }
-  document.querySelectorAll('.score-row').forEach(row=>row.onclick=()=>openStock(Number(row.dataset.i)));bindScoreHistoryLinks(document.getElementById('scoreTable'));
+  document.querySelectorAll('.score-row').forEach(row=>row.onclick=()=>openStock(Number(row.dataset.i)));
+  bindScoreHistoryLinks(document.getElementById('scoreTable'));
+  bindScoreTableSorting(table);
   renderTop();renderDevelopment();renderDashboard()
 }
 function scoreBand(score,dataReady=true){
@@ -5359,6 +5438,183 @@ function benchmarkValueOnOrBefore(market,date){
   }
   return found
 }
+
+function isoDate(date){return date.toISOString().slice(0,10)}
+function dateAtLocalNoon(value){
+  const d=value instanceof Date?new Date(value):new Date(String(value).slice(0,10)+'T12:00:00');
+  return d
+}
+function latestCompletedFriday(now=new Date()){
+  const d=new Date(now);
+  const day=d.getDay();
+  let daysBack=(day+2)%7;
+  if(day===5){
+    const afterClose=d.getHours()>17||(d.getHours()===17&&d.getMinutes()>=30);
+    daysBack=afterClose?0:7
+  }
+  d.setDate(d.getDate()-daysBack);
+  d.setHours(12,0,0,0);
+  return d
+}
+function followingMonday(friday){
+  const monday=new Date(friday);
+  monday.setDate(monday.getDate()+3);
+  monday.setHours(12,0,0,0);
+  return monday
+}
+function priceHistoryOnOrBefore(row,date){
+  return (Array.isArray(row?.priceHistory)?row.priceHistory:[])
+    .filter(point=>String(point?.date||'').slice(0,10)<=date)
+    .slice()
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date)))
+}
+function marketPointOnOrBefore(row,date){
+  const points=(Array.isArray(row?.marketHistory)?row.marketHistory:[])
+    .filter(point=>String(point?.savedAt||'').slice(0,10)<=date)
+    .slice()
+    .sort((a,b)=>String(a.savedAt).localeCompare(String(b.savedAt)));
+  return points[points.length-1]||null
+}
+function historicalCandidate(row,cutoffDate){
+  const prices=priceHistoryOnOrBefore(row,cutoffDate);
+  const marketPoint=marketPointOnOrBefore(row,cutoffDate);
+  let historicalRow={...row,priceHistory:prices};
+
+  if(prices.length>=263){
+    try{
+      const technical=technicalFromPriceHistory(prices);
+      historicalRow={...historicalRow,...technical}
+    }catch(error){
+      console.warn('Historisk teknik kunde inte beräknas',row.ticker,error)
+    }
+  }else if(marketPoint){
+    historicalRow={
+      ...historicalRow,
+      price:marketPoint.price??historicalRow.price,
+      ma200:marketPoint.ma200??historicalRow.ma200,
+      ma1w:marketPoint.ma1w??historicalRow.ma1w,
+      ma1m:marketPoint.ma1m??historicalRow.ma1m,
+      ma3m:marketPoint.ma3m??historicalRow.ma3m,
+      rsi14:marketPoint.rsi14??historicalRow.rsi14
+    }
+  }
+
+  const price=prices.length?num(prices[prices.length-1].close):num(marketPoint?.price);
+  if(Number.isFinite(price))historicalRow.price=price;
+
+  let blue,white,average,blueQualified,whiteReady;
+  const savedBlue=num(marketPoint?.blueScore??marketPoint?.score);
+  const savedWhite=num(marketPoint?.whiteScore);
+
+  if(Number.isFinite(savedBlue)&&Number.isFinite(savedWhite)){
+    blue={total:savedBlue,qualified:marketPoint?.blueQualified!==false};
+    white={total:savedWhite,dataReady:true,qualified:marketPoint?.whiteQualified!==false};
+    average=(savedBlue+savedWhite)/2;
+    blueQualified=blue.qualified;
+    whiteReady=true
+  }else{
+    blue=calc(historicalRow);
+    white=whiteCalc(historicalRow);
+    average=averageScoreFromResults(blue,white);
+    blueQualified=blue.qualified;
+    whiteReady=white.dataReady
+  }
+
+  return{row:historicalRow,price,blue,white,average,blueQualified,whiteReady}
+}
+function historicalWeeklyMembers(model,cutoffDate){
+  return rows.map(row=>{
+    const candidate=historicalCandidate(row,cutoffDate);
+    const score=model==='blue'?candidate.blue.total:model==='white'?candidate.white.total:candidate.average;
+    const valid=model==='blue'
+      ?candidate.blueQualified
+      :model==='white'
+        ?candidate.whiteReady
+        :candidate.blueQualified&&candidate.whiteReady;
+    return{...candidate,score,valid}
+  }).filter(candidate=>candidate.valid&&Number.isFinite(candidate.score)&&Number.isFinite(candidate.price)&&candidate.price>0)
+    .sort((a,b)=>b.score-a.score)
+    .slice(0,10)
+    .map((candidate,index)=>({
+      rank:index+1,
+      ticker:candidate.row.ticker||'',
+      company:candidate.row.company||'',
+      market:candidate.row.market||'SE',
+      startPrice:candidate.price,
+      blueScore:candidate.blue.total,
+      whiteScore:candidate.white.total,
+      averageScore:candidate.average
+    }))
+}
+function createHistoricalWeeklySnapshot(friday,automatic=true){
+  const cutoffDate=isoDate(friday);
+  const targetInfo=isoWeekInfo(followingMonday(friday));
+  if(weeklyPortfolios.some(snapshot=>snapshot.weekKey===targetInfo.key))return false;
+
+  const settings=loadWeeklySettings();
+  const benchmarkMarket=settings.benchmarkMarket||'SE';
+  const blue=historicalWeeklyMembers('blue',cutoffDate);
+  const white=historicalWeeklyMembers('white',cutoffDate);
+  const average=historicalWeeklyMembers('average',cutoffDate);
+  if(blue.length<10||white.length<10||average.length<10)return false;
+
+  const benchmarkStart=benchmarkValueOnOrBefore(benchmarkMarket,cutoffDate);
+  if(!Number.isFinite(benchmarkStart))return false;
+
+  const snapshot={
+    id:`${targetInfo.key}-${cutoffDate}`,
+    weekKey:targetInfo.key,
+    year:targetInfo.year,
+    week:targetInfo.week,
+    savedAt:`${cutoffDate}T17:30:00`,
+    savedDate:cutoffDate,
+    lockDate:cutoffDate,
+    benchmarkMarket,
+    benchmarkSymbol:benchmarkSymbol(benchmarkMarket),
+    benchmarkStart,
+    portfolios:{
+      blue:{name:'Blå',members:blue},
+      white:{name:'Vit',members:white},
+      average:{name:'Snitt',members:average}
+    }
+  };
+  weeklyPortfolios.push(snapshot);
+  weeklyPortfolios.sort((a,b)=>String(b.savedAt).localeCompare(String(a.savedAt)));
+  weeklyPersist();
+  if(!automatic)toast('Veckoportföljen skapades från fredagens historiska data');
+  return true
+}
+function backfillMissingWeeklyPortfolios(){
+  const settings=loadWeeklySettings();
+  if(settings.autoSave!=='on')return 0;
+
+  const latestFriday=latestCompletedFriday(new Date());
+  let startFriday;
+
+  const dated=weeklyPortfolios
+    .map(snapshot=>snapshot.lockDate||snapshot.savedDate)
+    .filter(Boolean)
+    .sort();
+
+  if(dated.length){
+    startFriday=dateAtLocalNoon(dated[dated.length-1]);
+    startFriday.setDate(startFriday.getDate()+7)
+  }else{
+    startFriday=new Date(latestFriday)
+  }
+
+  let created=0;
+  for(let friday=new Date(startFriday);friday<=latestFriday;friday.setDate(friday.getDate()+7)){
+    if(createHistoricalWeeklySnapshot(new Date(friday),true))created++
+  }
+  if(created){
+    weeklyPersist();
+    renderWeeklyPortfolios();
+    if(developmentMode==='portfolios')renderDevelopmentPortfolios()
+  }
+  return created
+}
+
 function weeklyModelCandidates(model){
   return rows.map(r=>{
     const blue=calc(r),white=whiteCalc(r),average=averageScoreFromResults(blue,white);
@@ -5520,11 +5776,7 @@ function createWeeklySnapshot(overwrite=false,automatic=false){
   return true
 }
 function ensureWeeklyPortfolioSnapshot(){
-  const settings=loadWeeklySettings();
-  if(settings.autoSave!=='on')return false;
-  const info=isoWeekInfo();
-  if(weeklyPortfolios.some(x=>x.weekKey===info.key))return false;
-  return createWeeklySnapshot(false,true)
+  return backfillMissingWeeklyPortfolios()>0
 }
 function weeklySnapshotLabel(s){return `${s.weekKey} · ${dateFmt(s.savedAt)}`}
 function renderWeeklyPortfolios(){
@@ -5745,7 +5997,11 @@ setCompanyType(document.getElementById('companyType').value||'regular');
 document.querySelectorAll('.tab[data-tab]').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));ids.forEach(k=>document.getElementById(k).addEventListener('input',renderPreview));
 function refreshAutoYahooSymbol(){document.getElementById('yahooSymbol').value=inferYahooSymbol(document.getElementById('ticker').value,document.getElementById('market').value)}
 document.getElementById('ticker').addEventListener('input',refreshAutoYahooSymbol);
-document.getElementById('market').addEventListener('change',refreshAutoYahooSymbol);document.getElementById('save').onclick=save;document.getElementById('clearForm').onclick=clearForm;document.getElementById('newQuarter').onclick=quarter;document.getElementById('searchAll').oninput=render;document.getElementById('ownershipFilter').onchange=render;document.getElementById('modelFilter').onchange=render;document.getElementById('scoreMarketFilter').onchange=render;document.getElementById('sortField').onchange=render;
+document.getElementById('market').addEventListener('change',refreshAutoYahooSymbol);document.getElementById('save').onclick=save;document.getElementById('clearForm').onclick=clearForm;document.getElementById('newQuarter').onclick=quarter;document.getElementById('searchAll').oninput=render;document.getElementById('ownershipFilter').onchange=render;document.getElementById('modelFilter').onchange=render;document.getElementById('scoreMarketFilter').onchange=render;document.getElementById('sortField').onchange=e=>{
+  scoreActiveSort=e.target.value;
+  scoreSortDirection=['ticker','company'].includes(scoreActiveSort)?'asc':'desc';
+  render()
+};
 document.getElementById('simpleScoreView').onclick=()=>{scoreView='simple';document.getElementById('simpleScoreView').classList.add('active');document.getElementById('analysisScoreView').classList.remove('active');render()};
 document.getElementById('analysisScoreView').onclick=()=>{scoreView='analysis';document.getElementById('analysisScoreView').classList.add('active');document.getElementById('simpleScoreView').classList.remove('active');render()};document.getElementById('topFilter').onchange=renderTop;document.getElementById('topModel').onchange=renderTop;document.getElementById('developmentStocksMode').onclick=()=>setDevelopmentMode('stocks');
 document.getElementById('developmentPortfoliosMode').onclick=()=>setDevelopmentMode('portfolios');
@@ -5994,6 +6250,9 @@ try{
     document.getElementById('labStatus').textContent='Laboratoriet är klart. Välj inställningar och kör testet.';
   }
 }catch(e){console.error('Laboratoriets startkontroll misslyckades',e)}
-setTimeout(maybeAutoUpdate,600);
+setTimeout(()=>{
+  try{backfillMissingWeeklyPortfolios()}catch(error){console.error('Veckoportföljernas återställning misslyckades',error)}
+  maybeAutoUpdate()
+},600);
 </script>
 </body></html>
