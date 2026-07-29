@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.0.5</title>
+<title>MomentumScore v20.0.6</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -239,7 +239,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.0.5 – stabil utveckling och veckoportföljer</h1>
+<h1>MomentumScore v20.0.6 – stabil utveckling och veckoportföljer</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -442,7 +442,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
       <div id="devPortfolioDetailSummary" class="summary"></div>
       <div class="tablewrap" style="margin-top:12px"><table id="devPortfolioMembersTable"></table></div>
     </div>
-    <p class="note">Varje rad visar dag, vecka, månad och utveckling sedan start för en fryst Top 10-portfölj, plus relativ utveckling mot OMX för samma perioder. Klicka på en kolumnrubrik för att sortera. Klicka igen för att vända ordningen. Klicka på raden för innehaven.</p>
+    <p class="note">Varje rad visar dag, vecka, månad och utveckling sedan start för en fryst Top 10-portfölj, plus relativ utveckling mot OMX för samma perioder. Klicka på en kolumnrubrik för att sortera. Klicka igen för att vända ordningen. Samma sortering fungerar även inne i den öppnade portföljens innehavstabell.</p>
   </div>
 </section>
 
@@ -1090,7 +1090,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v20.0.5 – regler och analys</h2>
+<h2>MomentumScore v20.0.6 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -2319,9 +2319,104 @@ function renderDevelopmentPortfolios(){
     row.onclick=()=>openDevelopmentPortfolio(Number(row.dataset.portfolioIndex))
   });
 }
+
+let devPortfolioMemberSort='start';
+let devPortfolioMemberDirection='desc';
+let activeDevelopmentPortfolioIndex=null;
+
+function developmentPortfolioMemberValue(item,key){
+  if(key==='rank')return Number(item.member.rank);
+  if(key==='ticker')return String(item.member.ticker||'');
+  if(key==='company')return String(item.member.company||'');
+  if(key==='day')return item.values.day;
+  if(key==='week')return item.values.week;
+  if(key==='month')return item.values.month;
+  if(key==='start')return item.values.start;
+  if(key==='relative')return item.relative;
+  if(key==='blue')return num(item.member.blueScore);
+  if(key==='white')return num(item.member.whiteScore);
+  if(key==='average')return num(item.member.averageScore);
+  return NaN
+}
+
+function renderDevelopmentPortfolioMembers(x){
+  const table=document.getElementById('devPortfolioMembersTable');
+  if(!table)return;
+
+  const items=x.result.memberReturns.map(member=>{
+    const values=Object.fromEntries(['day','week','month','start'].map(period=>[
+      period,
+      holdingPeriodReturn(member,period)
+    ]));
+    const relative=Number.isFinite(values.start)&&Number.isFinite(x.indexReturns.start)
+      ?values.start-x.indexReturns.start
+      :NaN;
+    return{member,values,relative,stockIndex:rowIndexForMember(member)}
+  });
+
+  items.sort((a,b)=>{
+    const av=developmentPortfolioMemberValue(a,devPortfolioMemberSort);
+    const bv=developmentPortfolioMemberValue(b,devPortfolioMemberSort);
+
+    if(typeof av==='string'||typeof bv==='string'){
+      const comparison=String(av||'').localeCompare(String(bv||''),'sv');
+      return devPortfolioMemberDirection==='asc'?comparison:-comparison
+    }
+
+    const aValid=Number.isFinite(av),bValid=Number.isFinite(bv);
+    if(aValid&&!bValid)return -1;
+    if(!aValid&&bValid)return 1;
+    if(!aValid&&!bValid)return 0;
+    return devPortfolioMemberDirection==='asc'?av-bv:bv-av
+  });
+
+  const heading=(key,label)=>`<th class="sortable-head${devPortfolioMemberSort===key?' active-sort'+(devPortfolioMemberDirection==='asc'?' sort-asc':''):''}" data-member-sort="${key}">${label}</th>`;
+
+  table.innerHTML='<tr>'+
+    heading('rank','Rank')+
+    heading('ticker','Ticker')+
+    heading('company','Bolag')+
+    heading('day','Dag')+
+    heading('week','Vecka')+
+    heading('month','Månad')+
+    heading('start','Sedan start')+
+    heading('relative','Mot OMX start')+
+    heading('blue','Blå')+
+    heading('white','Vit')+
+    heading('average','Snitt')+
+    '</tr>'+
+    items.map(item=>`<tr class="unified-stock-row" data-stock-index="${item.stockIndex}">
+      <td>${item.member.rank}</td>
+      <td><b>${item.member.ticker}</b></td>
+      <td>${item.member.company}</td>
+      ${['day','week','month','start'].map(period=>`<td class="${portfolioReturnClass(item.values[period])}"><b>${signed(item.values[period],' %')}</b></td>`).join('')}
+      <td class="${portfolioReturnClass(item.relative)}"><b>${signed(item.relative,' p.e.')}</b></td>
+      <td>${scoreLinkHtml(item.stockIndex,item.member.blueScore,'blue',Number.isFinite(item.member.blueScore),false)}</td>
+      <td>${scoreLinkHtml(item.stockIndex,item.member.whiteScore,'white',Number.isFinite(item.member.whiteScore),false)}</td>
+      <td>${scoreLinkHtml(item.stockIndex,item.member.averageScore,'average',Number.isFinite(item.member.averageScore),false)}</td>
+    </tr>`).join('');
+
+  table.querySelectorAll('[data-member-sort]').forEach(header=>{
+    header.onclick=()=>{
+      const key=header.dataset.memberSort;
+      if(devPortfolioMemberSort===key){
+        devPortfolioMemberDirection=devPortfolioMemberDirection==='desc'?'asc':'desc'
+      }else{
+        devPortfolioMemberSort=key;
+        devPortfolioMemberDirection=['ticker','company','rank'].includes(key)?'asc':'desc'
+      }
+      renderDevelopmentPortfolioMembers(x)
+    }
+  });
+
+  bindScoreHistoryLinks(table);
+  bindUnifiedStockRows(table)
+}
+
 function openDevelopmentPortfolio(index){
   const x=developmentPortfolioRows()[index];
   if(!x)return;
+  activeDevelopmentPortfolioIndex=index;
   const detail=document.getElementById('devPortfolioDetail');
   detail.classList.remove('hidden');
   document.getElementById('devPortfolioDetailTitle').textContent=`${x.snapshot.weekKey} – ${portfolioModelName(x.model)} Top 10`;
@@ -2342,22 +2437,8 @@ function openDevelopmentPortfolio(index){
     ['Medianaktie',signed(median,' %')]
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
 
-  document.getElementById('devPortfolioMembersTable').innerHTML=
-    '<tr><th>Rank</th><th>Ticker</th><th>Bolag</th><th>Dag</th><th>Vecka</th><th>Månad</th><th>Sedan start</th><th>Mot OMX start</th><th>Blå</th><th>Vit</th><th>Snitt</th></tr>'+
-    x.result.memberReturns.slice().sort((a,b)=>(Number.isFinite(b.returnPct)?b.returnPct:-Infinity)-(Number.isFinite(a.returnPct)?a.returnPct:-Infinity)).map(m=>{
-      const vals=Object.fromEntries(['day','week','month','start'].map(p=>[p,holdingPeriodReturn(m,p)]));
-      const relative=Number.isFinite(vals.start)&&Number.isFinite(x.indexReturns.start)?vals.start-x.indexReturns.start:NaN;
-      const stockIndex=rowIndexForMember(m);
-      return `<tr class="unified-stock-row" data-stock-index="${stockIndex}">
-        <td>${m.rank}</td><td><b>${m.ticker}</b></td><td>${m.company}</td>
-        ${['day','week','month','start'].map(p=>`<td class="${portfolioReturnClass(vals[p])}"><b>${signed(vals[p],' %')}</b></td>`).join('')}
-        <td class="${portfolioReturnClass(relative)}"><b>${signed(relative,' p.e.')}</b></td>
-        <td>${scoreLinkHtml(rowIndexForMember(m),m.blueScore,'blue',Number.isFinite(m.blueScore),false)}</td>
-        <td>${scoreLinkHtml(rowIndexForMember(m),m.whiteScore,'white',Number.isFinite(m.whiteScore),false)}</td>
-        <td>${scoreLinkHtml(rowIndexForMember(m),m.averageScore,'average',Number.isFinite(m.averageScore),false)}</td>
-      </tr>`
-    }).join('');
-  bindScoreHistoryLinks(detail);bindUnifiedStockRows(detail);detail.scrollIntoView({behavior:'smooth',block:'start'})
+  renderDevelopmentPortfolioMembers(x);
+  detail.scrollIntoView({behavior:'smooth',block:'start'})
 }
 
 
