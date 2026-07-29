@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.2.5</title>
+<title>MomentumScore v20.2.6</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -260,11 +260,18 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .detail-chart-legend{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0 0;color:var(--muted);font-size:12px}
 .detail-chart-legend span{display:inline-flex;align-items:center;gap:5px}
 .detail-chart-dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.detail-chart-stage{position:relative}
+.detail-chart-tooltip{position:absolute;z-index:8;pointer-events:none;min-width:170px;padding:10px 12px;border-radius:10px;background:rgba(7,17,28,.96);border:1px solid var(--line);box-shadow:0 8px 24px rgba(0,0,0,.35);font-size:12px;line-height:1.55;display:none;transform:translate(10px,-50%)}
+.detail-chart-tooltip.show{display:block}
+.detail-chart-tooltip b{display:block;margin-bottom:3px;color:var(--text)}
+.detail-chart-tooltip .price{color:#47d18c}.detail-chart-tooltip .blue{color:#4ca6ff}.detail-chart-tooltip .white{color:#f2f2f2}.detail-chart-tooltip .average{color:#9d7cff}
+.detail-chart-guide{stroke:rgba(255,255,255,.55);stroke-width:1;stroke-dasharray:4 4;display:none}
+.detail-chart-hover-point{display:none;stroke-width:2;stroke:var(--card2)}
 </style>
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.2.5 – rullande Top 10-portföljer</h1>
+<h1>MomentumScore v20.2.6 – rullande Top 10-portföljer</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -5484,11 +5491,15 @@ function detailCombinedHistoryChart(points,state=detailChartState){
     const title=`${dateFmt(p.date)} · Kurs ${Number.isFinite(p.price)?p.price.toLocaleString('sv-SE',{maximumFractionDigits:2}):'–'} · Blå ${Number.isFinite(p.blue)?fmt(p.blue):'–'} · Vit ${Number.isFinite(p.white)?fmt(p.white):'–'} · Snitt ${Number.isFinite(p.average)?fmt(p.average):'–'}`;
     return `<circle cx="${x(i)}" cy="${Number.isFinite(p.average)?yScore(p.average):top+innerH}" r="5" fill="transparent"><title>${title}</title></circle>`
   }).join('');
-  return `<div class="detail-combined-chart"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Poäng- och kursutveckling">
+  const hoverData=encodeURIComponent(JSON.stringify(clean));
+  return `<div class="detail-combined-chart"><div class="detail-chart-stage" data-chart-points="${hoverData}" data-chart-left="${left}" data-chart-right="${right}" data-chart-width="${w}" data-chart-height="${h}" data-chart-top="${top}" data-chart-bottom="${bottom}" data-price-min="${pMin}" data-price-max="${pMax}"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Poäng- och kursutveckling">
     <text x="${left}" y="16" fill="#4ca6ff" font-size="12">Poäng (0–100)</text><text x="${w-right}" y="16" text-anchor="end" fill="#47d18c" font-size="12">Kurs</text>
     ${grid}<line x1="${left}" y1="${top}" x2="${left}" y2="${top+innerH}" class="chart-axis"></line><line x1="${w-right}" y1="${top}" x2="${w-right}" y2="${top+innerH}" class="chart-axis"></line><line x1="${left}" y1="${top+innerH}" x2="${w-right}" y2="${top+innerH}" class="chart-axis"></line>
     ${paths.join('')}${circles}${xLabels}
-  </svg><div class="detail-chart-legend"><span><i class="detail-chart-dot" style="background:#47d18c"></i>Kurs (höger axel)</span><span><i class="detail-chart-dot" style="background:#4ca6ff"></i>Blå</span><span><i class="detail-chart-dot" style="background:#f2f2f2"></i>Vit</span><span><i class="detail-chart-dot" style="background:#9d7cff"></i>Snitt</span></div></div>`
+    <line class="detail-chart-guide" x1="0" y1="${top}" x2="0" y2="${top+innerH}"></line>
+    <circle class="detail-chart-hover-point hp-price" r="5" fill="#47d18c"></circle><circle class="detail-chart-hover-point hp-blue" r="5" fill="#4ca6ff"></circle><circle class="detail-chart-hover-point hp-white" r="5" fill="#f2f2f2"></circle><circle class="detail-chart-hover-point hp-average" r="5" fill="#9d7cff"></circle>
+    <rect class="detail-chart-hit" x="${left}" y="${top}" width="${innerW}" height="${innerH}" fill="transparent" style="cursor:crosshair"></rect>
+  </svg><div class="detail-chart-tooltip"></div></div><div class="detail-chart-legend"><span><i class="detail-chart-dot" style="background:#47d18c"></i>Kurs (höger axel)</span><span><i class="detail-chart-dot" style="background:#4ca6ff"></i>Blå</span><span><i class="detail-chart-dot" style="background:#f2f2f2"></i>Vit</span><span><i class="detail-chart-dot" style="background:#9d7cff"></i>Snitt</span></div></div>`
 }
 function detailScoreHistoryHtml(r){
   const points=scoreHistoryByDay(r);
@@ -5500,10 +5511,40 @@ function detailScoreHistoryHtml(r){
     <p class="note">Poängen visas på vänster axel med fast skala 0–100. Aktiekursen visas på höger axel. Håll muspekaren över diagrammet för datum och värden.</p>
   </div>`
 }
+function bindCombinedChartTooltip(){
+  const stage=document.querySelector('#detailCombinedChart .detail-chart-stage');
+  if(!stage)return;
+  const svg=stage.querySelector('svg'),hit=stage.querySelector('.detail-chart-hit'),tip=stage.querySelector('.detail-chart-tooltip'),guide=stage.querySelector('.detail-chart-guide');
+  if(!svg||!hit||!tip||!guide)return;
+  let points=[];try{points=JSON.parse(decodeURIComponent(stage.dataset.chartPoints||''))}catch{return}
+  if(!points.length)return;
+  const w=Number(stage.dataset.chartWidth),h=Number(stage.dataset.chartHeight),left=Number(stage.dataset.chartLeft),right=Number(stage.dataset.chartRight),top=Number(stage.dataset.chartTop),bottom=Number(stage.dataset.chartBottom);
+  const innerW=w-left-right,innerH=h-top-bottom,pMin=Number(stage.dataset.priceMin),pMax=Number(stage.dataset.priceMax);
+  const xFor=i=>left+(i/Math.max(1,points.length-1))*innerW;
+  const yScore=v=>top+(100-v)/100*innerH;
+  const yPrice=v=>top+(pMax-v)/(pMax-pMin)*innerH;
+  const marker=(cls,x,y,show)=>{const el=stage.querySelector(cls);if(!el)return;el.style.display=show?'block':'none';if(show){el.setAttribute('cx',x);el.setAttribute('cy',y)}};
+  const hide=()=>{tip.classList.remove('show');guide.style.display='none';stage.querySelectorAll('.detail-chart-hover-point').forEach(el=>el.style.display='none')};
+  hit.addEventListener('mousemove',e=>{
+    const rect=svg.getBoundingClientRect(),sx=w/rect.width,sy=h/rect.height;
+    const mx=(e.clientX-rect.left)*sx;
+    const idx=Math.max(0,Math.min(points.length-1,Math.round((mx-left)/innerW*(points.length-1))));
+    const p=points[idx],px=xFor(idx);
+    guide.style.display='block';guide.setAttribute('x1',px);guide.setAttribute('x2',px);
+    marker('.hp-price',px,yPrice(p.price),Number.isFinite(p.price));marker('.hp-blue',px,yScore(p.blue),Number.isFinite(p.blue));marker('.hp-white',px,yScore(p.white),Number.isFinite(p.white));marker('.hp-average',px,yScore(p.average),Number.isFinite(p.average));
+    const money=v=>Number.isFinite(v)?v.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2}):'–';
+    const score=v=>Number.isFinite(v)?v.toLocaleString('sv-SE',{minimumFractionDigits:1,maximumFractionDigits:1}):'–';
+    tip.innerHTML=`<b>${dateFmt(p.date)}</b><div class="price">● Kurs: ${money(p.price)}</div><div class="blue">● Blå: ${score(p.blue)}</div><div class="white">● Vit: ${score(p.white)}</div><div class="average">● Snitt: ${score(p.average)}</div>`;
+    const localX=(px/w)*rect.width,localY=Math.min(rect.height-55,Math.max(55,(e.clientY-rect.top)));
+    tip.style.left=`${Math.min(rect.width-190,Math.max(0,localX))}px`;tip.style.top=`${localY}px`;tip.classList.add('show');
+  });
+  hit.addEventListener('mouseleave',hide);
+}
 function bindDetailChartControls(r){
   const root=document.getElementById('detailCurrent');if(!root)return;
-  root.querySelectorAll('[data-detail-range]').forEach(btn=>btn.addEventListener('click',()=>{detailChartState.range=btn.dataset.detailRange;root.querySelectorAll('[data-detail-range]').forEach(x=>x.classList.toggle('active',x.dataset.detailRange===detailChartState.range));const target=document.getElementById('detailCombinedChart');if(target)target.innerHTML=detailCombinedHistoryChart(scoreHistoryByDay(r))}));
-  root.querySelectorAll('[data-detail-series]').forEach(cb=>cb.addEventListener('change',()=>{detailChartState[cb.dataset.detailSeries]=cb.checked;const target=document.getElementById('detailCombinedChart');if(target)target.innerHTML=detailCombinedHistoryChart(scoreHistoryByDay(r))}))
+  root.querySelectorAll('[data-detail-range]').forEach(btn=>btn.addEventListener('click',()=>{detailChartState.range=btn.dataset.detailRange;root.querySelectorAll('[data-detail-range]').forEach(x=>x.classList.toggle('active',x.dataset.detailRange===detailChartState.range));const target=document.getElementById('detailCombinedChart');if(target){target.innerHTML=detailCombinedHistoryChart(scoreHistoryByDay(r));bindCombinedChartTooltip()}}));
+  root.querySelectorAll('[data-detail-series]').forEach(cb=>cb.addEventListener('change',()=>{detailChartState[cb.dataset.detailSeries]=cb.checked;const target=document.getElementById('detailCombinedChart');if(target){target.innerHTML=detailCombinedHistoryChart(scoreHistoryByDay(r));bindCombinedChartTooltip()}}));
+  bindCombinedChartTooltip();
 }
 
 function openDetail(i){
