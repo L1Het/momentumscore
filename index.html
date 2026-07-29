@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.2.1</title>
+<title>MomentumScore v20.2.5</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -248,11 +248,23 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .sortable-head{cursor:pointer;user-select:none}
 .sortable-head.active-sort::after{content:' ▼';font-size:11px}
 .sortable-head.active-sort.sort-asc::after{content:' ▲'}
+
+.detail-history-toolbar{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.detail-range-buttons,.detail-series-toggles{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.detail-range-buttons button{padding:7px 10px;background:#263d52;color:var(--text);border:1px solid var(--line)}
+.detail-range-buttons button.active{background:var(--blue);color:#06111c}
+.detail-series-toggles label{display:flex;align-items:center;gap:5px;margin:0;padding:6px 8px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.025);color:var(--text)}
+.detail-series-toggles input{width:auto;margin:0}
+.detail-combined-chart{border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--card2)}
+.detail-combined-chart svg{width:100%;height:auto;display:block}
+.detail-chart-legend{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0 0;color:var(--muted);font-size:12px}
+.detail-chart-legend span{display:inline-flex;align-items:center;gap:5px}
+.detail-chart-dot{width:9px;height:9px;border-radius:50%;display:inline-block}
 </style>
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.2.1 – rullande Top 10-portföljer</h1>
+<h1>MomentumScore v20.2.5 – rullande Top 10-portföljer</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -5432,38 +5444,66 @@ function normalizeHistoryEntries(row){
   }))
 }
 
-function singleScoreHistoryChart(points,key,label,color){
-  const clean=points.filter(p=>Number.isFinite(p[key]));
+let detailChartState={range:'1y',showPrice:true,showBlue:true,showWhite:true,showAverage:true};
+function detailRangeCutoff(points,range){
+  if(!points.length||range==='all')return points;
+  const days={ '1m':31,'3m':93,'6m':186,'1y':366,'3y':1098 }[range]||366;
+  const last=new Date(points[points.length-1].date+'T12:00:00').getTime();
+  return points.filter(p=>new Date(p.date+'T12:00:00').getTime()>=last-days*86400000)
+}
+function detailCombinedHistoryChart(points,state=detailChartState){
+  const ranged=detailRangeCutoff(points,state.range);
+  const clean=ranged.filter(p=>Number.isFinite(p.blue)||Number.isFinite(p.white)||Number.isFinite(p.average)||Number.isFinite(p.price));
   if(clean.length<2)return '<div class="note">Minst två sparade handelsdagar behövs för diagram.</div>';
-  const w=720,h=250,pad=38;
-  const vals=clean.map(p=>p[key]);
-  let min=Math.min(...vals),max=Math.max(...vals);
-  if(min===max){min-=1;max+=1}
-  min=Math.max(0,Math.floor(min-2));max=Math.min(100,Math.ceil(max+2));
-  const x=i=>pad+(i/(clean.length-1))*(w-pad*2);
-  const y=v=>h-pad-((v-min)/(max-min))*(h-pad*2);
-  const path=clean.map((p,i)=>`${i?'L':'M'}${x(i).toFixed(1)} ${y(p[key]).toFixed(1)}`).join(' ');
-  const last=clean[clean.length-1];
-  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${label}">
-    <line class="chart-axis" x1="${pad}" y1="${h-pad}" x2="${w-pad}" y2="${h-pad}"></line>
-    <line class="chart-axis" x1="${pad}" y1="${pad}" x2="${pad}" y2="${h-pad}"></line>
-    <path d="${path}" fill="none" stroke="${color}" stroke-width="3"></path>
-    <circle cx="${x(clean.length-1).toFixed(1)}" cy="${y(last[key]).toFixed(1)}" r="4" fill="${color}"></circle>
-    <text class="chart-label" x="${pad}" y="${h-8}">${dateFmt(clean[0].date)}</text>
-    <text class="chart-label" x="${w-pad}" y="${h-8}" text-anchor="end">${dateFmt(last.date)}</text>
-    <text class="chart-label" x="${pad+3}" y="${pad-8}">${fmt(max)}</text>
-    <text class="chart-label" x="${pad+3}" y="${h-pad-5}">${fmt(min)}</text>
-    <text x="${pad+8}" y="${pad+14}" fill="${color}" font-weight="700">${label}: ${modelScoreText(last[key],key)}</text>
-  </svg>`
+  const w=980,h=390,left=54,right=62,top=30,bottom=48;
+  const innerW=w-left-right,innerH=h-top-bottom;
+  const x=i=>left+(i/(clean.length-1))*innerW;
+  const yScore=v=>top+(100-v)/100*innerH;
+  const prices=clean.map(p=>p.price).filter(Number.isFinite);
+  let pMin=prices.length?Math.min(...prices):0,pMax=prices.length?Math.max(...prices):1;
+  if(pMin===pMax){pMin-=1;pMax+=1}
+  const pPad=(pMax-pMin)*.06||1;pMin=Math.max(0,pMin-pPad);pMax+=pPad;
+  const yPrice=v=>top+(pMax-v)/(pMax-pMin)*innerH;
+  function pathFor(key,yFn){
+    let started=false,out=[];
+    clean.forEach((p,i)=>{const v=p[key];if(Number.isFinite(v)){out.push(`${started?'L':'M'}${x(i).toFixed(1)} ${yFn(v).toFixed(1)}`);started=true}});
+    return out.join(' ')
+  }
+  let grid='';
+  for(let v=0;v<=100;v+=20){const y=yScore(v);grid+=`<line x1="${left}" y1="${y}" x2="${w-right}" y2="${y}" stroke="rgba(157,176,193,.22)" stroke-dasharray="4 4"></line><text x="${left-10}" y="${y+4}" text-anchor="end" class="chart-label">${v}</text>`}
+  for(let j=0;j<=4;j++){const pv=pMin+(pMax-pMin)*(4-j)/4;const y=top+j*innerH/4;grid+=`<text x="${w-right+10}" y="${y+4}" class="chart-label" fill="#47d18c">${pv.toLocaleString('sv-SE',{maximumFractionDigits:0})}</text>`}
+  const tickCount=Math.min(6,clean.length);
+  let xLabels='';
+  for(let j=0;j<tickCount;j++){const i=Math.round(j*(clean.length-1)/(tickCount-1));xLabels+=`<text x="${x(i)}" y="${h-16}" text-anchor="middle" class="chart-label">${String(clean[i].date).slice(0,7)}</text>`}
+  const paths=[];
+  if(state.showPrice&&prices.length)paths.push(`<path d="${pathFor('price',yPrice)}" fill="none" stroke="#47d18c" stroke-width="2.8"></path>`);
+  if(state.showBlue)paths.push(`<path d="${pathFor('blue',yScore)}" fill="none" stroke="#4ca6ff" stroke-width="2.8"></path>`);
+  if(state.showWhite)paths.push(`<path d="${pathFor('white',yScore)}" fill="none" stroke="#f2f2f2" stroke-width="2.8"></path>`);
+  if(state.showAverage)paths.push(`<path d="${pathFor('average',yScore)}" fill="none" stroke="#9d7cff" stroke-width="2.8"></path>`);
+  const circles=clean.map((p,i)=>{
+    const title=`${dateFmt(p.date)} · Kurs ${Number.isFinite(p.price)?p.price.toLocaleString('sv-SE',{maximumFractionDigits:2}):'–'} · Blå ${Number.isFinite(p.blue)?fmt(p.blue):'–'} · Vit ${Number.isFinite(p.white)?fmt(p.white):'–'} · Snitt ${Number.isFinite(p.average)?fmt(p.average):'–'}`;
+    return `<circle cx="${x(i)}" cy="${Number.isFinite(p.average)?yScore(p.average):top+innerH}" r="5" fill="transparent"><title>${title}</title></circle>`
+  }).join('');
+  return `<div class="detail-combined-chart"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Poäng- och kursutveckling">
+    <text x="${left}" y="16" fill="#4ca6ff" font-size="12">Poäng (0–100)</text><text x="${w-right}" y="16" text-anchor="end" fill="#47d18c" font-size="12">Kurs</text>
+    ${grid}<line x1="${left}" y1="${top}" x2="${left}" y2="${top+innerH}" class="chart-axis"></line><line x1="${w-right}" y1="${top}" x2="${w-right}" y2="${top+innerH}" class="chart-axis"></line><line x1="${left}" y1="${top+innerH}" x2="${w-right}" y2="${top+innerH}" class="chart-axis"></line>
+    ${paths.join('')}${circles}${xLabels}
+  </svg><div class="detail-chart-legend"><span><i class="detail-chart-dot" style="background:#47d18c"></i>Kurs (höger axel)</span><span><i class="detail-chart-dot" style="background:#4ca6ff"></i>Blå</span><span><i class="detail-chart-dot" style="background:#f2f2f2"></i>Vit</span><span><i class="detail-chart-dot" style="background:#9d7cff"></i>Snitt</span></div></div>`
 }
 function detailScoreHistoryHtml(r){
   const points=scoreHistoryByDay(r);
-  return `<div class="card"><h3>Poänghistorik</h3>
-    <div class="score-history-grid">
-      <div class="score-history-chart"><h3>🔵 Blå poäng</h3>${singleScoreHistoryChart(points,'blue','Blå','#4ca6ff')}</div>
-      <div class="score-history-chart"><h3>⚪ Vit poäng</h3>${singleScoreHistoryChart(points,'white','Vit','#f2f2f2')}</div>
-    </div>
+  const ranges=[['1m','1M'],['3m','3M'],['6m','6M'],['1y','1Å'],['3y','3Å'],['all','All historik']];
+  return `<div class="card"><h3>Poäng- och kursutveckling</h3>
+    <div class="detail-history-toolbar"><div class="detail-range-buttons">${ranges.map(([key,label])=>`<button type="button" class="secondary ${detailChartState.range===key?'active':''}" data-detail-range="${key}">${label}</button>`).join('')}</div>
+    <div class="detail-series-toggles"><label><input type="checkbox" data-detail-series="showPrice" ${detailChartState.showPrice?'checked':''}>Kurs</label><label><input type="checkbox" data-detail-series="showBlue" ${detailChartState.showBlue?'checked':''}>Blå</label><label><input type="checkbox" data-detail-series="showWhite" ${detailChartState.showWhite?'checked':''}>Vit</label><label><input type="checkbox" data-detail-series="showAverage" ${detailChartState.showAverage?'checked':''}>Snitt</label></div></div>
+    <div id="detailCombinedChart">${detailCombinedHistoryChart(points)}</div>
+    <p class="note">Poängen visas på vänster axel med fast skala 0–100. Aktiekursen visas på höger axel. Håll muspekaren över diagrammet för datum och värden.</p>
   </div>`
+}
+function bindDetailChartControls(r){
+  const root=document.getElementById('detailCurrent');if(!root)return;
+  root.querySelectorAll('[data-detail-range]').forEach(btn=>btn.addEventListener('click',()=>{detailChartState.range=btn.dataset.detailRange;root.querySelectorAll('[data-detail-range]').forEach(x=>x.classList.toggle('active',x.dataset.detailRange===detailChartState.range));const target=document.getElementById('detailCombinedChart');if(target)target.innerHTML=detailCombinedHistoryChart(scoreHistoryByDay(r))}));
+  root.querySelectorAll('[data-detail-series]').forEach(cb=>cb.addEventListener('change',()=>{detailChartState[cb.dataset.detailSeries]=cb.checked;const target=document.getElementById('detailCombinedChart');if(target)target.innerHTML=detailCombinedHistoryChart(scoreHistoryByDay(r))}))
 }
 
 function openDetail(i){
@@ -5476,7 +5516,7 @@ document.getElementById('historyList').innerHTML=safeHistory.slice().reverse().m
   const score=safeHistoricalScore(x,r);
   const raw=safeHistoricalRaw(x);
   return `<details class="rowcard"><summary><b>${dateFmt(x.savedAt)}</b> · ${x.kind||'Historikpost'} · ${Number.isFinite(score)?fmt(score)+' p':'poäng saknas'}</summary><div class="note">${Object.keys(raw).length?Object.entries(raw).map(([k,v])=>`${k}: ${v}`).join(' · '):'Ingen äldre rådata sparad för denna post.'}</div></details>`
-}).join('')||'Ingen historik';document.getElementById('txList').innerHTML=[...(r.transactions||[])].reverse().map(t=>`<div class="rowcard"><b>${t.date} · ${t.type}</b><br>Antal ${t.qty||'–'} · Pris ${t.price||'–'} · Courtage ${t.fee||'–'} · Utdelning ${t.dividend||'–'}<br><span class="note">${(t.reasons||[]).join(', ')||'–'} · Poäng ${t.scoreAtTransaction?.total??'–'}</span></div>`).join('')||'Inga affärer';document.getElementById('detailModal').classList.add('open');bindScoreHistoryLinks(document.getElementById('detailCurrent'))}
+}).join('')||'Ingen historik';document.getElementById('txList').innerHTML=[...(r.transactions||[])].reverse().map(t=>`<div class="rowcard"><b>${t.date} · ${t.type}</b><br>Antal ${t.qty||'–'} · Pris ${t.price||'–'} · Courtage ${t.fee||'–'} · Utdelning ${t.dividend||'–'}<br><span class="note">${(t.reasons||[]).join(', ')||'–'} · Poäng ${t.scoreAtTransaction?.total??'–'}</span></div>`).join('')||'Inga affärer';document.getElementById('detailModal').classList.add('open');bindScoreHistoryLinks(document.getElementById('detailCurrent'));bindDetailChartControls(r)}
 function saveTx(){const r=rows[detailIndex],t={type:document.getElementById('txType').value,date:document.getElementById('txDate').value||todayISO(),qty:document.getElementById('txQty').value,price:document.getElementById('txPrice').value,fee:document.getElementById('txFee').value,dividend:document.getElementById('txDividend').value,reasons:[...document.querySelectorAll('.reasonBox:checked')].map(x=>x.value),scoreAtTransaction:calc(r),savedAt:nowISO()};r.transactions=[...(r.transactions||[]),t];r.updatedAt=nowISO();persist();render();openDetail(detailIndex)}
 function pePreview(){const r=rows[detailIndex],op=num(r.price),ope=num(r.pe),np=num(document.getElementById('newPrice').value),npe=op>0&&Number.isFinite(ope)&&Number.isFinite(np)?ope*np/op:NaN;document.getElementById('newPe').value=Number.isFinite(npe)?npe.toFixed(2):''}
 function savePe(){const r=rows[detailIndex],np=num(document.getElementById('newPrice').value),npe=num(document.getElementById('newPe').value);if(!Number.isFinite(np)||!Number.isFinite(npe))return alert('Fyll i giltig kurs');const u={...r,price:String(np),pe:String(npe),updatedAt:nowISO(),fundamentalUpdatedAt:nowISO()};u.history=[...(r.history||[]),snapshot(u,'Kursjusterad P/E')];rows[detailIndex]=u;persist();render();openDetail(detailIndex)}
