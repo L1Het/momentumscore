@@ -6035,6 +6035,9 @@ async function updateBenchmarksForMarkets(markets,status){
 
 async function updateAllPrices(silent=false){
   const btn=document.getElementById('updatePrices'),status=document.getElementById('marketStatus');
+  const dashBtn=document.getElementById('dashboardUpdatePrices');
+  const originalDashText=dashBtn?dashBtn.textContent:'';
+  if(dashBtn){dashBtn.disabled=true;dashBtn.textContent='⏳ Uppdaterar... 0 %';}
   btn.disabled=true;status.textContent='Förbereder uppdatering av '+rows.length+' bolag…';await new Promise(resolve=>setTimeout(resolve,50));
   const beforeAll=cloneJson(rows);
   const localBackupCreated=savePreUpdateBackup();
@@ -6047,6 +6050,7 @@ async function updateAllPrices(silent=false){
     for(let i=0;i<rows.length;i++){
       const r=rows[i],symbol=(r.yahooSymbol||inferYahooSymbol(r.ticker,r.market)).trim();
       status.textContent='Uppdaterar '+(i+1)+' av '+rows.length+': '+(r.company||r.ticker||symbol);
+      if(dashBtn){dashBtn.textContent='⏳ Uppdaterar... '+Math.round(((i+1)/rows.length)*100)+' %';}
       if(!symbol){failed.push((r.company||r.ticker||'Okänt')+': Yahoo-symbol saknas');continue}
       try{
         const q=await fetchYahooHistory(symbol,r.priceHistory||[]);
@@ -6086,6 +6090,7 @@ async function updateAllPrices(silent=false){
     if(!silent)alert('Uppdateringen avbröts. Ingen gammal data togs bort.');
   }finally{
     btn.disabled=false;
+  if(dashBtn){dashBtn.textContent='✅ Uppdaterat!';setTimeout(()=>{dashBtn.disabled=false;dashBtn.textContent=originalDashText;},2000);}
   }
 }
 function maybeAutoUpdate(){
