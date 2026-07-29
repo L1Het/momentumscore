@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.0.7</title>
+<title>MomentumScore v20.1.0</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -235,18 +235,28 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 
 .unified-stock-row{cursor:pointer}
 .unified-stock-row:hover{background:rgba(76,166,255,.08)}
+
+.dashboard-quick-actions{padding:12px 14px}
+.filter-chip-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.score-filter-chip{display:flex;align-items:center;gap:7px;padding:7px 9px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.035)}
+.score-filter-chip input[type="number"]{width:82px;padding:6px 7px}
+.score-filter-chip label{display:flex;align-items:center;gap:5px;margin:0}
+.score-filter-chip button{padding:5px 8px}
+.settings-laboratory{margin-top:24px;padding-top:18px;border-top:2px solid var(--line)}
+.sortable-head{cursor:pointer;user-select:none}
+.sortable-head.active-sort::after{content:' ▼';font-size:11px}
+.sortable-head.active-sort.sort-asc::after{content:' ▲'}
 </style>
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.0.7 – automatisk veckohistorik och enhetlig sortering</h1>
+<h1>MomentumScore v20.1.0 – poängscreening och renare arbetsyta</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
 <button class="tab" data-tab="scores">Poäng</button>
 <button class="tab" data-tab="top">Topplista</button>
 <button class="tab" data-tab="development">Utveckling</button>
-<button class="tab" data-tab="laboratory">Analyslaboratorium</button>
 <button class="tab" data-tab="rules">Regler</button>
 <button class="tab" data-tab="settings">Inställningar</button>
 </div>
@@ -254,6 +264,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 <main>
 
 <section id="dashboard" class="panel active">
+  <div class="card dashboard-quick-actions"><div class="actions" style="margin:0"><button id="dashboardUpdatePrices">🔄 Uppdatera kurser</button><span id="dashboardUpdateStatus" class="note">Använder samma säkra uppdatering som under Inställningar.</span></div></div>
   <div id="dashboardSummary" class="summary"></div>
   <div class="card">
     <div class="searchbar">
@@ -345,6 +356,17 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 <div class="toolbar-inline">
   <div><label>Vy</label><div class="view-switch"><button type="button" id="simpleScoreView" class="secondary active">Enkel vy</button><button type="button" id="analysisScoreView" class="secondary">Analysvy</button></div></div>
 </div>
+</div>
+<div id="scoreAnalysisControls" class="card hidden">
+  <div class="searchbar">
+    <div><label>Poängmodell</label><select id="scoreAnalysisModel"><option value="blue" selected>🔵 Blå</option><option value="white">⚪ Vit</option></select></div>
+    <div><label>Poängfaktor</label><select id="scoreFilterFactor"></select></div>
+    <div><label>Min poäng</label><input id="scoreFilterMin" inputmode="decimal" placeholder="Ingen min"></div>
+    <div><label>Max poäng</label><input id="scoreFilterMax" inputmode="decimal" placeholder="Ingen max"></div>
+    <div class="actions" style="align-items:end;margin:0"><button id="addScoreFilter" type="button">Lägg till filter</button><button id="clearScoreFilters" type="button" class="secondary">Rensa alla</button></div>
+  </div>
+  <div id="scoreFilterChips" class="filter-chip-list"></div>
+  <div id="scoreFilterResultCount" class="note" style="margin-top:8px"></div>
 </div>
 <div class="card"><div class="searchbar">
 <div><label>Sök aktie</label><input id="searchAll" type="search" autocomplete="off" placeholder="Skriv bolagsnamn eller ticker..."></div>
@@ -467,7 +489,111 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
   <div class="card"><h3 id="weeklyDetailTitle">Vald vecka</h3><div id="weeklyDetail"></div></div>
 </section>
 
-<section id="laboratory" class="panel">
+
+
+<section id="rules" class="panel"><div class="card">
+<h2>MomentumScore v20.1.0 – regler och analys</h2>
+<div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
+1. Kursen ska ligga över MA200.<br>
+2. MA200-trenden över 3 månader ska vara positiv.<br>
+3. Nuvarande P/E ska vara högst 125 % av minst ett av bolagets P/E-snitt för 3 eller 5 år.<br>
+Om en eller flera grundregler inte klaras markeras aktien som <b>Ej kvalificerad</b>, och exakt vilka regler som brutits visas på inmatningssidan, poängsidan, topplistan och i detaljvyn.</div>
+<div class="rowcard"><b>Trend – max 30 p</b><br>
+Kurs över MA200: 10 p · positiv 1-vecka: 5 p · positiv 1-månad: 5 p · positiv 3-månader: 10 p.</div>
+<div class="rowcard"><b>Neutralzon för kvartalsmomentum</b><br>
+Högre tillväxttal än föregående kvartal = förbättring. Samma tal = neutralt. Om föregående tal är positivt får nästa kvartal falla högst 10 % relativt föregående nivå och ändå räknas som neutralt. Neutral ger inga förbättringspoäng men bryter inte följden. Ett större tapp bryter följden. Q1 är äldst och Q4 senast.</div>
+<div class="rowcard"><b>Omsättning – max 15 p</b><br>
+Momentum, max 10 p: 0/1/2/3 förbättringar i den obrutna följden ger 2/5/8/10 p.<br>
+Historik, max 5 p: medianen av Q1–Q4 jämförs med bolagets årliga omsättningstillväxt över 3 år.</div>
+<div class="rowcard"><b>Vinst – max 20 p</b><br>
+Momentum, max 15 p: 0/1/2/3 förbättringar i den obrutna följden ger 3/8/12/15 p.<br>
+Historik, max 5 p: medianen av Q1–Q4 jämförs med bolagets årliga vinsttillväxt över 3 år.</div>
+<div class="rowcard"><b>Historikpoäng när 3-årstillväxten är positiv</b><br>
+Median ≥125 % av 3-årstillväxten: 5 p · 110–124,99 %: 4 p · 90–109,99 %: 3 p · 75–89,99 %: 2 p · under 75 %: 0 p.</div>
+<div class="rowcard"><b>Historikpoäng när 3-årstillväxten är noll eller negativ</b><br>
+Positiv median när historiken är noll eller negativ: 5 p. Median 0 när historiken är 0: 3 p. Om både median och historik är negativa jämförs hur mycket mindre eller mer negativ medianen är: minst 25 % förbättring = 5 p · minst 10 % förbättring = 4 p · inom ±10 % = 3 p · högst 25 % försämring = 2 p · större försämring = 0 p.</div>
+<div class="rowcard"><b>P/E – max 20 p</b><br>
+Mot vart och ett av 3- och 5-årssnitten: P/E vid eller under snittet = 10 p · högst 10 % över = 7 p · högst 20 % över = 3 p · mer än 20 % över = 0 p. Grundregeln ovan gäller dessutom.</div>
+<div class="rowcard"><b>ROE – max 5 p</b><br>
+Över 25 % = 5 p · 20–25 % = 4 p · 15–19,99 % = 3 p · 10–14,99 % = 2 p · under 10 % = 0 p.</div>
+<div class="rowcard"><b>Nettoskuld/EBITDA – max 5 p</b><br>
+Under 1,0 = 5 p · 1,0–2,0 = 4 p · över 2,0 till 3,0 = 2 p · över 3,0 = 0 p.</div>
+<div class="rowcard"><b>FCF-marginal – max 5 p</b><br>
+Över 15 % = 5 p · 10–15 % = 4 p · 5–9,99 % = 3 p · 0–4,99 % = 2 p · negativ = 0 p.</div>
+<div class="rowcard"><b>Bedömning efter totalpoäng</b><br>
+90–100 = Mycket stark · 80–89 = Stark · 70–79 = Bevakning · under 70 = Avstå. En aktie som bryter en grundregel står alltid som Ej kvalificerad oavsett poäng.</div>
+
+<div class="rowcard"><b>⚪ Modell Vit – fast platåmodell</b><br>
+Vit använder exakt tre tekniska faktorer med fast vikt 1:1:1. Faktorerna ändras inte och inga fundamentala data, värderingsmått, indexjämförelser eller hårda grundkrav ingår.</div>
+<div class="rowcard"><b>Vit – faktorer och vikter</b><br>
+Kursens avstånd till MA200: max 33,33 p · MA50:s avstånd till MA200: max 33,33 p · MA200-trend senaste månaden: max 33,34 p.</div>
+<div class="rowcard"><b>Vit – platåprincip</b><br>
+Full poäng ges i faktorernas historiskt bästa intervall. Utanför intervallet faller poängen mjukt mot noll. Ett extremt högt trendvärde ger därför inte automatiskt högre poäng.</div>
+<div id="whitePlateauRules" class="plateau-grid"></div>
+<div class="rowcard"><b>Ny Utveckling</b><br>
+Utveckling delas i Kursutveckling, Poängutveckling och Teknisk data. Varje vy visar dag, vecka, månad och år samtidigt. Fokusperioden styr sorteringen. OMXSPI visas som fast referens och kursvyn visar varje akties över- eller underavkastning mot index.</div>
+<div class="rowcard"><b>Veckoportföljer mot OMXSPI</b><br>
+Veckoportföljer delas i Resultat, Modelljämförelse och Innehav. Resultat visar Blå, Vit, Snitt och OMXSPI för dag, vecka, månad och sedan start. Modelljämförelse visar träffprocent och genomsnittlig överavkastning mot OMXSPI. Innehav visar varje akties egen utveckling och relativa utveckling mot index.</div>
+<div class="rowcard"><b>Automatiskt aktuellt P/E</b><br>
+När ett P/E-tal sparas lagras samtidigt aktiekursen som P/E-bas. För äldre bolag hämtas startbasen från befintligt P/E och kursen vid den senaste manuella inmatningen av samma P/E-tal i historiken – inte från dagens kurs. Därefter räknas aktuellt P/E som bas-P/E × aktuell kurs / baskurs. Det beräknade värdet används i Blås P/E-poäng, grundregel och Snittpoäng, men visas endast när aktien öppnas.</div>
+<div class="rowcard"><b>Klickbar poänghistorik</b><br>
+Alla aktuella Blå-, Vit- och Snittpoäng i huvudvyerna är klickbara. Historikpanelen skapas innan JavaScript initieras och alla händelser binds med säkerhetskontroller, så ett saknat element kan inte stoppa resten av programmet. Panelen visar dagens tre poäng, förändring över 1 dag, 1 vecka och 1 månad, kursutveckling, diagram och full sparad historik.</div>
+<div class="rowcard"><b>Användarvänlig sortering i Översikt</b><br>
+Översikten använder samma system som Utveckling. Blå, Vit, Snitt, deras dagliga förändringar, kursutveckling, RSI och bolagsnamn är klickbara. Första klicket visar högst/bäst överst och ett nytt klick på samma rubrik visar lägst/sämst överst. Ordningen kan också väljas i en tydlig rullista.</div>
+<div class="rowcard"><b>Användarvänlig sortering i Utveckling</b><br>
+Utveckling visar daglig poängförändring för Blå, Vit och Snitt. Alla viktiga kolumnrubriker är klickbara. Första klicket sorterar högst/bäst överst; ett nytt klick på samma rubrik växlar till lägst/sämst överst. Samma val kan göras tydligt i rullistan Ordning.</div>
+<div class="rowcard"><b>Nytt kvartal – låsning</b><br>
+När Nytt kvartal aktiveras låses ticker, bolag, börs, Yahoo-symbol, kurs och samtliga MA-fält. Från Omsättningstillväxt 3 år och nedåt är rapportfälten öppna. De gamla kvartalen Q1–Q3 flyttas automatiskt och låses; endast nya Q4 för omsättning och vinst/EPS kan skrivas in.</div>
+<div class="rowcard"><b>Daglig översikt</b><br>
+Översikten visar Blå, Vit och Snitt tillsammans med respektive poängförändring mot föregående sparade handelsdag. Kursutvecklingen senaste handelsdagen visas i procent. Själva siffran är grön över noll, röd under noll och neutral vid exakt noll. Kurs/MA200 och MA200-trend 3 månader visas inte längre i översikten.</div>
+<div class="rowcard"><b>Portföljläge i Utveckling</b><br>
+Utveckling kan växlas mellan Aktier och Veckoportföljer. Portföljläget visar varje sparad veckas Blå-, Vit- och Snittportfölj, avkastning mot index, antal vinnare samt bästa och sämsta innehav. En klickbar detaljvy visar samtliga tio aktier.</div>
+<div class="rowcard"><b>Veckoportföljer</b><br>
+En gång per kalendervecka sparas tre frysta och likaviktade Top 10-portföljer: Blå, Vit och Snitt. Startkurs, poäng och rank sparas för varje aktie. Portföljerna följs mot valt index, som standard OMXSPI. Veckans snapshot skapas automatiskt efter den första lyckade kursuppdateringen och ingår i säkerhetskopian.</div>
+<div class="rowcard"><b>Två modeller – inte en vald modell</b><br>
+Blå och Vit är separata modeller. Snitt är endast ett visat medelvärde. Vit får ingen poängförändring förrän separat Vit-historik har börjat samlas in. I Utveckling bestäms Status och radfärg av den poäng som tabellen är sorterad på.</div>
+<div class="rowcard"><b>Blå, Vit och Snitt</b><br>
+Alla huvudtabeller visar kolumnerna i ordningen Blå, Vit och Snitt. Snittet beräknas som (Blå + Vit) / 2 och visas med en decimal. Status och radfärg följer alltid den poäng som valts för sortering/status.</div>
+<div class="rowcard"><b>Gemensam färgkodning för Blå och Vit</b><br>
+Båda modellernas poäng använder samma nivåer och färger: 90–100 grön, 80–89 blå, 70–79 gul, 60–69 orange och under 60 röd. Blå visas som heltal och Vit med en decimal.</div>
+<div class="rowcard"><b>Vit – bedömning och färger</b><br>
+90–100 = Extremt stark (grön) · 80–89,9 = Stark (blå) · 70–79,9 = Intressant (gul) · 60–69,9 = Neutral (orange) · under 60 = Svag (röd). Vit-poängen och alla tre delpoäng visas med en decimal. Rader, poäng och status färgkodas efter nivån. Saknas någon faktor visas Underlag saknas i grått.</div>
+<div class="rowcard"><b>Vit – uppdatering av platåerna</b><br>
+Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gränser kan uppdateras från Intervalloptimeraren. Detta ändrar inte vilka faktorer som används.</div>
+<div class="rowcard"><b>Import och versionskompatibilitet</b><br>Säkerhetskopior från version 6 och 7 kan importeras. Importförlopp och eventuella fel visas direkt bredvid filväljaren. Saknade fält för börs, Yahoo-symbol, teknisk historik och modeller fylls i automatiskt utan att äldre history, marketHistory eller transaktioner tas bort.</div>
+
+</div></section>
+
+<section id="settings" class="panel">
+<div class="card">
+<h2>Data och säkerhetskopiering</h2>
+<div class="actions" style="margin:0;align-items:end">
+<button class="secondary" id="exportBtn">Spara som…</button>
+<button class="secondary" id="chooseImportFile" type="button">Importera datafil…</button>
+<input type="file" id="importFile" accept=".json,application/json" class="hidden">
+</div>
+<div id="importStatus" class="note" style="margin-top:8px">Ingen fil vald.</div>
+</div>
+<div class="card">
+<h2>Automatisk kursuppdatering</h2>
+<div class="grid">
+<div><label>Datakälla</label><select id="marketSource"><option value="yahoo">Yahoo Finance</option></select></div>
+<div><label>Uppdateringsintervall</label><select id="updateInterval"><option value="manual">Endast manuellt</option><option value="24">En gång per dygn</option><option value="12">Var 12:e timme</option><option value="6">Var 6:e timme</option></select></div>
+<div><label>Automatisk uppdatering när sidan öppnas</label><select id="autoUpdate"><option value="off">Av</option><option value="on">På</option></select></div>
+<div><label>Senaste lyckade uppdatering</label><input id="lastMarketUpdate" disabled></div>
+</div>
+<div class="actions"><button id="updatePrices">🔄 Uppdatera aktiekurser nu</button><button class="secondary" id="saveSettings">Spara inställningar</button></div>
+<div id="marketStatus" class="note" style="margin-top:10px">Ingen uppdatering pågår.</div>
+<p class="note">Veckoportföljer skapas automatiskt från den senaste avslutade fredagens data. Om appen inte öppnas under helgen eller före måndagens börsöppning återskapas saknade veckor automatiskt från sparad kurs- och poänghistorik nästa gång appen öppnas.</p>
+<div class="card" style="margin-top:14px">
+  <h3>Databaskontroll</h3>
+  <div class="actions"><button class="secondary" id="checkDatabase">Kontrollera databas</button><button class="secondary" id="restoreLocalBackup">Återställ lokal backup</button></div>
+  <div id="databaseHealth" class="note" style="margin-top:10px">Ingen kontroll har körts.</div>
+</div>
+<p class="note"><b>Uppdateras:</b> aktiekurs, MA200-nivå, avstånd till MA200, MA200-trend 1 vecka, 1 månad och 3 månader samt RSI 14. Trenderna räknas från verkliga dagliga stängningskurser. Aktuellt P/E beräknas automatiskt i bakgrunden från P/E-basen och kursförändringen; basvärdet och övrig rapportdata skrivs inte över. Kurs, Kurs/MA200, RSI 14 samt Blå och Vit poäng sparas i historiken vid varje lyckad uppdatering. Jämförelseindex uppdateras före aktierna. Inför varje massuppdatering används alltid en säkerhetskopia i arbetsminnet. En extra lokal backup skapas bara om webbläsarens lagringsutrymme räcker. Versionsmigrering lägger bara till saknade fält och bevarar befintliga listor, och uppdateringen avbryts automatiskt om någon äldre historik skulle saknas. Automatisk uppdatering sker endast när sidan är öppen eller öppnas – en lokal HTML-fil kan inte arbeta i bakgrunden när den är stängd.</p>
+<p class="note">Sverige är standard. Välj Danmark, Norge, Finland eller Island när du matar in ett nordiskt bolag. Yahoo-symbolen får då rätt suffix automatiskt, exempelvis NOVO B → NOVO-B.CO, EQNR → EQNR.OL och NOKIA → NOKIA.HE. När ett bolag saknar minst 263 handelsdagar hämtar Yahoo två års grundhistorik. Därefter begär appen ett mycket litet femdagarsfönster men sparar bara den senaste tillgängliga kursen och slår ihop den med den lokala historiken. Appen lagrar de senaste 400 handelsdagarna och räknar själv MA200 och MA200-trenderna. Om Yahoos sista dagscandle är null används meta.regularMarketPrice som den senaste avslutade handelsdagens kurs och läggs till i samma serie. Om ett bolag inte kan hämtas visas det i statusrutan och övriga bolag fortsätter uppdateras.</p>
+</div>
+<div id="laboratory" class="settings-laboratory">
   <div class="card">
     <h2>Analyslaboratorium</h2>
     <p class="note">Testar historiskt vilka tekniska lägen som följts av bäst utveckling sex månader senare. Standardläget delar observationerna i tio lika stora grupper, så att datan själv bestämmer gränserna. Resultaten ändrar inte Blå eller Vit automatiskt. I kombinationsläget kan samma aktie få träff i flera optimala faktorintervall samtidigt.</p>
@@ -1078,109 +1204,6 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
       <b>Rapportdata:</b> laboratoriet testar tills vidare endast faktorer som kan återskapas historiskt från kurserna. Historiska fundamentala kvartalsdata finns inte dag för dag.
     </div>
   </div>
-</section>
-
-<section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v20.0.7 – regler och analys</h2>
-<div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
-1. Kursen ska ligga över MA200.<br>
-2. MA200-trenden över 3 månader ska vara positiv.<br>
-3. Nuvarande P/E ska vara högst 125 % av minst ett av bolagets P/E-snitt för 3 eller 5 år.<br>
-Om en eller flera grundregler inte klaras markeras aktien som <b>Ej kvalificerad</b>, och exakt vilka regler som brutits visas på inmatningssidan, poängsidan, topplistan och i detaljvyn.</div>
-<div class="rowcard"><b>Trend – max 30 p</b><br>
-Kurs över MA200: 10 p · positiv 1-vecka: 5 p · positiv 1-månad: 5 p · positiv 3-månader: 10 p.</div>
-<div class="rowcard"><b>Neutralzon för kvartalsmomentum</b><br>
-Högre tillväxttal än föregående kvartal = förbättring. Samma tal = neutralt. Om föregående tal är positivt får nästa kvartal falla högst 10 % relativt föregående nivå och ändå räknas som neutralt. Neutral ger inga förbättringspoäng men bryter inte följden. Ett större tapp bryter följden. Q1 är äldst och Q4 senast.</div>
-<div class="rowcard"><b>Omsättning – max 15 p</b><br>
-Momentum, max 10 p: 0/1/2/3 förbättringar i den obrutna följden ger 2/5/8/10 p.<br>
-Historik, max 5 p: medianen av Q1–Q4 jämförs med bolagets årliga omsättningstillväxt över 3 år.</div>
-<div class="rowcard"><b>Vinst – max 20 p</b><br>
-Momentum, max 15 p: 0/1/2/3 förbättringar i den obrutna följden ger 3/8/12/15 p.<br>
-Historik, max 5 p: medianen av Q1–Q4 jämförs med bolagets årliga vinsttillväxt över 3 år.</div>
-<div class="rowcard"><b>Historikpoäng när 3-årstillväxten är positiv</b><br>
-Median ≥125 % av 3-årstillväxten: 5 p · 110–124,99 %: 4 p · 90–109,99 %: 3 p · 75–89,99 %: 2 p · under 75 %: 0 p.</div>
-<div class="rowcard"><b>Historikpoäng när 3-årstillväxten är noll eller negativ</b><br>
-Positiv median när historiken är noll eller negativ: 5 p. Median 0 när historiken är 0: 3 p. Om både median och historik är negativa jämförs hur mycket mindre eller mer negativ medianen är: minst 25 % förbättring = 5 p · minst 10 % förbättring = 4 p · inom ±10 % = 3 p · högst 25 % försämring = 2 p · större försämring = 0 p.</div>
-<div class="rowcard"><b>P/E – max 20 p</b><br>
-Mot vart och ett av 3- och 5-årssnitten: P/E vid eller under snittet = 10 p · högst 10 % över = 7 p · högst 20 % över = 3 p · mer än 20 % över = 0 p. Grundregeln ovan gäller dessutom.</div>
-<div class="rowcard"><b>ROE – max 5 p</b><br>
-Över 25 % = 5 p · 20–25 % = 4 p · 15–19,99 % = 3 p · 10–14,99 % = 2 p · under 10 % = 0 p.</div>
-<div class="rowcard"><b>Nettoskuld/EBITDA – max 5 p</b><br>
-Under 1,0 = 5 p · 1,0–2,0 = 4 p · över 2,0 till 3,0 = 2 p · över 3,0 = 0 p.</div>
-<div class="rowcard"><b>FCF-marginal – max 5 p</b><br>
-Över 15 % = 5 p · 10–15 % = 4 p · 5–9,99 % = 3 p · 0–4,99 % = 2 p · negativ = 0 p.</div>
-<div class="rowcard"><b>Bedömning efter totalpoäng</b><br>
-90–100 = Mycket stark · 80–89 = Stark · 70–79 = Bevakning · under 70 = Avstå. En aktie som bryter en grundregel står alltid som Ej kvalificerad oavsett poäng.</div>
-
-<div class="rowcard"><b>⚪ Modell Vit – fast platåmodell</b><br>
-Vit använder exakt tre tekniska faktorer med fast vikt 1:1:1. Faktorerna ändras inte och inga fundamentala data, värderingsmått, indexjämförelser eller hårda grundkrav ingår.</div>
-<div class="rowcard"><b>Vit – faktorer och vikter</b><br>
-Kursens avstånd till MA200: max 33,33 p · MA50:s avstånd till MA200: max 33,33 p · MA200-trend senaste månaden: max 33,34 p.</div>
-<div class="rowcard"><b>Vit – platåprincip</b><br>
-Full poäng ges i faktorernas historiskt bästa intervall. Utanför intervallet faller poängen mjukt mot noll. Ett extremt högt trendvärde ger därför inte automatiskt högre poäng.</div>
-<div id="whitePlateauRules" class="plateau-grid"></div>
-<div class="rowcard"><b>Ny Utveckling</b><br>
-Utveckling delas i Kursutveckling, Poängutveckling och Teknisk data. Varje vy visar dag, vecka, månad och år samtidigt. Fokusperioden styr sorteringen. OMXSPI visas som fast referens och kursvyn visar varje akties över- eller underavkastning mot index.</div>
-<div class="rowcard"><b>Veckoportföljer mot OMXSPI</b><br>
-Veckoportföljer delas i Resultat, Modelljämförelse och Innehav. Resultat visar Blå, Vit, Snitt och OMXSPI för dag, vecka, månad och sedan start. Modelljämförelse visar träffprocent och genomsnittlig överavkastning mot OMXSPI. Innehav visar varje akties egen utveckling och relativa utveckling mot index.</div>
-<div class="rowcard"><b>Automatiskt aktuellt P/E</b><br>
-När ett P/E-tal sparas lagras samtidigt aktiekursen som P/E-bas. För äldre bolag hämtas startbasen från befintligt P/E och kursen vid den senaste manuella inmatningen av samma P/E-tal i historiken – inte från dagens kurs. Därefter räknas aktuellt P/E som bas-P/E × aktuell kurs / baskurs. Det beräknade värdet används i Blås P/E-poäng, grundregel och Snittpoäng, men visas endast när aktien öppnas.</div>
-<div class="rowcard"><b>Klickbar poänghistorik</b><br>
-Alla aktuella Blå-, Vit- och Snittpoäng i huvudvyerna är klickbara. Historikpanelen skapas innan JavaScript initieras och alla händelser binds med säkerhetskontroller, så ett saknat element kan inte stoppa resten av programmet. Panelen visar dagens tre poäng, förändring över 1 dag, 1 vecka och 1 månad, kursutveckling, diagram och full sparad historik.</div>
-<div class="rowcard"><b>Användarvänlig sortering i Översikt</b><br>
-Översikten använder samma system som Utveckling. Blå, Vit, Snitt, deras dagliga förändringar, kursutveckling, RSI och bolagsnamn är klickbara. Första klicket visar högst/bäst överst och ett nytt klick på samma rubrik visar lägst/sämst överst. Ordningen kan också väljas i en tydlig rullista.</div>
-<div class="rowcard"><b>Användarvänlig sortering i Utveckling</b><br>
-Utveckling visar daglig poängförändring för Blå, Vit och Snitt. Alla viktiga kolumnrubriker är klickbara. Första klicket sorterar högst/bäst överst; ett nytt klick på samma rubrik växlar till lägst/sämst överst. Samma val kan göras tydligt i rullistan Ordning.</div>
-<div class="rowcard"><b>Nytt kvartal – låsning</b><br>
-När Nytt kvartal aktiveras låses ticker, bolag, börs, Yahoo-symbol, kurs och samtliga MA-fält. Från Omsättningstillväxt 3 år och nedåt är rapportfälten öppna. De gamla kvartalen Q1–Q3 flyttas automatiskt och låses; endast nya Q4 för omsättning och vinst/EPS kan skrivas in.</div>
-<div class="rowcard"><b>Daglig översikt</b><br>
-Översikten visar Blå, Vit och Snitt tillsammans med respektive poängförändring mot föregående sparade handelsdag. Kursutvecklingen senaste handelsdagen visas i procent. Själva siffran är grön över noll, röd under noll och neutral vid exakt noll. Kurs/MA200 och MA200-trend 3 månader visas inte längre i översikten.</div>
-<div class="rowcard"><b>Portföljläge i Utveckling</b><br>
-Utveckling kan växlas mellan Aktier och Veckoportföljer. Portföljläget visar varje sparad veckas Blå-, Vit- och Snittportfölj, avkastning mot index, antal vinnare samt bästa och sämsta innehav. En klickbar detaljvy visar samtliga tio aktier.</div>
-<div class="rowcard"><b>Veckoportföljer</b><br>
-En gång per kalendervecka sparas tre frysta och likaviktade Top 10-portföljer: Blå, Vit och Snitt. Startkurs, poäng och rank sparas för varje aktie. Portföljerna följs mot valt index, som standard OMXSPI. Veckans snapshot skapas automatiskt efter den första lyckade kursuppdateringen och ingår i säkerhetskopian.</div>
-<div class="rowcard"><b>Två modeller – inte en vald modell</b><br>
-Blå och Vit är separata modeller. Snitt är endast ett visat medelvärde. Vit får ingen poängförändring förrän separat Vit-historik har börjat samlas in. I Utveckling bestäms Status och radfärg av den poäng som tabellen är sorterad på.</div>
-<div class="rowcard"><b>Blå, Vit och Snitt</b><br>
-Alla huvudtabeller visar kolumnerna i ordningen Blå, Vit och Snitt. Snittet beräknas som (Blå + Vit) / 2 och visas med en decimal. Status och radfärg följer alltid den poäng som valts för sortering/status.</div>
-<div class="rowcard"><b>Gemensam färgkodning för Blå och Vit</b><br>
-Båda modellernas poäng använder samma nivåer och färger: 90–100 grön, 80–89 blå, 70–79 gul, 60–69 orange och under 60 röd. Blå visas som heltal och Vit med en decimal.</div>
-<div class="rowcard"><b>Vit – bedömning och färger</b><br>
-90–100 = Extremt stark (grön) · 80–89,9 = Stark (blå) · 70–79,9 = Intressant (gul) · 60–69,9 = Neutral (orange) · under 60 = Svag (röd). Vit-poängen och alla tre delpoäng visas med en decimal. Rader, poäng och status färgkodas efter nivån. Saknas någon faktor visas Underlag saknas i grått.</div>
-<div class="rowcard"><b>Vit – uppdatering av platåerna</b><br>
-Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gränser kan uppdateras från Intervalloptimeraren. Detta ändrar inte vilka faktorer som används.</div>
-<div class="rowcard"><b>Import och versionskompatibilitet</b><br>Säkerhetskopior från version 6 och 7 kan importeras. Importförlopp och eventuella fel visas direkt bredvid filväljaren. Saknade fält för börs, Yahoo-symbol, teknisk historik och modeller fylls i automatiskt utan att äldre history, marketHistory eller transaktioner tas bort.</div>
-
-</div></section>
-
-<section id="settings" class="panel">
-<div class="card">
-<h2>Data och säkerhetskopiering</h2>
-<div class="actions" style="margin:0;align-items:end">
-<button class="secondary" id="exportBtn">Spara som…</button>
-<button class="secondary" id="chooseImportFile" type="button">Importera datafil…</button>
-<input type="file" id="importFile" accept=".json,application/json" class="hidden">
-</div>
-<div id="importStatus" class="note" style="margin-top:8px">Ingen fil vald.</div>
-</div>
-<div class="card">
-<h2>Automatisk kursuppdatering</h2>
-<div class="grid">
-<div><label>Datakälla</label><select id="marketSource"><option value="yahoo">Yahoo Finance</option></select></div>
-<div><label>Uppdateringsintervall</label><select id="updateInterval"><option value="manual">Endast manuellt</option><option value="24">En gång per dygn</option><option value="12">Var 12:e timme</option><option value="6">Var 6:e timme</option></select></div>
-<div><label>Automatisk uppdatering när sidan öppnas</label><select id="autoUpdate"><option value="off">Av</option><option value="on">På</option></select></div>
-<div><label>Senaste lyckade uppdatering</label><input id="lastMarketUpdate" disabled></div>
-</div>
-<div class="actions"><button id="updatePrices">🔄 Uppdatera aktiekurser nu</button><button class="secondary" id="saveSettings">Spara inställningar</button></div>
-<div id="marketStatus" class="note" style="margin-top:10px">Ingen uppdatering pågår.</div>
-<p class="note">Veckoportföljer skapas automatiskt från den senaste avslutade fredagens data. Om appen inte öppnas under helgen eller före måndagens börsöppning återskapas saknade veckor automatiskt från sparad kurs- och poänghistorik nästa gång appen öppnas.</p>
-<div class="card" style="margin-top:14px">
-  <h3>Databaskontroll</h3>
-  <div class="actions"><button class="secondary" id="checkDatabase">Kontrollera databas</button><button class="secondary" id="restoreLocalBackup">Återställ lokal backup</button></div>
-  <div id="databaseHealth" class="note" style="margin-top:10px">Ingen kontroll har körts.</div>
-</div>
-<p class="note"><b>Uppdateras:</b> aktiekurs, MA200-nivå, avstånd till MA200, MA200-trend 1 vecka, 1 månad och 3 månader samt RSI 14. Trenderna räknas från verkliga dagliga stängningskurser. Aktuellt P/E beräknas automatiskt i bakgrunden från P/E-basen och kursförändringen; basvärdet och övrig rapportdata skrivs inte över. Kurs, Kurs/MA200, RSI 14 samt Blå och Vit poäng sparas i historiken vid varje lyckad uppdatering. Jämförelseindex uppdateras före aktierna. Inför varje massuppdatering används alltid en säkerhetskopia i arbetsminnet. En extra lokal backup skapas bara om webbläsarens lagringsutrymme räcker. Versionsmigrering lägger bara till saknade fält och bevarar befintliga listor, och uppdateringen avbryts automatiskt om någon äldre historik skulle saknas. Automatisk uppdatering sker endast när sidan är öppen eller öppnas – en lokal HTML-fil kan inte arbeta i bakgrunden när den är stängd.</p>
-<p class="note">Sverige är standard. Välj Danmark, Norge, Finland eller Island när du matar in ett nordiskt bolag. Yahoo-symbolen får då rätt suffix automatiskt, exempelvis NOVO B → NOVO-B.CO, EQNR → EQNR.OL och NOKIA → NOKIA.HE. När ett bolag saknar minst 263 handelsdagar hämtar Yahoo två års grundhistorik. Därefter begär appen ett mycket litet femdagarsfönster men sparar bara den senaste tillgängliga kursen och slår ihop den med den lokala historiken. Appen lagrar de senaste 400 handelsdagarna och räknar själv MA200 och MA200-trenderna. Om Yahoos sista dagscandle är null används meta.regularMarketPrice som den senaste avslutade handelsdagens kurs och läggs till i samma serie. Om ett bolag inte kan hämtas visas det i statusrutan och övriga bolag fortsätter uppdateras.</p>
 </div>
 </section>
 
@@ -1642,6 +1665,96 @@ document.querySelectorAll('.type-choice').forEach(b=>b.classList.toggle('active'
 function renderPreview(){const r=formRow(),c=calc(r),q=document.getElementById('qualification'),g=growthLabel(r);q.className='status '+(c.qualified?'ok':'no');q.textContent=c.qualified?'Godkänd av hårda filter':'Ej godkänd: '+(c.warning||'Ofullständig inmatning');document.getElementById('livePreview').innerHTML=[['Trend',c.trend],[g+' mom',c.revMomentum],[g+' hist',c.revHistory],['Vinst mom',c.epsMomentum],['Vinst hist',c.epsHistory],['P/E',c.peScore],['ROE',c.roe],['Skuld',c.debt],['FCF',c.fcf],['Total',c.total]].map(([a,b])=>`<div class="metric"><small>${a}</small><b class="${a==='Total'?cls(b):''}">${b}</b></div>`).join('')}
 function searchable(r){const c=calc(r);return[r.ticker,r.company,r.createdAt,r.updatedAt,c.rating,c.warning,...(r.transactions||[]).flatMap(t=>[t.type,t.date,...(t.reasons||[])])].join(' ').toLowerCase()}
 
+let scoreAnalysisModel='blue';
+let scoreAnalysisFilters={blue:[],white:[]};
+const SCORE_ANALYSIS_FACTORS={
+  blue:[
+    {key:'blueTotal',label:'Totalpoäng',max:100},
+    {key:'blueTrend',label:'Trend',max:30},
+    {key:'blueRevenue',label:'Omsättning totalt',max:15},
+    {key:'blueRevenueMomentum',label:'Omsättningsmomentum',max:10},
+    {key:'blueRevenueHistory',label:'Omsättningshistorik',max:5},
+    {key:'blueEps',label:'Vinst totalt',max:20},
+    {key:'blueEpsMomentum',label:'Vinstmomentum',max:15},
+    {key:'blueEpsHistory',label:'Vinsthistorik',max:5},
+    {key:'bluePe',label:'Värdering',max:20},
+    {key:'blueRoe',label:'ROE',max:5},
+    {key:'blueDebt',label:'Nettoskuld/EBITDA',max:5},
+    {key:'blueFcf',label:'FCF-marginal',max:5}
+  ],
+  white:[
+    {key:'whiteTotal',label:'Totalpoäng',max:100},
+    {key:'whiteDistance',label:'Kurs/MA200',max:33.33},
+    {key:'whiteSpread',label:'MA50/MA200',max:33.33},
+    {key:'whiteSlope',label:'MA200-trend 1 månad',max:33.34}
+  ]
+};
+function scoreAnalysisFactorValue(item,key){
+  const map={
+    blueTotal:item.c.total,blueTrend:item.c.trend,blueRevenue:item.c.rev,
+    blueRevenueMomentum:item.c.revMomentum,blueRevenueHistory:item.c.revHistory,
+    blueEps:item.c.eps,blueEpsMomentum:item.c.epsMomentum,blueEpsHistory:item.c.epsHistory,
+    bluePe:item.c.peScore,blueRoe:item.c.roe,blueDebt:item.c.debt,blueFcf:item.c.fcf,
+    whiteTotal:item.w.total,whiteDistance:item.w.parts?.distanceMa200,
+    whiteSpread:item.w.parts?.ma50Spread,whiteSlope:item.w.parts?.ma200Slope1m
+  };
+  return num(map[key])
+}
+function activeScoreFilters(){return scoreAnalysisFilters[scoreAnalysisModel]||[]}
+function matchesScoreAnalysisFilters(item){
+  return activeScoreFilters().filter(filter=>filter.enabled!==false).every(filter=>{
+    const value=scoreAnalysisFactorValue(item,filter.key);
+    if(!Number.isFinite(value))return false;
+    if(Number.isFinite(filter.min)&&value<filter.min)return false;
+    if(Number.isFinite(filter.max)&&value>filter.max)return false;
+    return true
+  })
+}
+function scoreAnalysisFactorDefinition(key){
+  return Object.values(SCORE_ANALYSIS_FACTORS).flat().find(factor=>factor.key===key)
+}
+function populateScoreFilterFactors(){
+  const select=document.getElementById('scoreFilterFactor');if(!select)return;
+  select.innerHTML=SCORE_ANALYSIS_FACTORS[scoreAnalysisModel].map(factor=>`<option value="${factor.key}">${factor.label} (0–${String(factor.max).replace('.',',')})</option>`).join('')
+}
+function addScoreAnalysisFilter(){
+  const key=document.getElementById('scoreFilterFactor').value;
+  const min=num(document.getElementById('scoreFilterMin').value);
+  const max=num(document.getElementById('scoreFilterMax').value);
+  if(!Number.isFinite(min)&&!Number.isFinite(max)){toast('Ange minst ett min- eller maxvärde');return}
+  if(Number.isFinite(min)&&Number.isFinite(max)&&min>max){toast('Minpoängen kan inte vara högre än maxpoängen');return}
+  activeScoreFilters().push({id:Date.now()+Math.random(),key,min,max,enabled:true});
+  document.getElementById('scoreFilterMin').value='';document.getElementById('scoreFilterMax').value='';
+  renderScoreFilterChips();render()
+}
+function renderScoreFilterChips(){
+  const root=document.getElementById('scoreFilterChips');if(!root)return;
+  const filters=activeScoreFilters();
+  root.innerHTML=filters.length?filters.map(filter=>{
+    const factor=scoreAnalysisFactorDefinition(filter.key);
+    const min=Number.isFinite(filter.min)?String(filter.min).replace('.',','):'–';
+    const max=Number.isFinite(filter.max)?String(filter.max).replace('.',','):'–';
+    return `<div class="score-filter-chip" data-filter-id="${filter.id}">
+      <label><input type="checkbox" data-filter-enabled="${filter.id}" ${filter.enabled!==false?'checked':''}> ${factor?.label||filter.key}</label>
+      <span>${min} till ${max} poäng</span>
+      <button type="button" class="secondary" data-filter-remove="${filter.id}">×</button>
+    </div>`
+  }).join(''):'<span class="note">Inga poängfilter aktiva. Du kan kombinera hur många filter som helst.</span>';
+  root.querySelectorAll('[data-filter-enabled]').forEach(box=>box.onchange=()=>{
+    const filter=filters.find(item=>String(item.id)===box.dataset.filterEnabled);if(filter)filter.enabled=box.checked;render()
+  });
+  root.querySelectorAll('[data-filter-remove]').forEach(button=>button.onclick=()=>{
+    scoreAnalysisFilters[scoreAnalysisModel]=filters.filter(item=>String(item.id)!==button.dataset.filterRemove);renderScoreFilterChips();render()
+  })
+}
+function setScoreAnalysisModel(model){
+  scoreAnalysisModel=model;
+  populateScoreFilterFactors();renderScoreFilterChips();
+const marketStatusObserver=new MutationObserver(()=>{const target=document.getElementById('dashboardUpdateStatus');if(target)target.textContent=document.getElementById('marketStatus')?.textContent||''});
+marketStatusObserver.observe(document.getElementById('marketStatus'),{childList:true,subtree:true,characterData:true});
+  scoreActiveSort=model==='blue'?'blueTotal':'whiteTotal';scoreSortDirection='desc';render()
+}
+
 let scoreActiveSort='averageScore';
 let scoreSortDirection='desc';
 
@@ -1664,6 +1777,7 @@ function scoreSortValue(item,key){
   if(key==='whiteDistance')return num(item.w.parts?.distanceMa200);
   if(key==='whiteSpread')return num(item.w.parts?.ma50Spread);
   if(key==='whiteSlope')return num(item.w.parts?.ma200Slope1m);
+  if(key.startsWith('blue')||key.startsWith('white'))return scoreAnalysisFactorValue(item,key);
   if(key==='createdAt')return new Date(item.r.createdAt||0).getTime();
   if(key==='updatedAt')return new Date(item.r.updatedAt||0).getTime();
   return NaN
@@ -1698,6 +1812,7 @@ function listRows(){
   if(model==='blue')l=l.filter(x=>x.c.qualified);
   if(model==='white')l=l.filter(x=>x.w.qualified);
   if(model==='both')l=l.filter(x=>x.c.qualified&&x.w.qualified);
+  if(scoreView==='analysis')l=l.filter(matchesScoreAnalysisFilters);
   l.sort((a,b)=>{
     const av=scoreSortValue(a,scoreActiveSort),bv=scoreSortValue(b,scoreActiveSort);
     if(typeof av==='string'||typeof bv==='string'){
@@ -1908,38 +2023,25 @@ function render(){
         </tr>`
       }).join('');
   }else{
-    table.className='';
-    table.innerHTML='<tr>'+
-      scoreSortableHeading('ticker','Ticker')+
-      scoreSortableHeading('company','Bolag')+
-      scoreSortableHeading('market','Börs')+
-      scoreSortableHeading('blueScore','🔵 Blå')+
-      scoreSortableHeading('whiteScore','⚪ Vit')+
-      scoreSortableHeading('averageScore','🟣 Snitt')+
-      scoreSortableHeading('status','Status')+
-      scoreSortableHeading('whiteDistance','Vit Kurs/MA200')+
-      scoreSortableHeading('whiteSpread','Vit MA50/MA200')+
-      scoreSortableHeading('whiteSlope','Vit MA200-trend 1m')+
-      scoreSortableHeading('owned','Ägs')+
-      scoreSortableHeading('marketUpdatedAt','Marknadsdata')+
-      '</tr>'+
-      l.map(x=>{
-        const average=averageScoreFromResults(x.c,x.w);
-        const selected=statusModel==='blue'?x.c.total:statusModel==='white'?x.w.total:average;
-        const ready=statusModel==='white'||statusModel==='average'?x.w.dataReady:true;
+    table.className='analysis-table';
+    const factors=SCORE_ANALYSIS_FACTORS[scoreAnalysisModel];
+    table.innerHTML='<tr>'+scoreSortableHeading('ticker','Ticker')+scoreSortableHeading('company','Bolag')+scoreSortableHeading('market','Börs')+
+      factors.map(factor=>scoreSortableHeading(factor.key,`${factor.label}<br><small>max ${String(factor.max).replace('.',',')}</small>`)).join('')+
+      scoreSortableHeading('owned','Ägs')+scoreSortableHeading('marketUpdatedAt','Marknadsdata')+'</tr>'+l.map(x=>{
+        const values=factors.map(factor=>{
+          const value=scoreAnalysisFactorValue(x,factor.key);
+          const scoreClass=scoreAnalysisModel==='blue'?'model-blue':'model-white';
+          return `<td class="${scoreClass}">${Number.isFinite(value)?value.toFixed(1).replace('.',','):'–'}</td>`
+        }).join('');
+        const selected=scoreAnalysisModel==='blue'?x.c.total:x.w.total;
+        const ready=scoreAnalysisModel==='blue'?true:x.w.dataReady;
         return `<tr class="score-row ${scoreRowClass(selected,ready)}" data-i="${x.i}" data-stock-index="${x.i}">
-          <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td><td>${marketLabel(x.r.market||'SE')}</td>
-          <td class="model-blue">${scoreLinkHtml(x.i,x.c.total,'blue',true,true)}</td>
-          <td class="model-white">${scoreLinkHtml(x.i,x.w.total,'white',x.w.dataReady,true)}</td>
-          <td>${scoreLinkHtml(x.i,average,'average',x.w.dataReady,true)}</td>
-          <td class="${scoreStatusClass(selected,ready)}">${scoreRating(selected,ready)}</td>
-          <td>${whitePartText(x.w.parts?.distanceMa200)} / 33,3</td>
-          <td>${whitePartText(x.w.parts?.ma50Spread)} / 33,3</td>
-          <td>${whitePartText(x.w.parts?.ma200Slope1m)} / 33,3</td>
-          <td>${x.h.shares>0?'Ja':'Nej'}</td>
-          <td class="${ageClass(x.r.marketUpdatedAt||x.r.technicalSourceDate)}">${ageText(x.r.marketUpdatedAt||x.r.technicalSourceDate)}</td>
+          <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td><td>${marketLabel(x.r.market||'SE')}</td>${values}
+          <td>${x.h.shares>0?'Ja':'Nej'}</td><td class="${ageClass(x.r.marketUpdatedAt||x.r.technicalSourceDate)}">${ageText(x.r.marketUpdatedAt||x.r.technicalSourceDate)}</td>
         </tr>`
       }).join('');
+    const count=document.getElementById('scoreFilterResultCount');
+    if(count)count.textContent=`${l.length} bolag matchar ${activeScoreFilters().filter(filter=>filter.enabled!==false).length} aktiva poängfilter.`;
   }
   document.querySelectorAll('.score-row').forEach(row=>row.onclick=()=>openStock(Number(row.dataset.i)));
   bindScoreHistoryLinks(document.getElementById('scoreTable'));
@@ -6002,8 +6104,8 @@ document.getElementById('market').addEventListener('change',refreshAutoYahooSymb
   scoreSortDirection=['ticker','company'].includes(scoreActiveSort)?'asc':'desc';
   render()
 };
-document.getElementById('simpleScoreView').onclick=()=>{scoreView='simple';document.getElementById('simpleScoreView').classList.add('active');document.getElementById('analysisScoreView').classList.remove('active');render()};
-document.getElementById('analysisScoreView').onclick=()=>{scoreView='analysis';document.getElementById('analysisScoreView').classList.add('active');document.getElementById('simpleScoreView').classList.remove('active');render()};document.getElementById('topFilter').onchange=renderTop;document.getElementById('topModel').onchange=renderTop;document.getElementById('developmentStocksMode').onclick=()=>setDevelopmentMode('stocks');
+document.getElementById('simpleScoreView').onclick=()=>{scoreView='simple';document.getElementById('scoreAnalysisControls').classList.add('hidden');document.getElementById('simpleScoreView').classList.add('active');document.getElementById('analysisScoreView').classList.remove('active');render()};
+document.getElementById('analysisScoreView').onclick=()=>{scoreView='analysis';document.getElementById('scoreAnalysisControls').classList.remove('hidden');document.getElementById('analysisScoreView').classList.add('active');document.getElementById('simpleScoreView').classList.remove('active');populateScoreFilterFactors();renderScoreFilterChips();render()};document.getElementById('topFilter').onchange=renderTop;document.getElementById('topModel').onchange=renderTop;document.getElementById('developmentStocksMode').onclick=()=>setDevelopmentMode('stocks');
 document.getElementById('developmentPortfoliosMode').onclick=()=>setDevelopmentMode('portfolios');
 document.getElementById('devPortfolioModel').onchange=renderDevelopmentPortfolios;
 document.getElementById('devPortfolioSort').onchange=e=>{
@@ -6017,6 +6119,11 @@ document.getElementById('dashboardSearch').oninput=renderDashboard;document.getE
 document.getElementById('dashboardFilter').onchange=renderDashboard;document.getElementById('dashboardMarket').onchange=renderDashboard;
 document.getElementById('dashboardSort').onchange=renderDashboard;
 document.getElementById('dashboardDirection').onchange=renderDashboard;
+document.getElementById('dashboardUpdatePrices').onclick=()=>document.getElementById('updatePrices').click();
+document.getElementById('scoreAnalysisModel').onchange=e=>setScoreAnalysisModel(e.target.value);
+document.getElementById('addScoreFilter').onclick=addScoreAnalysisFilter;
+document.getElementById('clearScoreFilters').onclick=()=>{scoreAnalysisFilters[scoreAnalysisModel]=[];renderScoreFilterChips();render()};
+populateScoreFilterFactors();renderScoreFilterChips();
 
 function initializeScoreHistoryUI(){
   const closeButton=document.getElementById('closeScoreHistory');
