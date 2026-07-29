@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.0.4</title>
+<title>MomentumScore v20.0.5</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -239,7 +239,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.0.4 – stabil utveckling och veckoportföljer</h1>
+<h1>MomentumScore v20.0.5 – stabil utveckling och veckoportföljer</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -442,7 +442,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
       <div id="devPortfolioDetailSummary" class="summary"></div>
       <div class="tablewrap" style="margin-top:12px"><table id="devPortfolioMembersTable"></table></div>
     </div>
-    <p class="note">Varje rad visar dag, vecka, månad och utveckling sedan start för en fryst Top 10-portfölj, plus relativ utveckling mot OMX för samma perioder. Klicka på raden för innehaven.</p>
+    <p class="note">Varje rad visar dag, vecka, månad och utveckling sedan start för en fryst Top 10-portfölj, plus relativ utveckling mot OMX för samma perioder. Klicka på en kolumnrubrik för att sortera. Klicka igen för att vända ordningen. Klicka på raden för innehaven.</p>
   </div>
 </section>
 
@@ -1090,7 +1090,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </section>
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v20.0.4 – regler och analys</h2>
+<h2>MomentumScore v20.0.5 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -2204,9 +2204,28 @@ function setDevelopmentMode(mode){
   if(developmentMode==='stocks')renderDevelopment();
   else renderDevelopmentPortfolios()
 }
+let devPortfolioActiveSort='week';
+let devPortfolioDirection='desc';
+
+function devPortfolioSortValue(x,key){
+  if(key==='week')return new Date(x.snapshot.savedAt||0).getTime();
+  if(key==='model')return portfolioModelName(x.model);
+  if(key==='day')return x.returns.day;
+  if(key==='weekReturn')return x.returns.week;
+  if(key==='month')return x.returns.month;
+  if(key==='return')return x.returns.start;
+  if(key==='excessDay')return x.excessReturns.day;
+  if(key==='excessWeek')return x.excessReturns.week;
+  if(key==='excessMonth')return x.excessReturns.month;
+  if(key==='excess')return x.excessReturns.start;
+  if(key==='winners')return x.winners;
+  return NaN
+}
+
 function developmentPortfolioRows(){
   const modelFilter=document.getElementById('devPortfolioModel')?.value||'all';
-  const sort=document.getElementById('devPortfolioSort')?.value||'week';
+  const selectedSort=document.getElementById('devPortfolioSort')?.value||'week';
+  if(!devPortfolioActiveSort)devPortfolioActiveSort=selectedSort;
   const out=[];
   for(const snapshot of weeklyPortfolios){
     const indexReturn=weeklyBenchmarkReturn(snapshot);
@@ -2229,17 +2248,17 @@ function developmentPortfolioRows(){
     }
   }
   out.sort((a,b)=>{
-    const diff=(bv,av)=>(Number.isFinite(bv)?bv:-Infinity)-(Number.isFinite(av)?av:-Infinity);
-    if(sort==='day')return diff(b.returns.day,a.returns.day);
-    if(sort==='weekReturn')return diff(b.returns.week,a.returns.week);
-    if(sort==='month')return diff(b.returns.month,a.returns.month);
-    if(sort==='return')return diff(b.returns.start,a.returns.start);
-    if(sort==='excessDay')return diff(b.excessReturns.day,a.excessReturns.day);
-    if(sort==='excessWeek')return diff(b.excessReturns.week,a.excessReturns.week);
-    if(sort==='excessMonth')return diff(b.excessReturns.month,a.excessReturns.month);
-    if(sort==='excess')return diff(b.excessReturns.start,a.excessReturns.start);
-    if(sort==='winners')return b.winners-a.winners;
-    return String(b.snapshot.savedAt).localeCompare(String(a.snapshot.savedAt))
+    const av=devPortfolioSortValue(a,devPortfolioActiveSort);
+    const bv=devPortfolioSortValue(b,devPortfolioActiveSort);
+    if(typeof av==='string'||typeof bv==='string'){
+      const cmp=String(av||'').localeCompare(String(bv||''),'sv');
+      return devPortfolioDirection==='asc'?cmp:-cmp
+    }
+    const aOk=Number.isFinite(av),bOk=Number.isFinite(bv);
+    if(aOk&&!bOk)return -1;
+    if(!aOk&&bOk)return 1;
+    if(!aOk&&!bOk)return 0;
+    return devPortfolioDirection==='asc'?av-bv:bv-av
   });
   return out
 }
@@ -2273,7 +2292,8 @@ function renderDevelopmentPortfolios(){
     ['Bästa hittills',best?`${portfolioModelName(best.model)} ${signed(best.ret,' %')}`:'–']
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
 
-  table.innerHTML='<tr><th>Vecka</th><th>Modell</th><th>Dag</th><th>Vecka</th><th>Månad</th><th>Sedan start</th><th>Mot OMX dag</th><th>Mot OMX vecka</th><th>Mot OMX månad</th><th>Mot OMX start</th><th>Vinnare</th></tr>'+
+  const th=(key,label)=>`<th class="sortable-head${devPortfolioActiveSort===key?' active-sort'+(devPortfolioDirection==='asc'?' sort-asc':''):''}" data-dev-portfolio-sort="${key}">${label}</th>`;
+  table.innerHTML='<tr>'+th('week','Vecka')+th('model','Modell')+th('day','Dag')+th('weekReturn','Vecka')+th('month','Månad')+th('return','Sedan start')+th('excessDay','Mot OMX dag')+th('excessWeek','Mot OMX vecka')+th('excessMonth','Mot OMX månad')+th('excess','Mot OMX start')+th('winners','Vinnare')+'</tr>'+
     data.map((x,i)=>`<tr class="portfolio-row" data-portfolio-index="${i}">
         <td><b>${x.snapshot.weekKey}</b><br><small>${dateFmt(x.snapshot.savedAt)}</small></td>
         <td>${portfolioModelName(x.model)}</td>
@@ -2282,6 +2302,19 @@ function renderDevelopmentPortfolios(){
         <td>${x.winners}/${x.result.available}</td>
       </tr>`).join('');
 
+  table.querySelectorAll('[data-dev-portfolio-sort]').forEach(header=>{
+    header.onclick=()=>{
+      const key=header.dataset.devPortfolioSort;
+      if(devPortfolioActiveSort===key)devPortfolioDirection=devPortfolioDirection==='desc'?'asc':'desc';
+      else{
+        devPortfolioActiveSort=key;
+        devPortfolioDirection=key==='model'?'asc':'desc'
+      }
+      const select=document.getElementById('devPortfolioSort');
+      if(select&&[...select.options].some(option=>option.value===key))select.value=key;
+      renderDevelopmentPortfolios()
+    }
+  });
   table.querySelectorAll('.portfolio-row').forEach(row=>{
     row.onclick=()=>openDevelopmentPortfolio(Number(row.dataset.portfolioIndex))
   });
@@ -2592,6 +2625,21 @@ function setQuarterFieldState(id,locked){
   if(!el)return;
   if(el.tagName==='SELECT')el.disabled=locked;
   else el.readOnly=locked;
+  if(locked){
+    if(!el.hasAttribute('data-original-tabindex')){
+      el.setAttribute('data-original-tabindex',el.hasAttribute('tabindex')?el.getAttribute('tabindex'):'')
+    }
+    el.tabIndex=-1
+  }else{
+    const original=el.getAttribute('data-original-tabindex');
+    if(original!==null){
+      if(original==='')el.removeAttribute('tabindex');
+      else el.setAttribute('tabindex',original);
+      el.removeAttribute('data-original-tabindex')
+    }else{
+      el.removeAttribute('tabindex')
+    }
+  }
   el.classList.toggle('quarter-locked',locked);
   el.title=locked?'Låst i läget Nytt kvartal':'';
 }
@@ -2607,6 +2655,8 @@ function setQuarterMode(active){
     if(!el)return;
     el.readOnly=false;
     el.disabled=false;
+    el.removeAttribute('tabindex');
+    el.removeAttribute('data-original-tabindex');
     el.classList.remove('quarter-locked');
     el.classList.toggle('quarter-open',quarterMode);
     el.title=quarterMode?'Fyll i det nya kvartalets värde':'';
@@ -2659,7 +2709,12 @@ function save(){
     u.history=[...(old.history||[]),snapshot(u,quarterMode?'Nytt kvartal':'Uppdatering')];
     rows[editing]=u
   }
-  persist();clearForm();render();toast(quarterMode?'Nytt kvartal sparat':'Sparat')
+  const savedQuarter=quarterMode;
+  persist();
+  clearForm();
+  render();
+  if(savedQuarter)showTab('scores');
+  toast(savedQuarter?'Nytt kvartal sparat':'Sparat')
 }
 function clearForm(){ids.forEach(k=>document.getElementById(k).value='');document.getElementById('market').value='SE';setCompanyType('regular');setQuarterMode(false);editing=null;document.getElementById('newQuarter').classList.add('hidden');renderPreview()}
 function editRow(i){editing=i;setQuarterMode(false);const r=rows[i];ids.forEach(k=>document.getElementById(k).value=r[k]??'');setCompanyType(r.companyType);document.getElementById('newQuarter').classList.remove('hidden');renderPreview();showTab('input');scrollTo(0,0)}
@@ -2694,6 +2749,8 @@ function quarter(){
 
   setQuarterMode(true);
   renderPreview();
+  const firstQ4=investment?g('eps4'):g('rev4');
+  firstQ4?.focus();
   toast('Fyll i nytt Q4 och rapportens övriga nyckeltal')
 }
 
@@ -5612,7 +5669,11 @@ document.getElementById('simpleScoreView').onclick=()=>{scoreView='simple';docum
 document.getElementById('analysisScoreView').onclick=()=>{scoreView='analysis';document.getElementById('analysisScoreView').classList.add('active');document.getElementById('simpleScoreView').classList.remove('active');render()};document.getElementById('topFilter').onchange=renderTop;document.getElementById('topModel').onchange=renderTop;document.getElementById('developmentStocksMode').onclick=()=>setDevelopmentMode('stocks');
 document.getElementById('developmentPortfoliosMode').onclick=()=>setDevelopmentMode('portfolios');
 document.getElementById('devPortfolioModel').onchange=renderDevelopmentPortfolios;
-document.getElementById('devPortfolioSort').onchange=renderDevelopmentPortfolios;
+document.getElementById('devPortfolioSort').onchange=e=>{
+  devPortfolioActiveSort=e.target.value;
+  devPortfolioDirection=devPortfolioActiveSort==='model'?'asc':'desc';
+  renderDevelopmentPortfolios()
+};
 document.getElementById('closeDevPortfolioDetail').onclick=()=>document.getElementById('devPortfolioDetail').classList.add('hidden');
 document.getElementById('developmentSearch').oninput=renderDevelopment;
 document.getElementById('dashboardSearch').oninput=renderDashboard;document.getElementById('dashboardModel').onchange=renderDashboard;
