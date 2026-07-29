@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.2.7</title>
+<title>MomentumScore v20.2.8</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -271,7 +271,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.2.7 – rullande Top 10-portföljer</h1>
+<h1>MomentumScore v20.2.8 – rullande Top 10-portföljer</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -5509,7 +5509,8 @@ function detailCombinedHistoryChart(points,state=detailChartState){
     return `<circle cx="${x(i)}" cy="${Number.isFinite(p.average)?yScore(p.average):top+innerH}" r="5" fill="transparent"><title>${title}</title></circle>`
   }).join('');
   const hoverData=encodeURIComponent(JSON.stringify(clean));
-  return `<div class="detail-combined-chart"><div class="detail-chart-stage" data-chart-points="${hoverData}" data-chart-left="${left}" data-chart-right="${right}" data-chart-width="${w}" data-chart-height="${h}" data-chart-top="${top}" data-chart-bottom="${bottom}" data-price-min="${pMin}" data-price-max="${pMax}"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Poäng- och kursutveckling">
+  const currentPrice=[...points].reverse().map(p=>p.price).find(Number.isFinite);
+  return `<div class="detail-combined-chart"><div class="detail-chart-stage" data-chart-points="${hoverData}" data-chart-left="${left}" data-chart-right="${right}" data-chart-width="${w}" data-chart-height="${h}" data-chart-top="${top}" data-chart-bottom="${bottom}" data-price-min="${pMin}" data-price-max="${pMax}" data-current-price="${Number.isFinite(currentPrice)?currentPrice:''}"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Poäng- och kursutveckling">
     <text x="${left}" y="16" fill="#4ca6ff" font-size="12">Poäng (0–100)</text><text x="${w-right}" y="16" text-anchor="end" fill="#47d18c" font-size="12">Kurs</text>
     ${grid}<line x1="${left}" y1="${top}" x2="${left}" y2="${top+innerH}" class="chart-axis"></line><line x1="${w-right}" y1="${top}" x2="${w-right}" y2="${top+innerH}" class="chart-axis"></line><line x1="${left}" y1="${top+innerH}" x2="${w-right}" y2="${top+innerH}" class="chart-axis"></line>
     ${paths.join('')}${circles}${xLabels}
@@ -5525,7 +5526,7 @@ function detailScoreHistoryHtml(r){
     <div class="detail-history-toolbar"><div class="detail-range-buttons">${ranges.map(([key,label])=>`<button type="button" class="secondary ${detailChartState.range===key?'active':''}" data-detail-range="${key}">${label}</button>`).join('')}</div>
     <div class="detail-series-toggles"><label><input type="checkbox" data-detail-series="showPrice" ${detailChartState.showPrice?'checked':''}>Kurs</label><label><input type="checkbox" data-detail-series="showBlue" ${detailChartState.showBlue?'checked':''}>Blå</label><label><input type="checkbox" data-detail-series="showWhite" ${detailChartState.showWhite?'checked':''}>Vit</label><label><input type="checkbox" data-detail-series="showAverage" ${detailChartState.showAverage?'checked':''}>Snitt</label></div></div>
     <div id="detailCombinedChart">${detailCombinedHistoryChart(points)}</div>
-    <p class="note">Poängen visas på vänster axel med fast skala 0–100. Aktiekursen visas på höger axel. Håll muspekaren över diagrammet för datum och värden.</p>
+    <p class="note">Poängen visas på vänster axel med fast skala 0–100. Aktiekursen visas på höger axel. Håll muspekaren över diagrammet för datum, värden och kursens procentuella skillnad mot dagens kurs.</p>
   </div>`
 }
 function bindCombinedChartTooltip(){
@@ -5536,7 +5537,7 @@ function bindCombinedChartTooltip(){
   let points=[];try{points=JSON.parse(decodeURIComponent(stage.dataset.chartPoints||''))}catch{return}
   if(!points.length)return;
   const w=Number(stage.dataset.chartWidth),h=Number(stage.dataset.chartHeight),left=Number(stage.dataset.chartLeft),right=Number(stage.dataset.chartRight),top=Number(stage.dataset.chartTop),bottom=Number(stage.dataset.chartBottom);
-  const innerW=w-left-right,innerH=h-top-bottom,pMin=Number(stage.dataset.priceMin),pMax=Number(stage.dataset.priceMax);
+  const innerW=w-left-right,innerH=h-top-bottom,pMin=Number(stage.dataset.priceMin),pMax=Number(stage.dataset.priceMax),currentPrice=Number(stage.dataset.currentPrice);
   const xFor=i=>left+(i/Math.max(1,points.length-1))*innerW;
   const yScore=v=>top+(100-v)/100*innerH;
   const yPrice=v=>top+(pMax-v)/(pMax-pMin)*innerH;
@@ -5551,7 +5552,9 @@ function bindCombinedChartTooltip(){
     marker('.hp-price',px,yPrice(p.price),Number.isFinite(p.price));marker('.hp-blue',px,yScore(p.blue),Number.isFinite(p.blue));marker('.hp-white',px,yScore(p.white),Number.isFinite(p.white));marker('.hp-average',px,yScore(p.average),Number.isFinite(p.average));
     const money=v=>Number.isFinite(v)?v.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2}):'–';
     const score=v=>Number.isFinite(v)?v.toLocaleString('sv-SE',{minimumFractionDigits:1,maximumFractionDigits:1}):'–';
-    tip.innerHTML=`<b>${dateFmt(p.date)}</b><div class="price">● Kurs: ${money(p.price)}</div><div class="blue">● Blå: ${score(p.blue)}</div><div class="white">● Vit: ${score(p.white)}</div><div class="average">● Snitt: ${score(p.average)}</div>`;
+    const priceVsToday=Number.isFinite(p.price)&&Number.isFinite(currentPrice)&&currentPrice!==0?(p.price/currentPrice-1)*100:NaN;
+    const priceVsTodayText=Number.isFinite(priceVsToday)?` (${priceVsToday>0?'+':''}${priceVsToday.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})} % mot idag)` : '';
+    tip.innerHTML=`<b>${dateFmt(p.date)}</b><div class="price">● Kurs: ${money(p.price)}${priceVsTodayText}</div><div class="blue">● Blå: ${score(p.blue)}</div><div class="white">● Vit: ${score(p.white)}</div><div class="average">● Snitt: ${score(p.average)}</div>`;
     const localX=(px/w)*rect.width,localY=Math.min(rect.height-55,Math.max(55,(e.clientY-rect.top)));
     tip.style.left=`${Math.min(rect.width-190,Math.max(0,localX))}px`;tip.style.top=`${localY}px`;tip.classList.add('show');
   });
