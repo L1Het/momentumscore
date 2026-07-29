@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.1.3</title>
+<title>MomentumScore v20.1.4</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -250,7 +250,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.1.3 – poängscreening och renare arbetsyta</h1>
+<h1>MomentumScore v20.1.4 – poängscreening och renare arbetsyta</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -492,7 +492,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 
 
 <section id="rules" class="panel"><div class="card">
-<h2>MomentumScore v20.1.3 – regler och analys</h2>
+<h2>MomentumScore v20.1.4 – regler och analys</h2>
 <div class="rowcard"><b>Grundregler – aktien måste klara alla tre</b><br>
 1. Kursen ska ligga över MA200.<br>
 2. MA200-trenden över 3 månader ska vara positiv.<br>
@@ -5470,16 +5470,31 @@ async function fetchYahooHistory(symbol,existingHistory=[]){
     }
   }
   const metaPrice=Number(result.meta?.regularMarketPrice),metaTime=Number(result.meta?.regularMarketTime)||0;
-  const previousClose=Number(result.meta?.chartPreviousClose ?? result.meta?.regularMarketPreviousClose ?? result.meta?.previousClose);
   if(Number.isFinite(metaPrice)&&metaTime){
     incoming.push({date:new Date(metaTime*1000).toISOString().slice(0,10),close:metaPrice});
   }
   incoming=mergeDailyPrices([],incoming);
+
+  // Dagens förändring ska jämföras med föregående handelsdags lokala stängningskurs.
+  // Yahoo-fältet chartPreviousClose kan för vissa utländska aktier vara gammalt eller
+  // ligga på fel aktieserie/justeringsnivå (t.ex. efter split), vilket gav extrema fel.
+  // Därför använder vi den näst senaste unika dagskursen i samma lokala prisserie.
+  const livePrice=Number.isFinite(metaPrice)?metaPrice:(incoming.length?num(incoming[incoming.length-1].close):NaN);
+  const liveDate=metaTime?new Date(metaTime*1000).toISOString().slice(0,10):(incoming.length?incoming[incoming.length-1].date:'');
+  const priorPoint=[...incoming].reverse().find(p=>p.date&&p.date!==liveDate&&Number.isFinite(num(p.close)));
+  let previousClose=priorPoint?num(priorPoint.close):NaN;
+  if(!Number.isFinite(previousClose)){
+    const mergedFallback=mergeDailyPrices(existingHistory,incoming);
+    const currentIndex=mergedFallback.findIndex(p=>p.date===liveDate);
+    if(currentIndex>0)previousClose=num(mergedFallback[currentIndex-1].close);
+    else if(mergedFallback.length>1)previousClose=num(mergedFallback[mergedFallback.length-2].close);
+  }
+
   if(hasEnough&&incoming.length)incoming=[incoming[incoming.length-1]];
   const priceHistory=mergeDailyPrices(existingHistory,incoming);
   const technical=technicalFromPriceHistory(priceHistory);
-  const dailyChangePct=(Number.isFinite(metaPrice)&&Number.isFinite(previousClose)&&previousClose!==0)
-    ?((metaPrice/previousClose)-1)*100:NaN;
+  const dailyChangePct=(Number.isFinite(livePrice)&&Number.isFinite(previousClose)&&previousClose!==0)
+    ?((livePrice/previousClose)-1)*100:NaN;
   return{...technical,priceHistory,previousClose,dailyChangePct,fetchMode:hasEnough?'Endast senaste kurs':'Två års grundhistorik'};
 }
 function cloneJson(value){return JSON.parse(JSON.stringify(value))}
