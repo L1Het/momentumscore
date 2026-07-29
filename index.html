@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.2.8</title>
+<title>MomentumScore v20.2.9</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -271,7 +271,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.2.8 – rullande Top 10-portföljer</h1>
+<h1>MomentumScore v20.2.9 – rullande Top 10-portföljer</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -5552,8 +5552,8 @@ function bindCombinedChartTooltip(){
     marker('.hp-price',px,yPrice(p.price),Number.isFinite(p.price));marker('.hp-blue',px,yScore(p.blue),Number.isFinite(p.blue));marker('.hp-white',px,yScore(p.white),Number.isFinite(p.white));marker('.hp-average',px,yScore(p.average),Number.isFinite(p.average));
     const money=v=>Number.isFinite(v)?v.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2}):'–';
     const score=v=>Number.isFinite(v)?v.toLocaleString('sv-SE',{minimumFractionDigits:1,maximumFractionDigits:1}):'–';
-    const priceVsToday=Number.isFinite(p.price)&&Number.isFinite(currentPrice)&&currentPrice!==0?(p.price/currentPrice-1)*100:NaN;
-    const priceVsTodayText=Number.isFinite(priceVsToday)?` (${priceVsToday>0?'+':''}${priceVsToday.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})} % mot idag)` : '';
+    const priceVsToday=Number.isFinite(p.price)&&p.price!==0&&Number.isFinite(currentPrice)?(currentPrice/p.price-1)*100:NaN;
+    const priceVsTodayText=Number.isFinite(priceVsToday)?` <span style="color:${priceVsToday>0?'var(--green)':priceVsToday<0?'var(--red)':'var(--muted)'}">(${priceVsToday>0?'+':''}${priceVsToday.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})} % till idag)</span>` : '';
     tip.innerHTML=`<b>${dateFmt(p.date)}</b><div class="price">● Kurs: ${money(p.price)}${priceVsTodayText}</div><div class="blue">● Blå: ${score(p.blue)}</div><div class="white">● Vit: ${score(p.white)}</div><div class="average">● Snitt: ${score(p.average)}</div>`;
     const localX=(px/w)*rect.width,localY=Math.min(rect.height-55,Math.max(55,(e.clientY-rect.top)));
     tip.style.left=`${Math.min(rect.width-190,Math.max(0,localX))}px`;tip.style.top=`${localY}px`;tip.classList.add('show');
