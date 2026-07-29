@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.2.6</title>
+<title>MomentumScore v20.2.7</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -271,7 +271,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.2.6 – rullande Top 10-portföljer</h1>
+<h1>MomentumScore v20.2.7 – rullande Top 10-portföljer</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -2162,18 +2162,35 @@ function scoreModelFromSortField(field){
 
 
 function scoreHistoryByDay(r){
-  const source=(Array.isArray(r?.marketHistory)?r.marketHistory:[])
+  // Kursserien ska använda samtliga sparade handelsdagar i priceHistory.
+  // Poäng läggs bara på de datum då de faktiskt sparades i marketHistory.
+  const byDay=new Map();
+  const priceSource=(Array.isArray(r?.priceHistory)?r.priceHistory:[])
+    .filter(p=>p&&p.date&&Number.isFinite(num(p.close)))
+    .slice()
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  for(const p of priceSource){
+    const date=String(p.date).slice(0,10);
+    byDay.set(date,{date,savedAt:p.date,blue:NaN,white:NaN,average:NaN,price:num(p.close)});
+  }
+  const scoreSource=(Array.isArray(r?.marketHistory)?r.marketHistory:[])
     .filter(p=>p&&p.savedAt)
     .slice()
     .sort((a,b)=>new Date(a.savedAt)-new Date(b.savedAt));
-  const byDay=new Map();
-  for(const p of source)byDay.set(String(p.savedAt).slice(0,10),p);
-  return [...byDay.values()].map(p=>{
+  for(const p of scoreSource){
+    const date=String(p.savedAt).slice(0,10);
     const blue=num(p.blueScore??p.score);
     const white=num(p.whiteScore);
     const average=Number.isFinite(blue)&&Number.isFinite(white)?(blue+white)/2:NaN;
-    return{date:String(p.savedAt).slice(0,10),savedAt:p.savedAt,blue,white,average,price:num(p.price)}
-  }).sort((a,b)=>a.date.localeCompare(b.date))
+    const existing=byDay.get(date)||{date,savedAt:p.savedAt,blue:NaN,white:NaN,average:NaN,price:NaN};
+    byDay.set(date,{
+      ...existing,
+      savedAt:p.savedAt,
+      blue,white,average,
+      price:Number.isFinite(existing.price)?existing.price:num(p.price)
+    });
+  }
+  return [...byDay.values()].sort((a,b)=>a.date.localeCompare(b.date))
 }
 function scorePointAtOrBefore(points,daysAgo){
   if(!points.length)return null;
