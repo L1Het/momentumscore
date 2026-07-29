@@ -445,9 +445,9 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
           <option value="excessMonth">Bäst mot OMX månaden</option>
           <option value="excess">Bäst mot OMX sedan start</option>
           <option value="winners">Flest vinnare</option>
-                    
-          
-          
+                    <option value="fees">Lägst courtage</option>
+          <option value="trades">Flest affärer</option>
+          <option value="turnover">Högst handlad omsättning</option>
         </select></div>
       </div>
     </div>
@@ -2539,31 +2539,12 @@ function rollingPortfolio(model){
   const benchmarkReturn=Number.isFinite(benchmarkStart)&&benchmarkStart!==0&&Number.isFinite(benchCurrent)?(benchCurrent/benchmarkStart-1)*100:NaN;
   return{type:'rolling',model,startDate,value,profit,returnPct:ret,cagr,benchmarkReturn,excess:Number.isFinite(ret)&&Number.isFinite(benchmarkReturn)?ret-benchmarkReturn:NaN,fees,buyCount,sellCount,trades:buyCount+sellCount,turnover:turnoverValue/ROLLING_START_CAPITAL*100,cash,memberReturns,transactions,snapshot:snaps[0]}
 }
-function rollingValueAtDate(portfolio,date){
-  if(!portfolio)return NaN;
-  let value=num(portfolio.cash)||0,available=0;
-  for(const h of portfolio.memberReturns||[]){
-    const price=rollingPriceAt(h,date);
-    if(Number.isFinite(price)&&price>0){value+=h.shares*price;available++}
-  }
-  return available?value:NaN
-}
-function rollingPeriodReturn(portfolio,days){
-  const nowValue=num(portfolio?.value);
-  const d=new Date();d.setDate(d.getDate()-days);
-  const oldValue=rollingValueAtDate(portfolio,isoDate(d));
-  return Number.isFinite(nowValue)&&Number.isFinite(oldValue)&&oldValue!==0?(nowValue/oldValue-1)*100:NaN
-}
 function rollingPortfolioRows(){
   const filter=document.getElementById('devPortfolioModel')?.value||'all';
-  return ['blue','white','average'].filter(m=>filter==='all'||filter===m).map(m=>rollingPortfolio(m)).filter(Boolean).map(r=>{
-    const market=r.snapshot?.benchmarkMarket||'SE';
-    const returns={day:rollingPeriodReturn(r,1),week:rollingPeriodReturn(r,7),month:rollingPeriodReturn(r,30),start:r.returnPct};
-    const indexReturns={...benchmarkPeriodReturns(market),start:r.benchmarkReturn};
-    const excessReturns=Object.fromEntries(['day','week','month','start'].map(k=>[k,Number.isFinite(returns[k])&&Number.isFinite(indexReturns[k])?returns[k]-indexReturns[k]:NaN]));
-    return {...r,rolling:true,model:r.model,profit:r.profit,fees:r.fees,trades:r.trades,turnover:r.turnover,winners:r.memberReturns.filter(x=>Number.isFinite(x.returnPct)&&x.returnPct>0).length,
-      returns,excessReturns,result:{available:r.memberReturns.filter(x=>Number.isFinite(x.currentPrice)).length,memberReturns:r.memberReturns},indexReturns}
-  })
+  return ['blue','white','average'].filter(m=>filter==='all'||filter===m).map(m=>rollingPortfolio(m)).filter(Boolean).map(r=>({
+    ...r,rolling:true,model:r.model,profit:r.profit,cagr:r.cagr,fees:r.fees,trades:r.trades,turnover:r.turnover,winners:r.memberReturns.filter(x=>Number.isFinite(x.returnPct)&&x.returnPct>0).length,
+    returns:{day:NaN,week:NaN,month:NaN,start:r.returnPct},excessReturns:{day:NaN,week:NaN,month:NaN,start:r.excess},result:{available:r.memberReturns.filter(x=>Number.isFinite(x.currentPrice)).length,memberReturns:r.memberReturns},indexReturns:{start:r.benchmarkReturn}
+  }))
 }
 
 function portfolioModelName(model){
@@ -2585,12 +2566,9 @@ function renderDevelopmentPortfolios(){
   const valid=allRows.filter(x=>Number.isFinite(x.ret)),beat=allRows.filter(x=>Number.isFinite(x.excess)&&x.excess>0),best=valid.slice().sort((a,b)=>b.ret-a.ret)[0];
   document.getElementById('devPortfolioSummary').innerHTML=[['Rullande portföljer',rolling.length],['Frysta veckor',weeklyPortfolios.length],['Slår index',allRows.filter(x=>Number.isFinite(x.excess)).length?`${beat.length}/${allRows.filter(x=>Number.isFinite(x.excess)).length}`:'–'],['Bästa frysta',best?`${portfolioModelName(best.model)} ${signed(best.ret,' %')}`:'–']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
   const th=(key,label)=>`<th class="sortable-head${devPortfolioActiveSort===key?' active-sort'+(devPortfolioDirection==='asc'?' sort-asc':''):''}" data-dev-portfolio-sort="${key}">${label}</th>`;
-  const head='<tr>'+th('week','Portfölj / start')+th('model','Modell')+th('day','Dag')+th('excessDay','Mot OMX dag')+th('weekReturn','Vecka')+th('excessWeek','Mot OMX vecka')+th('month','Månad')+th('excessMonth','Mot OMX månad')+th('return','Sedan start')+th('profit','Utveckling kr')+th('excess','Mot OMX start')+th('winners','Vinnare')+'</tr>';
-  const periodCells=x=>[
-    ['day',' %'],['excessDay',' p.e.'],['weekReturn',' %'],['excessWeek',' p.e.'],['month',' %'],['excessMonth',' p.e.']
-  ].map(([key,suffix])=>{const value=devPortfolioSortValue(x,key);return `<td class="${portfolioReturnClass(value)}"><b>${signed(value,suffix)}</b></td>`}).join('');
-  const rollingHtml=sortedRolling.length?'<tr class="portfolio-section-row"><td colspan="12">Rullande Top 10</td></tr>'+sortedRolling.map(x=>`<tr class="portfolio-row rolling-portfolio-row" data-rolling-model="${x.model}"><td><b>Rullande Top 10</b><br><small>${dateFmt(x.startDate)}</small></td><td>${portfolioModelName(x.model)}</td>${periodCells(x)}<td class="${portfolioReturnClass(x.returnPct)}"><b>${signed(x.returnPct,' %')}</b></td><td class="${portfolioReturnClass(x.profit)}"><b>${signed(x.profit,' kr')}</b></td><td class="${portfolioReturnClass(x.excess)}"><b>${signed(x.excess,' p.e.')}</b></td><td>${x.winners}/${x.result.available}</td></tr>`).join(''):'';
-  const frozenHtml=sortedFrozen.length?'<tr class="portfolio-section-row"><td colspan="12">Frysta veckoportföljer</td></tr>'+sortedFrozen.map(x=>{const frozenProfit=Number.isFinite(x.returns.start)?ROLLING_START_CAPITAL*x.returns.start/100:NaN;return `<tr class="portfolio-row" data-frozen-id="${x.snapshot.id}" data-frozen-model="${x.model}"><td><b>${x.snapshot.weekKey}</b><br><small>${dateFmt(x.snapshot.savedAt)}</small></td><td>${portfolioModelName(x.model)}</td>${periodCells(x)}<td class="${portfolioReturnClass(x.returns.start)}"><b>${signed(x.returns.start,' %')}</b></td><td class="${portfolioReturnClass(frozenProfit)}"><b>${signed(frozenProfit,' kr')}</b></td><td class="${portfolioReturnClass(x.excessReturns.start)}"><b>${signed(x.excessReturns.start,' p.e.')}</b></td><td>${x.winners}/${x.result.available}</td></tr>`}).join(''):'';
+  const head='<tr>'+th('week','Portfölj / start')+th('model','Modell')+th('return','Avkastning')+th('profit','Utveckling kr')+th('excess','Mot OMX')+th('fees','Courtage')+th('trades','Affärer')+th('turnover','Handlad omsättning')+th('winners','Vinnare')+'</tr>';
+  const rollingHtml=sortedRolling.length?'<tr class="portfolio-section-row"><td colspan="9">Rullande Top 10</td></tr>'+sortedRolling.map((x,i)=>`<tr class="portfolio-row rolling-portfolio-row" data-rolling-model="${x.model}"><td><b>Rullande Top 10</b><br><small>${dateFmt(x.startDate)}</small></td><td>${portfolioModelName(x.model)}</td><td class="${portfolioReturnClass(x.returnPct)}"><b>${signed(x.returnPct,' %')}</b></td><td class="${portfolioReturnClass(x.profit)}"><b>${signed(x.profit,' kr')}</b></td><td class="${portfolioReturnClass(x.excess)}"><b>${signed(x.excess,' p.e.')}</b></td><td>${x.fees.toLocaleString('sv-SE',{maximumFractionDigits:0})} kr</td><td>${x.trades}</td><td>${signed(x.turnover,' %')}</td><td>${x.winners}/${x.result.available}</td></tr>`).join(''):'';
+  const frozenHtml=sortedFrozen.length?'<tr class="portfolio-section-row"><td colspan="9">Frysta veckoportföljer</td></tr>'+sortedFrozen.map((x,i)=>{const frozenProfit=Number.isFinite(x.returns.start)?ROLLING_START_CAPITAL*x.returns.start/100:NaN;return `<tr class="portfolio-row" data-frozen-id="${x.snapshot.id}" data-frozen-model="${x.model}"><td><b>${x.snapshot.weekKey}</b><br><small>${dateFmt(x.snapshot.savedAt)}</small></td><td>${portfolioModelName(x.model)}</td><td class="${portfolioReturnClass(x.returns.start)}"><b>${signed(x.returns.start,' %')}</b></td><td class="${portfolioReturnClass(frozenProfit)}"><b>${signed(frozenProfit,' kr')}</b></td><td class="${portfolioReturnClass(x.excessReturns.start)}"><b>${signed(x.excessReturns.start,' p.e.')}</b></td><td>0 kr</td><td>0</td><td>0 %</td><td>${x.winners}/${x.result.available}</td></tr>`}).join(''):'';
   table.innerHTML=head+rollingHtml+frozenHtml;
   table.querySelectorAll('[data-dev-portfolio-sort]').forEach(header=>header.onclick=()=>{const key=header.dataset.devPortfolioSort;if(devPortfolioActiveSort===key)devPortfolioDirection=devPortfolioDirection==='desc'?'asc':'desc';else{devPortfolioActiveSort=key;devPortfolioDirection=['model','fees'].includes(key)?'asc':'desc'}const select=document.getElementById('devPortfolioSort');if(select&&[...select.options].some(o=>o.value===key))select.value=key;renderDevelopmentPortfolios()});
   table.querySelectorAll('[data-rolling-model]').forEach(row=>row.onclick=()=>openRollingDevelopmentPortfolio(row.dataset.rollingModel));
@@ -5454,12 +5432,46 @@ function normalizeHistoryEntries(row){
   }))
 }
 
+function singleScoreHistoryChart(points,key,label,color){
+  const clean=points.filter(p=>Number.isFinite(p[key]));
+  if(clean.length<2)return '<div class="note">Minst två sparade handelsdagar behövs för diagram.</div>';
+  const w=720,h=250,pad=38;
+  const vals=clean.map(p=>p[key]);
+  let min=Math.min(...vals),max=Math.max(...vals);
+  if(min===max){min-=1;max+=1}
+  min=Math.max(0,Math.floor(min-2));max=Math.min(100,Math.ceil(max+2));
+  const x=i=>pad+(i/(clean.length-1))*(w-pad*2);
+  const y=v=>h-pad-((v-min)/(max-min))*(h-pad*2);
+  const path=clean.map((p,i)=>`${i?'L':'M'}${x(i).toFixed(1)} ${y(p[key]).toFixed(1)}`).join(' ');
+  const last=clean[clean.length-1];
+  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${label}">
+    <line class="chart-axis" x1="${pad}" y1="${h-pad}" x2="${w-pad}" y2="${h-pad}"></line>
+    <line class="chart-axis" x1="${pad}" y1="${pad}" x2="${pad}" y2="${h-pad}"></line>
+    <path d="${path}" fill="none" stroke="${color}" stroke-width="3"></path>
+    <circle cx="${x(clean.length-1).toFixed(1)}" cy="${y(last[key]).toFixed(1)}" r="4" fill="${color}"></circle>
+    <text class="chart-label" x="${pad}" y="${h-8}">${dateFmt(clean[0].date)}</text>
+    <text class="chart-label" x="${w-pad}" y="${h-8}" text-anchor="end">${dateFmt(last.date)}</text>
+    <text class="chart-label" x="${pad+3}" y="${pad-8}">${fmt(max)}</text>
+    <text class="chart-label" x="${pad+3}" y="${h-pad-5}">${fmt(min)}</text>
+    <text x="${pad+8}" y="${pad+14}" fill="${color}" font-weight="700">${label}: ${modelScoreText(last[key],key)}</text>
+  </svg>`
+}
+function detailScoreHistoryHtml(r){
+  const points=scoreHistoryByDay(r);
+  return `<div class="card"><h3>Poänghistorik</h3>
+    <div class="score-history-grid">
+      <div class="score-history-chart"><h3>🔵 Blå poäng</h3>${singleScoreHistoryChart(points,'blue','Blå','#4ca6ff')}</div>
+      <div class="score-history-chart"><h3>⚪ Vit poäng</h3>${singleScoreHistoryChart(points,'white','Vit','#f2f2f2')}</div>
+    </div>
+  </div>`
+}
+
 function openDetail(i){
   if(!Number.isInteger(i)||i<0||i>=rows.length){toast('Aktien kunde inte öppnas');return}
   detailIndex=i;
   const r=normalizeRow(rows[i]),c=calc(r),w=whiteCalc(r),h=holdings(r),g=growthLabel(r);
 document.getElementById('detailTitle').textContent=`${r.ticker||''} ${r.company||''}`.trim();const losses=[['Trend',30-c.trend],['Tillväxt',15-c.rev],['Vinst',20-c.eps],['P/E',20-c.peScore],['ROE',5-c.roe],['Skuld',5-c.debt],['FCF',5-c.fcf]].filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
-document.getElementById('detailCurrent').innerHTML=`<div class="summary"><div class="metric"><small>Blå</small><b>${scoreLinkHtml(i,c.total,'blue',true,true)}</b></div><div class="metric"><small>Vit</small><b>${scoreLinkHtml(i,w.total,'white',w.dataReady,true)}</b></div><div class="metric"><small>Snitt</small><b>${scoreLinkHtml(i,averageScoreFromResults(c,w),'average',w.dataReady,true)}</b></div><div class="metric"><small>Status snitt</small><b class="${scoreStatusClass(averageScoreFromResults(c,w),w.dataReady)}">${scoreRating(averageScoreFromResults(c,w),w.dataReady)}</b></div><div class="metric"><small>Börs</small><b style="font-size:15px">${marketLabel(r.market||'SE')}</b></div><div class="metric"><small>Marknadsdata</small><b class="${ageClass(r.marketUpdatedAt||r.technicalSourceDate)}" style="font-size:15px">${ageText(r.marketUpdatedAt||r.technicalSourceDate)}</b></div><div class="metric"><small>Rapportdata</small><b class="${ageClass(r.fundamentalUpdatedAt||r.updatedAt)}" style="font-size:15px">${ageText(r.fundamentalUpdatedAt||r.updatedAt)}</b></div><div class="metric"><small>Inlagd</small><b style="font-size:15px">${dateFmt(r.createdAt)}</b></div></div><div class="status ${c.qualified?'ok':'no'}"><b>🔵 Blå:</b> ${c.qualified?'Alla grundregler är uppfyllda':'Ej kvalificerad: '+c.warning}</div><div class="status ${w.dataReady?'ok':'no'}"><b>⚪ Vit:</b> ${w.dataReady?w.rating:'Underlag saknas'}</div>${peDetailHtml(r,c)}${stockDataAuditHtml(r,c,w)}<div class="card"><h3>Nuvarande poäng</h3><div class="summary">${[['Trend',c.trend+'/30'],[g+' momentum',c.revMomentum+'/10'],[g+' historik',c.revHistory+'/5'],[g+' totalt',c.rev+'/15'],['Vinst momentum',c.epsMomentum+'/15'],['Vinst historik',c.epsHistory+'/5'],['Vinst totalt',c.eps+'/20'],['P/E',c.peScore+'/20'],['ROE',c.roe+'/5'],['Skuld',c.debt+'/5'],['FCF',c.fcf+'/5']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('')}</div><h3>Vit platåmodell</h3><div class="summary"><div class="metric"><small>Total Vit</small><b class="${scoreStatusClass(w.total,w.dataReady)}">${whiteScoreText(w.total)} / 100</b></div>${whitePartsHtml(w)}</div><h3>Poäng som saknas till 100</h3><div class="score-loss">${losses.length?losses.map(([a,b])=>`<div class="loss-item"><small>${a}</small><b>−${b} p</b></div>`).join(''):'<div class="note">Full poäng i samtliga kategorier.</div>'}</div><h3>Historikberäkning</h3><div class="summary"><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt Y-Y':'Median omsättning Q1–Q4'}</small><b>${fmt(c.revMedian)} %</b></div><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt 3 år':'Omsättningstillväxt 3 år'}</small><b>${fmt(num(r.companyType==='investment'?r.ek3y:r.rev3y))} %</b></div><div class="metric"><small>Historikpoäng ${g.toLowerCase()}</small><b>${c.revHistory}/5</b></div><div class="metric"><small>Median vinst Q1–Q4</small><b>${fmt(c.epsMedian)} %</b></div><div class="metric"><small>Vinsttillväxt 3 år</small><b>${fmt(num(r.eps3y))} %</b></div><div class="metric"><small>Historikpoäng vinst</small><b>${c.epsHistory}/5</b></div></div></div>`;document.getElementById('oldPrice').value=r.price||'';document.getElementById('newPrice').value='';document.getElementById('newPe').value='';document.getElementById('peTool').classList.add('hidden');document.getElementById('txDate').value=todayISO();reasonUI();document.getElementById('holdingSummary').innerHTML=[['Antal',fmt(h.shares)],['GAV',fmt(h.avg)],['Realiserat',fmt(h.realized)],['Utdelningar',fmt(h.dividends)],['Courtage',fmt(h.fees)],['Status',h.shares>0?'Ägs':'Ägs inte']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');const safeHistory=normalizeHistoryEntries(r);
+document.getElementById('detailCurrent').innerHTML=`<div class="summary"><div class="metric"><small>Blå</small><b>${scoreLinkHtml(i,c.total,'blue',true,true)}</b></div><div class="metric"><small>Vit</small><b>${scoreLinkHtml(i,w.total,'white',w.dataReady,true)}</b></div><div class="metric"><small>Snitt</small><b>${scoreLinkHtml(i,averageScoreFromResults(c,w),'average',w.dataReady,true)}</b></div><div class="metric"><small>Status snitt</small><b class="${scoreStatusClass(averageScoreFromResults(c,w),w.dataReady)}">${scoreRating(averageScoreFromResults(c,w),w.dataReady)}</b></div><div class="metric"><small>Börs</small><b style="font-size:15px">${marketLabel(r.market||'SE')}</b></div><div class="metric"><small>Marknadsdata</small><b class="${ageClass(r.marketUpdatedAt||r.technicalSourceDate)}" style="font-size:15px">${ageText(r.marketUpdatedAt||r.technicalSourceDate)}</b></div><div class="metric"><small>Rapportdata</small><b class="${ageClass(r.fundamentalUpdatedAt||r.updatedAt)}" style="font-size:15px">${ageText(r.fundamentalUpdatedAt||r.updatedAt)}</b></div><div class="metric"><small>Inlagd</small><b style="font-size:15px">${dateFmt(r.createdAt)}</b></div></div><div class="status ${c.qualified?'ok':'no'}"><b>🔵 Blå:</b> ${c.qualified?'Alla grundregler är uppfyllda':'Ej kvalificerad: '+c.warning}</div><div class="status ${w.dataReady?'ok':'no'}"><b>⚪ Vit:</b> ${w.dataReady?w.rating:'Underlag saknas'}</div>${detailScoreHistoryHtml(r)}${stockDataAuditHtml(r,c,w)}<div class="card"><h3>Nuvarande poäng</h3><div class="summary">${[['Trend',c.trend+'/30'],[g+' momentum',c.revMomentum+'/10'],[g+' historik',c.revHistory+'/5'],[g+' totalt',c.rev+'/15'],['Vinst momentum',c.epsMomentum+'/15'],['Vinst historik',c.epsHistory+'/5'],['Vinst totalt',c.eps+'/20'],['P/E',c.peScore+'/20'],['ROE',c.roe+'/5'],['Skuld',c.debt+'/5'],['FCF',c.fcf+'/5']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('')}</div><h3>Vit platåmodell</h3><div class="summary"><div class="metric"><small>Total Vit</small><b class="${scoreStatusClass(w.total,w.dataReady)}">${whiteScoreText(w.total)} / 100</b></div>${whitePartsHtml(w)}</div><h3>Poäng som saknas till 100</h3><div class="score-loss">${losses.length?losses.map(([a,b])=>`<div class="loss-item"><small>${a}</small><b>−${b} p</b></div>`).join(''):'<div class="note">Full poäng i samtliga kategorier.</div>'}</div><h3>Historikberäkning</h3><div class="summary"><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt Y-Y':'Median omsättning Q1–Q4'}</small><b>${fmt(c.revMedian)} %</b></div><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt 3 år':'Omsättningstillväxt 3 år'}</small><b>${fmt(num(r.companyType==='investment'?r.ek3y:r.rev3y))} %</b></div><div class="metric"><small>Historikpoäng ${g.toLowerCase()}</small><b>${c.revHistory}/5</b></div><div class="metric"><small>Median vinst Q1–Q4</small><b>${fmt(c.epsMedian)} %</b></div><div class="metric"><small>Vinsttillväxt 3 år</small><b>${fmt(num(r.eps3y))} %</b></div><div class="metric"><small>Historikpoäng vinst</small><b>${c.epsHistory}/5</b></div></div></div>`;document.getElementById('oldPrice').value=r.price||'';document.getElementById('newPrice').value='';document.getElementById('newPe').value='';document.getElementById('peTool').classList.add('hidden');document.getElementById('txDate').value=todayISO();reasonUI();document.getElementById('holdingSummary').innerHTML=[['Antal',fmt(h.shares)],['GAV',fmt(h.avg)],['Realiserat',fmt(h.realized)],['Utdelningar',fmt(h.dividends)],['Courtage',fmt(h.fees)],['Status',h.shares>0?'Ägs':'Ägs inte']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');const safeHistory=normalizeHistoryEntries(r);
 document.getElementById('historyList').innerHTML=safeHistory.slice().reverse().map(x=>{
   const score=safeHistoricalScore(x,r);
   const raw=safeHistoricalRaw(x);
