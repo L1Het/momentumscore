@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.2.10</title>
+<title>MomentumScore v20.2.11</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -271,7 +271,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.2.10 – rullande Top 10-portföljer</h1>
+<h1>MomentumScore v20.2.11 – rullande Top 10-portföljer</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -5475,7 +5475,7 @@ function detailRangeCutoff(points,range){
   const last=new Date(points[points.length-1].date+'T12:00:00').getTime();
   return points.filter(p=>new Date(p.date+'T12:00:00').getTime()>=last-days*86400000)
 }
-function detailCombinedHistoryChart(points,state=detailChartState){
+function detailCombinedHistoryChart(points,state=detailChartState,currentScores=null){
   const ranged=detailRangeCutoff(points,state.range);
   const clean=ranged.filter(p=>Number.isFinite(p.blue)||Number.isFinite(p.white)||Number.isFinite(p.average)||Number.isFinite(p.price));
   if(clean.length<2)return '<div class="note">Minst två sparade handelsdagar behövs för diagram.</div>';
@@ -5510,7 +5510,10 @@ function detailCombinedHistoryChart(points,state=detailChartState){
   }).join('');
   const hoverData=encodeURIComponent(JSON.stringify(clean));
   const currentPrice=[...points].reverse().map(p=>p.price).find(Number.isFinite);
-  return `<div class="detail-combined-chart"><div class="detail-chart-stage" data-chart-points="${hoverData}" data-chart-left="${left}" data-chart-right="${right}" data-chart-width="${w}" data-chart-height="${h}" data-chart-top="${top}" data-chart-bottom="${bottom}" data-price-min="${pMin}" data-price-max="${pMax}" data-current-price="${Number.isFinite(currentPrice)?currentPrice:''}"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Poäng- och kursutveckling">
+  const currentBlue=Number.isFinite(currentScores?.blue)?currentScores.blue:[...points].reverse().map(p=>p.blue).find(Number.isFinite);
+  const currentWhite=Number.isFinite(currentScores?.white)?currentScores.white:[...points].reverse().map(p=>p.white).find(Number.isFinite);
+  const currentAverage=Number.isFinite(currentScores?.average)?currentScores.average:[...points].reverse().map(p=>p.average).find(Number.isFinite);
+  return `<div class="detail-combined-chart"><div class="detail-chart-stage" data-chart-points="${hoverData}" data-chart-left="${left}" data-chart-right="${right}" data-chart-width="${w}" data-chart-height="${h}" data-chart-top="${top}" data-chart-bottom="${bottom}" data-price-min="${pMin}" data-price-max="${pMax}" data-current-price="${Number.isFinite(currentPrice)?currentPrice:''}" data-current-blue="${Number.isFinite(currentBlue)?currentBlue:''}" data-current-white="${Number.isFinite(currentWhite)?currentWhite:''}" data-current-average="${Number.isFinite(currentAverage)?currentAverage:''}"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Poäng- och kursutveckling">
     <text x="${left}" y="16" fill="#4ca6ff" font-size="12">Poäng (0–100)</text><text x="${w-right}" y="16" text-anchor="end" fill="#47d18c" font-size="12">Kurs</text>
     ${grid}<line x1="${left}" y1="${top}" x2="${left}" y2="${top+innerH}" class="chart-axis"></line><line x1="${w-right}" y1="${top}" x2="${w-right}" y2="${top+innerH}" class="chart-axis"></line><line x1="${left}" y1="${top+innerH}" x2="${w-right}" y2="${top+innerH}" class="chart-axis"></line>
     ${paths.join('')}${circles}${xLabels}
@@ -5521,11 +5524,13 @@ function detailCombinedHistoryChart(points,state=detailChartState){
 }
 function detailScoreHistoryHtml(r){
   const points=scoreHistoryByDay(r);
+  const currentBlue=calc(r).total,currentWhite=whiteCalc(r).total,currentAverage=Number.isFinite(currentBlue)&&Number.isFinite(currentWhite)?(currentBlue+currentWhite)/2:NaN;
+  const currentScores={blue:currentBlue,white:currentWhite,average:currentAverage};
   const ranges=[['1m','1M'],['3m','3M'],['6m','6M'],['1y','1Å'],['3y','3Å'],['all','All historik']];
   return `<div class="card"><h3>Poäng- och kursutveckling</h3>
     <div class="detail-history-toolbar"><div class="detail-range-buttons">${ranges.map(([key,label])=>`<button type="button" class="secondary ${detailChartState.range===key?'active':''}" data-detail-range="${key}">${label}</button>`).join('')}</div>
     <div class="detail-series-toggles"><label><input type="checkbox" data-detail-series="showPrice" ${detailChartState.showPrice?'checked':''}>Kurs</label><label><input type="checkbox" data-detail-series="showBlue" ${detailChartState.showBlue?'checked':''}>Blå</label><label><input type="checkbox" data-detail-series="showWhite" ${detailChartState.showWhite?'checked':''}>Vit</label><label><input type="checkbox" data-detail-series="showAverage" ${detailChartState.showAverage?'checked':''}>Snitt</label></div></div>
-    <div id="detailCombinedChart">${detailCombinedHistoryChart(points)}</div>
+    <div id="detailCombinedChart">${detailCombinedHistoryChart(points,detailChartState,currentScores)}</div>
     <p class="note">Poängen visas på vänster axel med fast skala 0–100. Aktiekursen visas på höger axel. Håll muspekaren över diagrammet för datum, värden och kursens procentuella skillnad mot dagens kurs.</p>
   </div>`
 }
@@ -5537,7 +5542,7 @@ function bindCombinedChartTooltip(){
   let points=[];try{points=JSON.parse(decodeURIComponent(stage.dataset.chartPoints||''))}catch{return}
   if(!points.length)return;
   const w=Number(stage.dataset.chartWidth),h=Number(stage.dataset.chartHeight),left=Number(stage.dataset.chartLeft),right=Number(stage.dataset.chartRight),top=Number(stage.dataset.chartTop),bottom=Number(stage.dataset.chartBottom);
-  const innerW=w-left-right,innerH=h-top-bottom,pMin=Number(stage.dataset.priceMin),pMax=Number(stage.dataset.priceMax),currentPrice=Number(stage.dataset.currentPrice);
+  const innerW=w-left-right,innerH=h-top-bottom,pMin=Number(stage.dataset.priceMin),pMax=Number(stage.dataset.priceMax),currentPrice=Number(stage.dataset.currentPrice),currentBlue=Number(stage.dataset.currentBlue),currentWhite=Number(stage.dataset.currentWhite),currentAverage=Number(stage.dataset.currentAverage);
   const xFor=i=>left+(i/Math.max(1,points.length-1))*innerW;
   const yScore=v=>top+(100-v)/100*innerH;
   const yPrice=v=>top+(pMax-v)/(pMax-pMin)*innerH;
@@ -5552,8 +5557,6 @@ function bindCombinedChartTooltip(){
     marker('.hp-price',px,yPrice(p.price),Number.isFinite(p.price));marker('.hp-blue',px,yScore(p.blue),Number.isFinite(p.blue));marker('.hp-white',px,yScore(p.white),Number.isFinite(p.white));marker('.hp-average',px,yScore(p.average),Number.isFinite(p.average));
     const money=v=>Number.isFinite(v)?v.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2}):'–';
     const score=v=>Number.isFinite(v)?v.toLocaleString('sv-SE',{minimumFractionDigits:1,maximumFractionDigits:1}):'–';
-    const latestFinite=key=>[...points].reverse().map(point=>point[key]).find(Number.isFinite);
-    const currentBlue=latestFinite('blue'),currentWhite=latestFinite('white'),currentAverage=latestFinite('average');
     const priceVsToday=Number.isFinite(p.price)&&p.price!==0&&Number.isFinite(currentPrice)?(currentPrice/p.price-1)*100:NaN;
     const priceVsTodayText=Number.isFinite(priceVsToday)?` <span style="color:${priceVsToday>0?'var(--green)':priceVsToday<0?'var(--red)':'var(--muted)'}">(${priceVsToday>0?'+':''}${priceVsToday.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})} % till idag)</span>` : '';
     const scoreDeltaText=(historical,current)=>{
@@ -5569,8 +5572,8 @@ function bindCombinedChartTooltip(){
 }
 function bindDetailChartControls(r){
   const root=document.getElementById('detailCurrent');if(!root)return;
-  root.querySelectorAll('[data-detail-range]').forEach(btn=>btn.addEventListener('click',()=>{detailChartState.range=btn.dataset.detailRange;root.querySelectorAll('[data-detail-range]').forEach(x=>x.classList.toggle('active',x.dataset.detailRange===detailChartState.range));const target=document.getElementById('detailCombinedChart');if(target){target.innerHTML=detailCombinedHistoryChart(scoreHistoryByDay(r));bindCombinedChartTooltip()}}));
-  root.querySelectorAll('[data-detail-series]').forEach(cb=>cb.addEventListener('change',()=>{detailChartState[cb.dataset.detailSeries]=cb.checked;const target=document.getElementById('detailCombinedChart');if(target){target.innerHTML=detailCombinedHistoryChart(scoreHistoryByDay(r));bindCombinedChartTooltip()}}));
+  root.querySelectorAll('[data-detail-range]').forEach(btn=>btn.addEventListener('click',()=>{detailChartState.range=btn.dataset.detailRange;root.querySelectorAll('[data-detail-range]').forEach(x=>x.classList.toggle('active',x.dataset.detailRange===detailChartState.range));const target=document.getElementById('detailCombinedChart');if(target){target.innerHTML=detailCombinedHistoryChart(scoreHistoryByDay(r),detailChartState,{blue:calc(r).total,white:whiteCalc(r).total,average:(calc(r).total+whiteCalc(r).total)/2});bindCombinedChartTooltip()}}));
+  root.querySelectorAll('[data-detail-series]').forEach(cb=>cb.addEventListener('change',()=>{detailChartState[cb.dataset.detailSeries]=cb.checked;const target=document.getElementById('detailCombinedChart');if(target){target.innerHTML=detailCombinedHistoryChart(scoreHistoryByDay(r),detailChartState,{blue:calc(r).total,white:whiteCalc(r).total,average:(calc(r).total+whiteCalc(r).total)/2});bindCombinedChartTooltip()}}));
   bindCombinedChartTooltip();
 }
 
