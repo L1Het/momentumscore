@@ -271,7 +271,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.2.13 – portföljöversikt och stabila Top 10</h1>
+<h1>MomentumScore v20.2.14 – portföljöversikt och stabila Top 10</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -2384,9 +2384,12 @@ function developmentMetrics(r){
   const prev30=historyPointAtOrBefore(hist,30);
   return{
     hist,first,last,currentScore,currentPrice,currentMa,
-    price1:Number.isFinite(num(r.dailyChangePct))?num(r.dailyChangePct):(day1?changePct(num(day1.close),currentPrice):(prev1?changePct(num(prev1.price),currentPrice):NaN)),
-    price7:day5?changePct(num(day5.close),currentPrice):(prev7?changePct(num(prev7.price),currentPrice):NaN),
-    price30:day21?changePct(num(day21.close),currentPrice):(prev30?changePct(num(prev30.price),currentPrice):NaN),
+    // Kursutveckling räknas alltid direkt från sparad, kronologisk dagshistorik.
+    // Senaste punkten är aktuell kurs och näst senaste är föregående handelsdags stängning.
+    // dailyChangePct används inte här eftersom ett äldre importerat värde annars kan ligga kvar.
+    price1:(daily.length>=2?changePct(num(daily[daily.length-2].close),num(daily[daily.length-1].close)):(prev1?changePct(num(prev1.price),currentPrice):NaN)),
+    price7:day5?changePct(num(day5.close),num(daily[daily.length-1]?.close??currentPrice)):(prev7?changePct(num(prev7.price),currentPrice):NaN),
+    price30:day21?changePct(num(day21.close),num(daily[daily.length-1]?.close??currentPrice)):(prev30?changePct(num(prev30.price),currentPrice):NaN),
     priceAll:first?changePct(num(first.price),currentPrice):NaN,
     maAll:first?currentMa-num(first.ma200):NaN,
     scoreAll:first?currentScore-num(first.score):NaN,
@@ -5727,24 +5730,16 @@ async function fetchYahooHistory(symbol,existingHistory=[]){
   }
   incoming=mergeDailyPrices([],incoming);
 
-  // Dagens förändring ska jämföras med föregående handelsdags lokala stängningskurs.
-  // Yahoo-fältet chartPreviousClose kan för vissa utländska aktier vara gammalt eller
-  // ligga på fel aktieserie/justeringsnivå (t.ex. efter split), vilket gav extrema fel.
-  // Därför använder vi den näst senaste unika dagskursen i samma lokala prisserie.
-  const livePrice=Number.isFinite(metaPrice)?metaPrice:(incoming.length?num(incoming[incoming.length-1].close):NaN);
-  const liveDate=metaTime?new Date(metaTime*1000).toISOString().slice(0,10):(incoming.length?incoming[incoming.length-1].date:'');
-  const priorPoint=[...incoming].reverse().find(p=>p.date&&p.date!==liveDate&&Number.isFinite(num(p.close)));
-  let previousClose=priorPoint?num(priorPoint.close):NaN;
-  if(!Number.isFinite(previousClose)){
-    const mergedFallback=mergeDailyPrices(existingHistory,incoming);
-    const currentIndex=mergedFallback.findIndex(p=>p.date===liveDate);
-    if(currentIndex>0)previousClose=num(mergedFallback[currentIndex-1].close);
-    else if(mergedFallback.length>1)previousClose=num(mergedFallback[mergedFallback.length-2].close);
-  }
-
+  // Behåll bara senaste inkommande punkt när full historik redan finns, men slå först
+  // ihop den med den sparade historiken. Därefter används alltid de två senaste unika
+  // handelsdagarna i samma prisserie. Ingen Yahoo-previousClose och ingen kalenderdagsgissning.
   if(hasEnough&&incoming.length)incoming=[incoming[incoming.length-1]];
   const priceHistory=mergeDailyPrices(existingHistory,incoming);
   const technical=technicalFromPriceHistory(priceHistory);
+  const latestPoint=priceHistory.length?priceHistory[priceHistory.length-1]:null;
+  const priorPoint=priceHistory.length>=2?priceHistory[priceHistory.length-2]:null;
+  const livePrice=latestPoint?num(latestPoint.close):NaN;
+  const previousClose=priorPoint?num(priorPoint.close):NaN;
   const dailyChangePct=(Number.isFinite(livePrice)&&Number.isFinite(previousClose)&&previousClose!==0)
     ?((livePrice/previousClose)-1)*100:NaN;
   return{...technical,priceHistory,previousClose,dailyChangePct,fetchMode:hasEnough?'Endast senaste kurs':'Två års grundhistorik'};
