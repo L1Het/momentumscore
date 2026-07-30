@@ -271,7 +271,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.2.12 – rullande Top 10-portföljer</h1>
+<h1>MomentumScore v20.2.13 – portföljöversikt och stabila Top 10</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -2575,12 +2575,31 @@ function rollingPortfolio(model){
   const benchmarkReturn=Number.isFinite(benchmarkStart)&&benchmarkStart!==0&&Number.isFinite(benchCurrent)?(benchCurrent/benchmarkStart-1)*100:NaN;
   return{type:'rolling',model,startDate,value,profit,returnPct:ret,cagr,benchmarkReturn,excess:Number.isFinite(ret)&&Number.isFinite(benchmarkReturn)?ret-benchmarkReturn:NaN,fees,buyCount,sellCount,trades:buyCount+sellCount,turnover:turnoverValue/ROLLING_START_CAPITAL*100,cash,memberReturns,transactions,snapshot:snaps[0]}
 }
+function rollingValueAtDate(portfolio,date){
+  if(!portfolio)return NaN;
+  let value=num(portfolio.cash)||0,available=0;
+  for(const h of portfolio.memberReturns||[]){
+    const price=rollingPriceAt(h,date);
+    if(Number.isFinite(price)&&price>0){value+=h.shares*price;available++}
+  }
+  return available?value:NaN
+}
+function rollingPeriodReturn(portfolio,days){
+  const nowValue=num(portfolio?.value);
+  const d=new Date();d.setDate(d.getDate()-days);
+  const oldValue=rollingValueAtDate(portfolio,isoDate(d));
+  return Number.isFinite(nowValue)&&Number.isFinite(oldValue)&&oldValue!==0?(nowValue/oldValue-1)*100:NaN
+}
 function rollingPortfolioRows(){
   const filter=document.getElementById('devPortfolioModel')?.value||'all';
-  return ['blue','white','average'].filter(m=>filter==='all'||filter===m).map(m=>rollingPortfolio(m)).filter(Boolean).map(r=>({
-    ...r,rolling:true,model:r.model,profit:r.profit,cagr:r.cagr,fees:r.fees,trades:r.trades,turnover:r.turnover,winners:r.memberReturns.filter(x=>Number.isFinite(x.returnPct)&&x.returnPct>0).length,
-    returns:{day:NaN,week:NaN,month:NaN,start:r.returnPct},excessReturns:{day:NaN,week:NaN,month:NaN,start:r.excess},result:{available:r.memberReturns.filter(x=>Number.isFinite(x.currentPrice)).length,memberReturns:r.memberReturns},indexReturns:{start:r.benchmarkReturn}
-  }))
+  return ['blue','white','average'].filter(m=>filter==='all'||filter===m).map(m=>rollingPortfolio(m)).filter(Boolean).map(r=>{
+    const market=r.snapshot?.benchmarkMarket||'SE';
+    const returns={day:rollingPeriodReturn(r,1),week:rollingPeriodReturn(r,7),month:rollingPeriodReturn(r,30),start:r.returnPct};
+    const indexReturns={...benchmarkPeriodReturns(market),start:r.benchmarkReturn};
+    const excessReturns=Object.fromEntries(['day','week','month','start'].map(k=>[k,Number.isFinite(returns[k])&&Number.isFinite(indexReturns[k])?returns[k]-indexReturns[k]:NaN]));
+    return {...r,rolling:true,model:r.model,profit:r.profit,fees:r.fees,trades:r.trades,turnover:r.turnover,winners:r.memberReturns.filter(x=>Number.isFinite(x.returnPct)&&x.returnPct>0).length,
+      returns,excessReturns,result:{available:r.memberReturns.filter(x=>Number.isFinite(x.currentPrice)).length,memberReturns:r.memberReturns},indexReturns}
+  })
 }
 
 function portfolioModelName(model){
@@ -2602,9 +2621,12 @@ function renderDevelopmentPortfolios(){
   const valid=allRows.filter(x=>Number.isFinite(x.ret)),beat=allRows.filter(x=>Number.isFinite(x.excess)&&x.excess>0),best=valid.slice().sort((a,b)=>b.ret-a.ret)[0];
   document.getElementById('devPortfolioSummary').innerHTML=[['Rullande portföljer',rolling.length],['Frysta veckor',weeklyPortfolios.length],['Slår index',allRows.filter(x=>Number.isFinite(x.excess)).length?`${beat.length}/${allRows.filter(x=>Number.isFinite(x.excess)).length}`:'–'],['Bästa frysta',best?`${portfolioModelName(best.model)} ${signed(best.ret,' %')}`:'–']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
   const th=(key,label)=>`<th class="sortable-head${devPortfolioActiveSort===key?' active-sort'+(devPortfolioDirection==='asc'?' sort-asc':''):''}" data-dev-portfolio-sort="${key}">${label}</th>`;
-  const head='<tr>'+th('week','Portfölj / start')+th('model','Modell')+th('return','Avkastning')+th('profit','Utveckling kr')+th('excess','Mot OMX')+th('fees','Courtage')+th('trades','Affärer')+th('turnover','Handlad omsättning')+th('winners','Vinnare')+'</tr>';
-  const rollingHtml=sortedRolling.length?'<tr class="portfolio-section-row"><td colspan="9">Rullande Top 10</td></tr>'+sortedRolling.map((x,i)=>`<tr class="portfolio-row rolling-portfolio-row" data-rolling-model="${x.model}"><td><b>Rullande Top 10</b><br><small>${dateFmt(x.startDate)}</small></td><td>${portfolioModelName(x.model)}</td><td class="${portfolioReturnClass(x.returnPct)}"><b>${signed(x.returnPct,' %')}</b></td><td class="${portfolioReturnClass(x.profit)}"><b>${signed(x.profit,' kr')}</b></td><td class="${portfolioReturnClass(x.excess)}"><b>${signed(x.excess,' p.e.')}</b></td><td>${x.fees.toLocaleString('sv-SE',{maximumFractionDigits:0})} kr</td><td>${x.trades}</td><td>${signed(x.turnover,' %')}</td><td>${x.winners}/${x.result.available}</td></tr>`).join(''):'';
-  const frozenHtml=sortedFrozen.length?'<tr class="portfolio-section-row"><td colspan="9">Frysta veckoportföljer</td></tr>'+sortedFrozen.map((x,i)=>{const frozenProfit=Number.isFinite(x.returns.start)?ROLLING_START_CAPITAL*x.returns.start/100:NaN;return `<tr class="portfolio-row" data-frozen-id="${x.snapshot.id}" data-frozen-model="${x.model}"><td><b>${x.snapshot.weekKey}</b><br><small>${dateFmt(x.snapshot.savedAt)}</small></td><td>${portfolioModelName(x.model)}</td><td class="${portfolioReturnClass(x.returns.start)}"><b>${signed(x.returns.start,' %')}</b></td><td class="${portfolioReturnClass(frozenProfit)}"><b>${signed(frozenProfit,' kr')}</b></td><td class="${portfolioReturnClass(x.excessReturns.start)}"><b>${signed(x.excessReturns.start,' p.e.')}</b></td><td>0 kr</td><td>0</td><td>0 %</td><td>${x.winners}/${x.result.available}</td></tr>`}).join(''):'';
+  const head='<tr>'+th('week','Portfölj / start')+th('model','Modell')+th('day','Dag')+th('excessDay','Mot OMX dag')+th('weekReturn','Vecka')+th('excessWeek','Mot OMX vecka')+th('month','Månad')+th('excessMonth','Mot OMX månad')+th('return','Sedan start')+th('profit','Utveckling kr')+th('excess','Mot OMX start')+th('winners','Vinnare')+'</tr>';
+  const periodCells=x=>[
+    ['day',' %'],['excessDay',' p.e.'],['weekReturn',' %'],['excessWeek',' p.e.'],['month',' %'],['excessMonth',' p.e.']
+  ].map(([key,suffix])=>{const value=devPortfolioSortValue(x,key);return `<td class="${portfolioReturnClass(value)}"><b>${signed(value,suffix)}</b></td>`}).join('');
+  const rollingHtml=sortedRolling.length?'<tr class="portfolio-section-row"><td colspan="12">Rullande Top 10</td></tr>'+sortedRolling.map(x=>`<tr class="portfolio-row rolling-portfolio-row" data-rolling-model="${x.model}"><td><b>Rullande Top 10</b><br><small>${dateFmt(x.startDate)}</small></td><td>${portfolioModelName(x.model)}</td>${periodCells(x)}<td class="${portfolioReturnClass(x.returnPct)}"><b>${signed(x.returnPct,' %')}</b></td><td class="${portfolioReturnClass(x.profit)}"><b>${signed(x.profit,' kr')}</b></td><td class="${portfolioReturnClass(x.excess)}"><b>${signed(x.excess,' p.e.')}</b></td><td>${x.winners}/${x.result.available}</td></tr>`).join(''):'';
+  const frozenHtml=sortedFrozen.length?'<tr class="portfolio-section-row"><td colspan="12">Frysta veckoportföljer</td></tr>'+sortedFrozen.map(x=>{const frozenProfit=Number.isFinite(x.returns.start)?ROLLING_START_CAPITAL*x.returns.start/100:NaN;return `<tr class="portfolio-row" data-frozen-id="${x.snapshot.id}" data-frozen-model="${x.model}"><td><b>${x.snapshot.weekKey}</b><br><small>${dateFmt(x.snapshot.savedAt)}</small></td><td>${portfolioModelName(x.model)}</td>${periodCells(x)}<td class="${portfolioReturnClass(x.returns.start)}"><b>${signed(x.returns.start,' %')}</b></td><td class="${portfolioReturnClass(frozenProfit)}"><b>${signed(frozenProfit,' kr')}</b></td><td class="${portfolioReturnClass(x.excessReturns.start)}"><b>${signed(x.excessReturns.start,' p.e.')}</b></td><td>${x.winners}/${x.result.available}</td></tr>`}).join(''):'';
   table.innerHTML=head+rollingHtml+frozenHtml;
   table.querySelectorAll('[data-dev-portfolio-sort]').forEach(header=>header.onclick=()=>{const key=header.dataset.devPortfolioSort;if(devPortfolioActiveSort===key)devPortfolioDirection=devPortfolioDirection==='desc'?'asc':'desc';else{devPortfolioActiveSort=key;devPortfolioDirection=['model','fees'].includes(key)?'asc':'desc'}const select=document.getElementById('devPortfolioSort');if(select&&[...select.options].some(o=>o.value===key))select.value=key;renderDevelopmentPortfolios()});
   table.querySelectorAll('[data-rolling-model]').forEach(row=>row.onclick=()=>openRollingDevelopmentPortfolio(row.dataset.rollingModel));
