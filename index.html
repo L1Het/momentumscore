@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.2.11</title>
+<title>MomentumScore v20.2.20</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -271,7 +271,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.2.19 – Topplistan som enda sanningskälla</h1>
+<h1>MomentumScore v20.2.20 – Fas 1 stabil</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -573,6 +573,8 @@ När Nytt kvartal aktiveras låses ticker, bolag, börs, Yahoo-symbol, kurs och 
 Översikten visar Blå, Vit och Snitt tillsammans med respektive poängförändring mot föregående sparade handelsdag. Kursutvecklingen senaste handelsdagen visas i procent. Själva siffran är grön över noll, röd under noll och neutral vid exakt noll. Kurs/MA200 och MA200-trend 3 månader visas inte längre i översikten.</div>
 <div class="rowcard"><b>Portföljläge i Utveckling</b><br>
 Utveckling kan växlas mellan Aktier och Veckoportföljer. Portföljläget visar varje sparad veckas Blå-, Vit- och Snittportfölj, avkastning mot index, antal vinnare samt bästa och sämsta innehav. En klickbar detaljvy visar samtliga tio aktier.</div>
+<div class="rowcard"><b>Fas 1 – stabil grund</b><br>
+Gemensam bolagsvy används från Översikt, Poäng, Topplista, Utveckling och portföljtabeller. Äldre felkopplad bolagshistorik rensas vid import, ofullständiga historikposter kan inte krascha bolagsvyn och Topplistan är fortsatt enda sanningskälla för nya Top 10-portföljer.</div>
 <div class="rowcard"><b>Rullande Top 10-portföljer</b><br>Under Utveckling → Veckoportföljer visas tre rullande strategier för Blå, Vit och Snitt. Startkapitalet är 100 000 kr. Innehav som ligger kvar i nästa veckas Top 10 behålls utan omviktning. Vid exakt lika poäng prioriteras alltid aktien som redan ingick i föregående veckas Top 10, så lika poäng utlöser inget byte. Aktier som lämnar säljs och nettolikviden delas lika mellan nya aktier. Courtage 0,069 % tas vid både köp och försäljning. Portföljerna återskapas deterministiskt från sparade veckosnapshots och följer med genom den befintliga veckoportföljhistoriken.</div>
 <div class="rowcard"><b>Veckoportföljer</b><br>
 Efter en lyckad kursuppdatering fredag 17:46 eller senare skapas nästa veckas tre frysta Top 10-portföljer direkt från den färdigräknade Topplistan. Topplistan är den enda sanningskällan: samma kvalificering, poäng och sorteringsordning kopieras, och startkursen hämtas uttryckligen från fredagens sista stängningskurs i kurshistoriken. Portföljerna visas direkt som kommande frysta portföljer men aktiveras i de rullande strategierna först på måndagen. Vid exakt lika poäng prioriteras befintligt innehav enligt nuvarande regel.</div>
@@ -1569,8 +1571,33 @@ function latestModelDelta(r,key,currentValue){
 }
 
 function snapshot(r,kind){const raw={};ids.forEach(k=>raw[k]=r[k]??'');return{savedAt:nowISO(),kind,raw,score:calc(r)}}
+
+function historyEntryBelongsToRow(entry,row){
+  const raw=entry?.raw;
+  if(!raw||typeof raw!=='object')return true;
+  const rowTicker=canonicalTicker(row?.ticker||row?.yahooSymbol);
+  const rawTicker=canonicalTicker(raw.ticker||raw.yahooSymbol);
+  const rowCompany=normalizedIdentity(row?.company);
+  const rawCompany=normalizedIdentity(raw.company);
+
+  if(rawTicker&&rowTicker&&rawTicker!==rowTicker)return false;
+  if(!rawTicker&&rawCompany&&rowCompany&&rawCompany!==rowCompany)return false;
+  return true
+}
+function cleanForeignHistory(row,history){
+  const source=Array.isArray(history)?history:[];
+  const kept=[],removed=[];
+  source.forEach(entry=>{
+    if(historyEntryBelongsToRow(entry,row))kept.push(entry);
+    else removed.push(entry)
+  });
+  return{kept,removed}
+}
+
 function normalizeRow(r){const n={...r};n.companyType=n.companyType==='investment'?'investment':'regular';n.market=['SE','DK','NO','FI','IS'].includes(n.market)?n.market:'SE';if(n.ma1&&!n.ma1m)n.ma1m=n.ma1;if(n.ma3&&!n.ma3m)n.ma3m=n.ma3;if(!('ma1w'in n))n.ma1w='';if(!('price'in n))n.price='';n.market=['SE','DK','NO','FI','IS'].includes(n.market)?n.market:'SE';n.yahooSymbol=n.yahooSymbol||inferYahooSymbol(n.ticker||'',n.market);if(!('rev3y'in n))n.rev3y='';if(!('ekYoy'in n))n.ekYoy='';if(!('ek3y'in n))n.ek3y='';if(!('eps3y'in n))n.eps3y='';n.createdAt=n.createdAt||nowISO();n.updatedAt=n.updatedAt||n.createdAt;n.history=Array.isArray(n.history)?n.history:[snapshot(n,'Importerad tidigare version')];
-n.history=n.history.map(entry=>({
+const cleanedHistory=cleanForeignHistory(n,n.history);
+n.historyRepairRemoved=(n.historyRepairRemoved||0)+cleanedHistory.removed.length;
+n.history=cleanedHistory.kept.map(entry=>({
   ...entry,
   savedAt:entry?.savedAt||n.updatedAt||n.createdAt||nowISO(),
   kind:entry?.kind||'Historikpost',
@@ -1638,6 +1665,24 @@ function holdings(r){let shares=0,cost=0,realized=0,dividends=0,fees=0,ever=fals
 
 function growthLabel(r){return (r?.companyType||document.getElementById('companyType').value)==='investment'?'EK-tillväxt':'Omsättning'}
 
+
+function phaseOneIntegrity(){
+  const duplicateTicker=[];
+  const seen=new Map();
+  rows.forEach((r,i)=>{
+    const key=canonicalTicker(r.ticker);
+    if(!key)return;
+    if(seen.has(key))duplicateTicker.push(`${r.ticker} (${seen.get(key)+1}/${i+1})`);
+    else seen.set(key,i)
+  });
+  return{
+    duplicateTicker,
+    repairedHistory:rows.reduce((sum,r)=>sum+(r.historyRepairRemoved||0),0),
+    brokenHistory:rows.filter(r=>(r.history||[]).some(x=>x?.score&&!Number.isFinite(num(x.score.total)))).length,
+    missingWhite:rows.filter(r=>!whiteCalc(r).dataReady).length
+  }
+}
+
 function databaseHealth(){
   const companies=rows.length;
   const histories=rows.reduce((s,r)=>s+(r.history?.length||0),0);
@@ -1651,7 +1696,7 @@ function databaseHealth(){
   return{companies,histories,marketPoints,transactions,priceDays,storageBytes,missingSymbols,shortHistory,missingRsi};
 }
 function renderDatabaseHealth(){
-  const h=databaseHealth();
+  const h=databaseHealth(),p1=phaseOneIntegrity();
   const line=(ok,text)=>`${ok?'✅':'⚠️'} ${text}`;
   document.getElementById('databaseHealth').innerHTML=[
     line(true,`${h.companies} bolag`),
@@ -1661,7 +1706,11 @@ function renderDatabaseHealth(){
     line(true,`${h.transactions} transaktioner`),line(h.storageBytes<4200000,`Databasstorlek ${(h.storageBytes/1024/1024).toFixed(2)} MB`),
     line(!h.missingSymbols.length,h.missingSymbols.length?`${h.missingSymbols.length} bolag saknar Yahoo-symbol: ${h.missingSymbols.join(', ')}`:'Alla bolag har Yahoo-symbol'),
     line(!h.shortHistory.length,h.shortHistory.length?`${h.shortHistory.length} bolag har ännu inte 263 handelsdagar`:'Alla bolag har tillräcklig historik för MA200-trend'),
-    line(!h.missingRsi.length,h.missingRsi.length?`${h.missingRsi.length} bolag saknar RSI`:'Alla bolag har RSI')
+    line(!h.missingRsi.length,h.missingRsi.length?`${h.missingRsi.length} bolag saknar RSI`:'Alla bolag har RSI'),
+    line(!p1.duplicateTicker.length,p1.duplicateTicker.length?`Dubbletter: ${p1.duplicateTicker.join(', ')}`:'Inga dubbla tickerposter'),
+    line(true,`${p1.repairedHistory} felkopplade historikposter rensade`),
+    line(!p1.brokenHistory,p1.brokenHistory?`${p1.brokenHistory} bolag har ofullständig äldre poänghistorik`:'Historikformatet är säkert'),
+    line(!p1.missingWhite,p1.missingWhite?`${p1.missingWhite} bolag saknar komplett Vit-data`:'Alla bolag har komplett Vit-data')
   ].join('<br>');
 }
 function restoreLocalBackup(){
@@ -2006,7 +2055,7 @@ function renderDashboard(){
       renderDashboard()
     }
   });
-  document.querySelectorAll('.dashboard-row').forEach(tr=>tr.onclick=()=>openStock(Number(tr.dataset.i)));bindScoreHistoryLinks(document.getElementById('dashboardTable'));
+  document.querySelectorAll('.dashboard-row').forEach(tr=>tr.onclick=e=>{if(e.target.closest('[data-score-history-index]'))return;openStock(Number(tr.dataset.i))});bindScoreHistoryLinks(document.getElementById('dashboardTable'));
 }
 function render(){
   const l=listRows(),table=document.getElementById('scoreTable');
@@ -2069,7 +2118,7 @@ function render(){
     const count=document.getElementById('scoreFilterResultCount');
     if(count)count.textContent=`${l.length} bolag matchar ${activeScoreFilters().filter(filter=>filter.enabled!==false).length} aktiva poängfilter.`;
   }
-  document.querySelectorAll('.score-row').forEach(row=>row.onclick=()=>openStock(Number(row.dataset.i)));
+  document.querySelectorAll('.score-row').forEach(row=>row.onclick=e=>{if(e.target.closest('[data-score-history-index]'))return;openStock(Number(row.dataset.i))});
   bindScoreHistoryLinks(document.getElementById('scoreTable'));
   bindScoreTableSorting(table);
   renderTop();renderDevelopment();renderDashboard()
@@ -2314,7 +2363,7 @@ function renderTop(){
       <td class="${scoreStatusClass(x.s.score,x.s.dataReady)}">${x.s.rating}</td>
       <td>${x.h.shares>0?'Ja':'Nej'}</td>
     </tr>`).join('');
-  document.querySelectorAll('.top-row').forEach(tr=>tr.onclick=()=>openStock(Number(tr.dataset.i)));bindScoreHistoryLinks(document.getElementById('topTable'));
+  document.querySelectorAll('.top-row').forEach(tr=>tr.onclick=e=>{if(e.target.closest('[data-score-history-index]'))return;openStock(Number(tr.dataset.i))});bindScoreHistoryLinks(document.getElementById('topTable'));
 }
 function developmentHistory(r){
   const source=(Array.isArray(r?.marketHistory)?r.marketHistory:[]).slice().sort((a,b)=>new Date(a.savedAt)-new Date(b.savedAt));
@@ -3036,7 +3085,7 @@ function renderDevelopment(){
       renderDevelopment()
     }
   });
-  table.querySelectorAll('.development-row').forEach(row=>row.onclick=()=>openStock(Number(row.dataset.i)));
+  table.querySelectorAll('.development-row').forEach(row=>row.onclick=e=>{if(e.target.closest('[data-score-history-index]'))return;openStock(Number(row.dataset.i))});
 }
 function normalizedIdentity(value){
   return String(value||'')
@@ -6242,10 +6291,12 @@ function openStock(ref){
   openDetail(index)
 }
 function bindUnifiedStockRows(root=document){
+  if(!root)return;
   root.querySelectorAll('[data-stock-index]').forEach(el=>{
     el.onclick=e=>{
       if(e.target.closest('[data-score-history-index]'))return;
-      openStock(Number(el.dataset.stockIndex))
+      const index=Number(el.dataset.stockIndex);
+      if(Number.isInteger(index)&&index>=0)openStock(index)
     }
   })
 }
@@ -6259,6 +6310,12 @@ function stockDataAuditHtml(r,c,w){
   if(!Number.isFinite(technical.ma200Level))issues.push('MA200-nivå kan inte beräknas');
   if(!w.dataReady)issues.push(w.warning||'Vit saknar underlag');
   if(!Number.isFinite(c.peCurrent))issues.push('Aktuellt P/E saknas');
+  if((r.historyRepairRemoved||0)>0)issues.push(`${r.historyRepairRemoved} felkopplade historikposter har rensats`);
+  const duplicates=rows.filter((other,index)=>index!==detailIndex&&(
+    canonicalTicker(other.ticker)===canonicalTicker(r.ticker)||
+    normalizedIdentity(other.company)===normalizedIdentity(r.company)
+  ));
+  if(duplicates.length)issues.push(`Möjlig dubblett: ${duplicates.map(x=>x.ticker||x.company).join(', ')}`);
 
   return `<div class="card"><h3>Datakontroll</h3>
     <div class="summary">
@@ -6834,6 +6891,21 @@ try{
     document.getElementById('labStatus').textContent='Laboratoriet är klart. Välj inställningar och kör testet.';
   }
 }catch(e){console.error('Laboratoriets startkontroll misslyckades',e)}
+
+window.addEventListener('error',event=>{
+  console.error('MomentumScore-fel',event.error||event.message);
+  try{toast('Ett visningsfel fångades. Övriga delar fortsätter fungera.')}catch{}
+});
+window.addEventListener('unhandledrejection',event=>{
+  console.error('MomentumScore asynkront fel',event.reason);
+  try{toast('En uppdatering misslyckades utan att sparad data ändrades.')}catch{}
+});
+const repairedHistoryCount=rows.reduce((sum,row)=>sum+(row.historyRepairRemoved||0),0);
+if(repairedHistoryCount){
+  persist();
+  console.warn(`${repairedHistoryCount} felkopplade historikposter rensades automatiskt.`);
+}
+
 setTimeout(()=>{
   try{backfillMissingWeeklyPortfolios()}catch(error){console.error('Veckoportföljernas återställning misslyckades',error)}
   maybeAutoUpdate()
