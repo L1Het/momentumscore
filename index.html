@@ -271,7 +271,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.2.15 – nästa vecka efter fredag 17:46</h1>
+<h1>MomentumScore v20.2.16 – nästa vecka efter fredag 17:46</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -5998,32 +5998,93 @@ function createHistoricalWeeklySnapshot(friday,automatic=true){
   if(!automatic)toast('Veckoportföljen skapades från fredagens historiska data');
   return true
 }
+
+function mondayFromWeekKey(weekKey){
+  const match=String(weekKey||'').match(/^(\d{4})-W(\d{2})$/);
+  if(!match)return null;
+  const year=Number(match[1]),week=Number(match[2]);
+  const jan4=new Date(year,0,4,12,0,0,0);
+  const day=jan4.getDay()||7;
+  const monday=new Date(jan4);
+  monday.setDate(jan4.getDate()-(day-1)+(week-1)*7);
+  return monday
+}
+function snapshotLockFriday(snapshot){
+  if(snapshot?.lockDate)return dateAtLocalNoon(snapshot.lockDate);
+  if(snapshot?.activationDate){
+    const d=dateAtLocalNoon(snapshot.activationDate);d.setDate(d.getDate()-3);return d
+  }
+  const monday=mondayFromWeekKey(snapshot?.weekKey);
+  if(monday){monday.setDate(monday.getDate()-3);return monday}
+  const saved=String(snapshot?.savedDate||snapshot?.savedAt||'').slice(0,10);
+  if(!saved)return null;
+  const d=dateAtLocalNoon(saved);
+  while(d.getDay()!==5)d.setDate(d.getDate()-1);
+  return d
+}
+function createCurrentDataWeeklySnapshot(friday,automatic=true){
+  const cutoffDate=isoDate(friday);
+  const activationDate=isoDate(followingMonday(friday));
+  const targetInfo=isoWeekInfo(followingMonday(friday));
+  if(weeklyPortfolios.some(snapshot=>snapshot.weekKey===targetInfo.key))return false;
+
+  const settings=loadWeeklySettings();
+  const benchmarkMarket=settings.benchmarkMarket||'SE';
+  const previousSnapshot=previousWeeklySnapshotBefore(cutoffDate,targetInfo.key);
+  const blue=weeklyMembers('blue',previousSnapshot),white=weeklyMembers('white',previousSnapshot),average=weeklyMembers('average',previousSnapshot);
+  if(blue.length<10||white.length<10||average.length<10){
+    console.warn('Nästa veckas Top 10 kunde inte skapas', {blue:blue.length,white:white.length,average:average.length});
+    return false
+  }
+  let benchmarkStart=benchmarkValueOnOrBefore(benchmarkMarket,cutoffDate);
+  if(!Number.isFinite(benchmarkStart))benchmarkStart=currentBenchmarkValue(benchmarkMarket);
+  if(!Number.isFinite(benchmarkStart)){
+    console.warn('Nästa veckas Top 10 saknar indexstart',benchmarkMarket,cutoffDate);
+    return false
+  }
+  const snapshot={
+    id:`${targetInfo.key}-${cutoffDate}`,
+    weekKey:targetInfo.key,year:targetInfo.year,week:targetInfo.week,
+    savedAt:nowISO(),savedDate:cutoffDate,lockDate:cutoffDate,activationDate,
+    preparedFrom:'current-after-friday-close',
+    benchmarkMarket,benchmarkSymbol:benchmarkSymbol(benchmarkMarket),benchmarkStart,
+    portfolios:{blue:{name:'Blå',members:blue},white:{name:'Vit',members:white},average:{name:'Snitt',members:average}}
+  };
+  weeklyPortfolios.push(snapshot);
+  weeklyPortfolios.sort((a,b)=>String(b.savedAt).localeCompare(String(a.savedAt)));
+  weeklyPersist();
+  if(!automatic)toast(`Nästa veckas Top 10 (${targetInfo.key}) skapades`);
+  return true
+}
+function ensureNextWeekPortfolioAfterFriday(){
+  const settings=loadWeeklySettings();
+  if(settings.autoSave!=='on')return false;
+  const friday=latestCompletedFriday(new Date());
+  const targetInfo=isoWeekInfo(followingMonday(friday));
+  if(weeklyPortfolios.some(snapshot=>snapshot.weekKey===targetInfo.key))return false;
+  if(createHistoricalWeeklySnapshot(new Date(friday),true))return true;
+  return createCurrentDataWeeklySnapshot(new Date(friday),true)
+}
+
 function backfillMissingWeeklyPortfolios(){
   const settings=loadWeeklySettings();
   if(settings.autoSave!=='on')return 0;
 
   const latestFriday=latestCompletedFriday(new Date());
+  const lockDates=weeklyPortfolios.map(snapshot=>snapshotLockFriday(snapshot)).filter(Boolean).sort((a,b)=>a-b);
   let startFriday;
-
-  const dated=weeklyPortfolios
-    .map(snapshot=>snapshot.lockDate||snapshot.savedDate)
-    .filter(Boolean)
-    .sort();
-
-  if(dated.length){
-    startFriday=dateAtLocalNoon(dated[dated.length-1]);
+  if(lockDates.length){
+    startFriday=new Date(lockDates[lockDates.length-1]);
     startFriday.setDate(startFriday.getDate()+7)
-  }else{
-    startFriday=new Date(latestFriday)
-  }
+  }else startFriday=new Date(latestFriday);
 
   let created=0;
   for(let friday=new Date(startFriday);friday<=latestFriday;friday.setDate(friday.getDate()+7)){
-    if(createHistoricalWeeklySnapshot(new Date(friday),true))created++
+    if(createHistoricalWeeklySnapshot(new Date(friday),true)||createCurrentDataWeeklySnapshot(new Date(friday),true))created++
   }
+  if(ensureNextWeekPortfolioAfterFriday())created++;
   if(created){
-    weeklyPersist();
-    renderWeeklyPortfolios();
+    weeklyPersist();renderWeeklyPortfolios();
     if(developmentMode==='portfolios')renderDevelopmentPortfolios()
   }
   return created
@@ -6212,7 +6273,7 @@ function renderWeeklyPortfolios(){
   if(old&&weeklyPortfolios.some(s=>s.id===old))select.value=old;
 
   document.getElementById('weeklyStatus').textContent=weeklyPortfolios.length
-    ?`${weeklyPortfolios.length} veckor sparade. Nästa veckas Top 10 skapas efter fredag 17:46 eller vid nästa kursuppdatering, men aktiveras först på måndagen.`
+    ?`${weeklyPortfolios.length} veckor sparade. Nästa veckas Top 10 skapas efter fredag 17:46 eller vid den första senare kursuppdateringen. Den visas som fryst vecka direkt men påverkar inte de rullande portföljerna förrän aktiveringsmåndagen.`
     :'Ingen veckoportfölj sparad ännu.';
 
   const s=weeklyPortfolios.find(x=>x.id===select.value)||weeklyPortfolios[0];
@@ -6393,7 +6454,8 @@ async function updateAllPrices(silent=false){
     const settings=loadMarketSettings();
     if(ok>0){
       settings.lastUpdate=nowISO();localStorage.setItem(settingsKey,JSON.stringify(settings));
-      ensureWeeklyPortfolioSnapshot();
+      const weeklyCreated=ensureWeeklyPortfolioSnapshot();
+      if(weeklyCreated)toast('Nästa veckas Top 10-portföljer skapades');
     }
     renderMarketSettings();
     renderWeeklyPortfolios();
