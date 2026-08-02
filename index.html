@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.2.20</title>
+<title>MomentumScore v20.2.21</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -271,7 +271,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.2.20 – Fas 1 stabil</h1>
+<h1>MomentumScore v20.2.21 – dataåterställning</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -574,7 +574,7 @@ När Nytt kvartal aktiveras låses ticker, bolag, börs, Yahoo-symbol, kurs och 
 <div class="rowcard"><b>Portföljläge i Utveckling</b><br>
 Utveckling kan växlas mellan Aktier och Veckoportföljer. Portföljläget visar varje sparad veckas Blå-, Vit- och Snittportfölj, avkastning mot index, antal vinnare samt bästa och sämsta innehav. En klickbar detaljvy visar samtliga tio aktier.</div>
 <div class="rowcard"><b>Fas 1 – stabil grund</b><br>
-Gemensam bolagsvy används från Översikt, Poäng, Topplista, Utveckling och portföljtabeller. Äldre felkopplad bolagshistorik rensas vid import, ofullständiga historikposter kan inte krascha bolagsvyn och Topplistan är fortsatt enda sanningskälla för nya Top 10-portföljer.</div>
+Gemensam bolagsvy används från Översikt, Poäng, Topplista, Utveckling och portföljtabeller. Äldre felkopplad bolagshistorik bevaras men filtreras i visningen, ofullständiga historikposter kan inte krascha bolagsvyn och Topplistan är fortsatt enda sanningskälla för nya Top 10-portföljer.</div>
 <div class="rowcard"><b>Rullande Top 10-portföljer</b><br>Under Utveckling → Veckoportföljer visas tre rullande strategier för Blå, Vit och Snitt. Startkapitalet är 100 000 kr. Innehav som ligger kvar i nästa veckas Top 10 behålls utan omviktning. Vid exakt lika poäng prioriteras alltid aktien som redan ingick i föregående veckas Top 10, så lika poäng utlöser inget byte. Aktier som lämnar säljs och nettolikviden delas lika mellan nya aktier. Courtage 0,069 % tas vid både köp och försäljning. Portföljerna återskapas deterministiskt från sparade veckosnapshots och följer med genom den befintliga veckoportföljhistoriken.</div>
 <div class="rowcard"><b>Veckoportföljer</b><br>
 Efter en lyckad kursuppdatering fredag 17:46 eller senare skapas nästa veckas tre frysta Top 10-portföljer direkt från den färdigräknade Topplistan. Topplistan är den enda sanningskällan: samma kvalificering, poäng och sorteringsordning kopieras, och startkursen hämtas uttryckligen från fredagens sista stängningskurs i kurshistoriken. Portföljerna visas direkt som kommande frysta portföljer men aktiveras i de rullande strategierna först på måndagen. Vid exakt lika poäng prioriteras befintligt innehav enligt nuvarande regel.</div>
@@ -1595,14 +1595,14 @@ function cleanForeignHistory(row,history){
 }
 
 function normalizeRow(r){const n={...r};n.companyType=n.companyType==='investment'?'investment':'regular';n.market=['SE','DK','NO','FI','IS'].includes(n.market)?n.market:'SE';if(n.ma1&&!n.ma1m)n.ma1m=n.ma1;if(n.ma3&&!n.ma3m)n.ma3m=n.ma3;if(!('ma1w'in n))n.ma1w='';if(!('price'in n))n.price='';n.market=['SE','DK','NO','FI','IS'].includes(n.market)?n.market:'SE';n.yahooSymbol=n.yahooSymbol||inferYahooSymbol(n.ticker||'',n.market);if(!('rev3y'in n))n.rev3y='';if(!('ekYoy'in n))n.ekYoy='';if(!('ek3y'in n))n.ek3y='';if(!('eps3y'in n))n.eps3y='';n.createdAt=n.createdAt||nowISO();n.updatedAt=n.updatedAt||n.createdAt;n.history=Array.isArray(n.history)?n.history:[snapshot(n,'Importerad tidigare version')];
-const cleanedHistory=cleanForeignHistory(n,n.history);
-n.historyRepairRemoved=(n.historyRepairRemoved||0)+cleanedHistory.removed.length;
-n.history=cleanedHistory.kept.map(entry=>({
+n.history=n.history.map(entry=>({
   ...entry,
   savedAt:entry?.savedAt||n.updatedAt||n.createdAt||nowISO(),
   kind:entry?.kind||'Historikpost',
-  raw:entry?.raw&&typeof entry.raw==='object'?entry.raw:{}
-}));n.transactions=Array.isArray(n.transactions)?n.transactions:[];n.marketHistory=Array.isArray(n.marketHistory)?n.marketHistory:[];n.priceHistory=Array.isArray(n.priceHistory)?n.priceHistory:[];if(!('ma200Level'in n))n.ma200Level='';if(!('technicalSource'in n))n.technicalSource='Manuell';if(!('rsi14'in n))n.rsi14='';
+  raw:entry?.raw&&typeof entry.raw==='object'?entry.raw:{},
+  foreignOwnerMismatch:!historyEntryBelongsToRow(entry,n)
+}));
+n.historyRepairRemoved=n.history.filter(entry=>entry.foreignOwnerMismatch).length;n.transactions=Array.isArray(n.transactions)?n.transactions:[];n.marketHistory=Array.isArray(n.marketHistory)?n.marketHistory:[];n.priceHistory=Array.isArray(n.priceHistory)?n.priceHistory:[];if(!('ma200Level'in n))n.ma200Level='';if(!('technicalSource'in n))n.technicalSource='Manuell';if(!('rsi14'in n))n.rsi14='';
 const inferredPeBase=historicalPeInputBase(n);
 if(!('peBase'in n)||!Number.isFinite(num(n.peBase)))n.peBase=Number.isFinite(inferredPeBase.pe)?String(inferredPeBase.pe):(n.pe??'');
 if(!('peBasePrice'in n)||!Number.isFinite(num(n.peBasePrice)))n.peBasePrice=Number.isFinite(inferredPeBase.price)?String(inferredPeBase.price):'';
@@ -1646,7 +1646,13 @@ function loadAndMigrate(){
       localStorage.setItem(storageKey,JSON.stringify(y));
       return y;
     }
-  }catch(e){console.error('Migrering misslyckades',e)}
+  }catch(e){
+    console.error('Migrering misslyckades – laddar den orörda lokala databasen',e);
+    try{
+      const untouched=JSON.parse(localStorage.getItem(storageKey)||'null');
+      if(Array.isArray(untouched))return untouched
+    }catch{}
+  }
   for(const k of oldKeys){
     try{
       const x=JSON.parse(localStorage.getItem(k)||'null');
@@ -1708,7 +1714,7 @@ function renderDatabaseHealth(){
     line(!h.shortHistory.length,h.shortHistory.length?`${h.shortHistory.length} bolag har ännu inte 263 handelsdagar`:'Alla bolag har tillräcklig historik för MA200-trend'),
     line(!h.missingRsi.length,h.missingRsi.length?`${h.missingRsi.length} bolag saknar RSI`:'Alla bolag har RSI'),
     line(!p1.duplicateTicker.length,p1.duplicateTicker.length?`Dubbletter: ${p1.duplicateTicker.join(', ')}`:'Inga dubbla tickerposter'),
-    line(true,`${p1.repairedHistory} felkopplade historikposter rensade`),
+    line(true,`${p1.repairedHistory} felkopplade historikposter bevarade men ignorerade`),
     line(!p1.brokenHistory,p1.brokenHistory?`${p1.brokenHistory} bolag har ofullständig äldre poänghistorik`:'Historikformatet är säkert'),
     line(!p1.missingWhite,p1.missingWhite?`${p1.missingWhite} bolag saknar komplett Vit-data`:'Alla bolag har komplett Vit-data')
   ].join('<br>');
@@ -5582,12 +5588,14 @@ function safeHistoricalRaw(entry){
 }
 function normalizeHistoryEntries(row){
   const history=Array.isArray(row?.history)?row.history:[];
-  return history.map(entry=>({
-    ...entry,
-    savedAt:entry?.savedAt||row.updatedAt||row.createdAt||nowISO(),
-    kind:entry?.kind||'Historikpost',
-    raw:safeHistoricalRaw(entry)
-  }))
+  return history
+    .filter(entry=>historyEntryBelongsToRow(entry,row))
+    .map(entry=>({
+      ...entry,
+      savedAt:entry?.savedAt||row.updatedAt||row.createdAt||nowISO(),
+      kind:entry?.kind||'Historikpost',
+      raw:safeHistoricalRaw(entry)
+    }))
 }
 
 let detailChartState={range:'1y',showPrice:true,showBlue:true,showWhite:true,showAverage:true};
@@ -6310,7 +6318,7 @@ function stockDataAuditHtml(r,c,w){
   if(!Number.isFinite(technical.ma200Level))issues.push('MA200-nivå kan inte beräknas');
   if(!w.dataReady)issues.push(w.warning||'Vit saknar underlag');
   if(!Number.isFinite(c.peCurrent))issues.push('Aktuellt P/E saknas');
-  if((r.historyRepairRemoved||0)>0)issues.push(`${r.historyRepairRemoved} felkopplade historikposter har rensats`);
+  if((r.historyRepairRemoved||0)>0)issues.push(`${r.historyRepairRemoved} felkopplade historikposter ignoreras i visningen`);
   const duplicates=rows.filter((other,index)=>index!==detailIndex&&(
     canonicalTicker(other.ticker)===canonicalTicker(r.ticker)||
     normalizedIdentity(other.company)===normalizedIdentity(r.company)
@@ -6903,7 +6911,7 @@ window.addEventListener('unhandledrejection',event=>{
 const repairedHistoryCount=rows.reduce((sum,row)=>sum+(row.historyRepairRemoved||0),0);
 if(repairedHistoryCount){
   persist();
-  console.warn(`${repairedHistoryCount} felkopplade historikposter rensades automatiskt.`);
+  console.warn(`${repairedHistoryCount} felkopplade historikposter bevarade men ignorerades automatiskt.`);
 }
 
 setTimeout(()=>{
