@@ -271,7 +271,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.2.18 – datum, sålda innehav och korrekt omsättning</h1>
+<h1>MomentumScore v20.2.19 – Topplistan som enda sanningskälla</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -575,7 +575,7 @@ När Nytt kvartal aktiveras låses ticker, bolag, börs, Yahoo-symbol, kurs och 
 Utveckling kan växlas mellan Aktier och Veckoportföljer. Portföljläget visar varje sparad veckas Blå-, Vit- och Snittportfölj, avkastning mot index, antal vinnare samt bästa och sämsta innehav. En klickbar detaljvy visar samtliga tio aktier.</div>
 <div class="rowcard"><b>Rullande Top 10-portföljer</b><br>Under Utveckling → Veckoportföljer visas tre rullande strategier för Blå, Vit och Snitt. Startkapitalet är 100 000 kr. Innehav som ligger kvar i nästa veckas Top 10 behålls utan omviktning. Vid exakt lika poäng prioriteras alltid aktien som redan ingick i föregående veckas Top 10, så lika poäng utlöser inget byte. Aktier som lämnar säljs och nettolikviden delas lika mellan nya aktier. Courtage 0,069 % tas vid både köp och försäljning. Portföljerna återskapas deterministiskt från sparade veckosnapshots och följer med genom den befintliga veckoportföljhistoriken.</div>
 <div class="rowcard"><b>Veckoportföljer</b><br>
-Efter en lyckad kursuppdatering fredag 17:46 eller senare skapas nästa veckas tre frysta Top 10-portföljer: Blå, Vit och Snitt. Om ingen uppdatering görs på fredagen skapas de vid nästa kursuppdatering från fredagens sparade marknadsdata. De visas direkt som frysta portföljer och uppdaterar samtidigt de rullande Top 10-portföljerna enligt de befintliga bytesreglerna. Inga byten sker före fredag 17:46. Urval, kvalificering, poängsortering och regeln att befintligt innehav prioriteras vid exakt lika poäng är oförändrade.</div>
+Efter en lyckad kursuppdatering fredag 17:46 eller senare skapas nästa veckas tre frysta Top 10-portföljer direkt från den färdigräknade Topplistan. Topplistan är den enda sanningskällan: samma kvalificering, poäng och sorteringsordning kopieras, och startkursen hämtas uttryckligen från fredagens sista stängningskurs i kurshistoriken. Portföljerna visas direkt som kommande frysta portföljer men aktiveras i de rullande strategierna först på måndagen. Vid exakt lika poäng prioriteras befintligt innehav enligt nuvarande regel.</div>
 <div class="rowcard"><b>Två modeller – inte en vald modell</b><br>
 Blå och Vit är separata modeller. Snitt är endast ett visat medelvärde. Vit får ingen poängförändring förrän separat Vit-historik har börjat samlas in. I Utveckling bestäms Status och radfärg av den poäng som tabellen är sorterad på.</div>
 <div class="rowcard"><b>Blå, Vit och Snitt</b><br>
@@ -5937,6 +5937,57 @@ function historicalCandidate(row,cutoffDate){
 
   return{row:historicalRow,price,blue,white,average,blueQualified,whiteReady}
 }
+
+function fridayClosingPrice(row,cutoffDate){
+  const cutoff=String(cutoffDate||'').slice(0,10);
+  const history=(Array.isArray(row?.priceHistory)?row.priceHistory:[])
+    .filter(point=>String(point?.date||'').slice(0,10)<=cutoff&&Number.isFinite(num(point?.close)))
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  if(history.length)return num(history[history.length-1].close);
+  return num(row?.price)
+}
+function topListCandidateFromCurrent(row,model,cutoffDate){
+  const selected=selectedModelValues(row,model);
+  return{
+    row,
+    selected,
+    score:selected.score,
+    valid:selected.qualified&&selected.dataReady&&Number.isFinite(selected.score),
+    price:fridayClosingPrice(row,cutoffDate),
+    blue:selected.b,
+    white:selected.w,
+    average:selected.average
+  }
+}
+function topListCandidatesForSnapshot(model,cutoffDate,previousSnapshot=null){
+  const previousKeys=new Set((previousSnapshot?.portfolios?.[model]?.members||[]).map(weeklyMemberKey).filter(Boolean));
+  return rows
+    .map(row=>topListCandidateFromCurrent(row,model,cutoffDate))
+    .filter(candidate=>candidate.valid&&Number.isFinite(candidate.price)&&candidate.price>0)
+    .sort(weeklyCandidateComparator(previousKeys))
+}
+function topListMembersForSnapshot(model,cutoffDate,previousSnapshot=null){
+  return topListCandidatesForSnapshot(model,cutoffDate,previousSnapshot).slice(0,10).map((candidate,index)=>({
+    rank:index+1,
+    ticker:candidate.row.ticker||'',
+    company:candidate.row.company||'',
+    market:candidate.row.market||'SE',
+    startPrice:candidate.price,
+    closeDate:String(cutoffDate||'').slice(0,10),
+    blueScore:candidate.blue.total,
+    whiteScore:candidate.white.total,
+    averageScore:candidate.average,
+    selectionScore:candidate.score,
+    selectionModel:model,
+    selectionSource:'toplist-friday-close-v1'
+  }))
+}
+function snapshotUsesTopListClose(snapshot){
+  return snapshot?.selectionSource==='toplist-friday-close-v1'&&
+    ['blue','white','average'].every(model=>(snapshot?.portfolios?.[model]?.members||[]).length===10&&
+      snapshot.portfolios[model].members.every(member=>member.selectionSource==='toplist-friday-close-v1'))
+}
+
 function weeklyMemberKey(ref){
   return canonicalTicker(ref?.ticker)||normalizedIdentity(ref?.company)
 }
@@ -6007,7 +6058,8 @@ function createHistoricalWeeklySnapshot(friday,automatic=true){
     savedAt:`${cutoffDate}T17:46:00`,
     savedDate:cutoffDate,
     lockDate:cutoffDate,
-    activationDate:cutoffDate,
+    activationDate:isoDate(followingMonday(friday)),
+    selectionSource:'toplist-friday-close-v1',
     benchmarkMarket,
     benchmarkSymbol:benchmarkSymbol(benchmarkMarket),
     benchmarkStart,
@@ -6047,38 +6099,47 @@ function snapshotLockFriday(snapshot){
   while(d.getDay()!==5)d.setDate(d.getDate()-1);
   return d
 }
-function createCurrentDataWeeklySnapshot(friday,automatic=true){
+function createCurrentDataWeeklySnapshot(friday,automatic=true,forceRebuild=false){
   const cutoffDate=isoDate(friday);
-  const activationDate=isoDate(followingMonday(friday));
-  const targetInfo=isoWeekInfo(followingMonday(friday));
-  if(weeklyPortfolios.some(snapshot=>snapshot.weekKey===targetInfo.key))return false;
+  const monday=followingMonday(friday);
+  const activationDate=isoDate(monday);
+  const targetInfo=isoWeekInfo(monday);
+  const existingIndex=weeklyPortfolios.findIndex(snapshot=>snapshot.weekKey===targetInfo.key);
+  if(existingIndex>=0&&!forceRebuild&&snapshotUsesTopListClose(weeklyPortfolios[existingIndex]))return false;
 
   const settings=loadWeeklySettings();
   const benchmarkMarket=settings.benchmarkMarket||'SE';
   const previousSnapshot=previousWeeklySnapshotBefore(cutoffDate,targetInfo.key);
-  const blue=weeklyMembers('blue',previousSnapshot),white=weeklyMembers('white',previousSnapshot),average=weeklyMembers('average',previousSnapshot);
+  const blue=topListMembersForSnapshot('blue',cutoffDate,previousSnapshot);
+  const white=topListMembersForSnapshot('white',cutoffDate,previousSnapshot);
+  const average=topListMembersForSnapshot('average',cutoffDate,previousSnapshot);
   if(blue.length<10||white.length<10||average.length<10){
-    console.warn('Nästa veckas Top 10 kunde inte skapas', {blue:blue.length,white:white.length,average:average.length});
+    console.warn('Nästa veckas Top 10 kunde inte skapas från Topplistan',{blue:blue.length,white:white.length,average:average.length});
     return false
   }
+
   let benchmarkStart=benchmarkValueOnOrBefore(benchmarkMarket,cutoffDate);
   if(!Number.isFinite(benchmarkStart))benchmarkStart=currentBenchmarkValue(benchmarkMarket);
   if(!Number.isFinite(benchmarkStart)){
     console.warn('Nästa veckas Top 10 saknar indexstart',benchmarkMarket,cutoffDate);
     return false
   }
+
   const snapshot={
     id:`${targetInfo.key}-${cutoffDate}`,
     weekKey:targetInfo.key,year:targetInfo.year,week:targetInfo.week,
-    savedAt:nowISO(),savedDate:cutoffDate,lockDate:cutoffDate,activationDate:cutoffDate,
-    preparedFrom:'current-after-friday-close',
+    savedAt:nowISO(),savedDate:cutoffDate,lockDate:cutoffDate,activationDate,
+    preparedFrom:'friday-close-toplist',
+    selectionSource:'toplist-friday-close-v1',
     benchmarkMarket,benchmarkSymbol:benchmarkSymbol(benchmarkMarket),benchmarkStart,
     portfolios:{blue:{name:'Blå',members:blue},white:{name:'Vit',members:white},average:{name:'Snitt',members:average}}
   };
-  weeklyPortfolios.push(snapshot);
+
+  if(existingIndex>=0)weeklyPortfolios[existingIndex]=snapshot;
+  else weeklyPortfolios.push(snapshot);
   weeklyPortfolios.sort((a,b)=>String(b.savedAt).localeCompare(String(a.savedAt)));
   weeklyPersist();
-  if(!automatic)toast(`Nästa veckas Top 10 (${targetInfo.key}) skapades`);
+  if(!automatic)toast(`Nästa veckas Top 10 (${targetInfo.key}) skapades från fredagens Topplista`);
   return true
 }
 function ensureNextWeekPortfolioAfterFriday(){
@@ -6086,9 +6147,15 @@ function ensureNextWeekPortfolioAfterFriday(){
   if(settings.autoSave!=='on')return false;
   const friday=latestCompletedFriday(new Date());
   const targetInfo=isoWeekInfo(followingMonday(friday));
-  if(weeklyPortfolios.some(snapshot=>snapshot.weekKey===targetInfo.key))return false;
-  if(createHistoricalWeeklySnapshot(new Date(friday),true))return true;
-  return createCurrentDataWeeklySnapshot(new Date(friday),true)
+  const existing=weeklyPortfolios.find(snapshot=>snapshot.weekKey===targetInfo.key);
+
+  // Gamla snapshots för samma vecka byggs om en gång så att både urval och
+  // startkurs kommer från fredagens färdiga Topplista och fredagens slutkurs.
+  if(existing&&!snapshotUsesTopListClose(existing)){
+    return createCurrentDataWeeklySnapshot(new Date(friday),true,true)
+  }
+  if(existing)return false;
+  return createCurrentDataWeeklySnapshot(new Date(friday),true,false)
 }
 
 function backfillMissingWeeklyPortfolios(){
@@ -6104,8 +6171,8 @@ function backfillMissingWeeklyPortfolios(){
   }else startFriday=new Date(latestFriday);
 
   let created=0;
-  for(let friday=new Date(startFriday);friday<=latestFriday;friday.setDate(friday.getDate()+7)){
-    if(createHistoricalWeeklySnapshot(new Date(friday),true)||createCurrentDataWeeklySnapshot(new Date(friday),true))created++
+  for(let friday=new Date(startFriday);friday<latestFriday;friday.setDate(friday.getDate()+7)){
+    if(createHistoricalWeeklySnapshot(new Date(friday),true))created++
   }
   if(ensureNextWeekPortfolioAfterFriday())created++;
   if(created){
@@ -6246,8 +6313,9 @@ function createWeeklySnapshot(overwrite=false,automatic=false){
     if(!automatic)alert('Veckans portföljer är redan sparade. Radera veckan först om du vill skapa om dem.');
     return false
   }
-  const previousSnapshot=previousWeeklySnapshotBefore(todayISO(),info.key);
-  const blue=weeklyMembers('blue',previousSnapshot),white=weeklyMembers('white',previousSnapshot),average=weeklyMembers('average',previousSnapshot);
+  const manualCutoff=isoDate(latestCompletedFriday(new Date()));
+  const previousSnapshot=previousWeeklySnapshotBefore(manualCutoff,info.key);
+  const blue=topListMembersForSnapshot('blue',manualCutoff,previousSnapshot),white=topListMembersForSnapshot('white',manualCutoff,previousSnapshot),average=topListMembersForSnapshot('average',manualCutoff,previousSnapshot);
   if(blue.length<10||white.length<10||average.length<10){
     if(!automatic)alert(`För få giltiga bolag för Top 10. Blå ${blue.length}, Vit ${white.length}, Snitt ${average.length}.`);
     return false
