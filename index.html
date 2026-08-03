@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.2.21</title>
+<title>MomentumScore v20.2.22</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -271,7 +271,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.2.21 – dataåterställning</h1>
+<h1>MomentumScore v20.2.22 – korrekt rullande historik</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -575,7 +575,7 @@ När Nytt kvartal aktiveras låses ticker, bolag, börs, Yahoo-symbol, kurs och 
 Utveckling kan växlas mellan Aktier och Veckoportföljer. Portföljläget visar varje sparad veckas Blå-, Vit- och Snittportfölj, avkastning mot index, antal vinnare samt bästa och sämsta innehav. En klickbar detaljvy visar samtliga tio aktier.</div>
 <div class="rowcard"><b>Fas 1 – stabil grund</b><br>
 Gemensam bolagsvy används från Översikt, Poäng, Topplista, Utveckling och portföljtabeller. Äldre felkopplad bolagshistorik bevaras men filtreras i visningen, ofullständiga historikposter kan inte krascha bolagsvyn och Topplistan är fortsatt enda sanningskälla för nya Top 10-portföljer.</div>
-<div class="rowcard"><b>Rullande Top 10-portföljer</b><br>Under Utveckling → Veckoportföljer visas tre rullande strategier för Blå, Vit och Snitt. Startkapitalet är 100 000 kr. Innehav som ligger kvar i nästa veckas Top 10 behålls utan omviktning. Vid exakt lika poäng prioriteras alltid aktien som redan ingick i föregående veckas Top 10, så lika poäng utlöser inget byte. Aktier som lämnar säljs och nettolikviden delas lika mellan nya aktier. Courtage 0,069 % tas vid både köp och försäljning. Portföljerna återskapas deterministiskt från sparade veckosnapshots och följer med genom den befintliga veckoportföljhistoriken.</div>
+<div class="rowcard"><b>Rullande Top 10-portföljer</b><br>Under Utveckling → Veckoportföljer visas tre rullande strategier för Blå, Vit och Snitt. Startkapitalet är 100 000 kr. Innehav som ligger kvar i nästa veckas Top 10 behålls utan omviktning, ursprungligt köpdatum och ursprunglig anskaffningskurs. Vid exakt lika poäng prioriteras alltid aktien som redan ingick i föregående veckas Top 10, så lika poäng utlöser inget byte. Aktier som lämnar säljs och nettolikviden delas lika mellan nya aktier. Courtage 0,069 % tas vid både köp och försäljning. Portföljerna sorteras kronologiskt efter veckonummer och återskapas deterministiskt från sparade veckosnapshots och följer med genom den befintliga veckoportföljhistoriken.</div>
 <div class="rowcard"><b>Veckoportföljer</b><br>
 Efter en lyckad kursuppdatering fredag 17:46 eller senare skapas nästa veckas tre frysta Top 10-portföljer direkt från den färdigräknade Topplistan. Topplistan är den enda sanningskällan: samma kvalificering, poäng och sorteringsordning kopieras, och startkursen hämtas uttryckligen från fredagens sista stängningskurs i kurshistoriken. Portföljerna visas direkt som kommande frysta portföljer men aktiveras i de rullande strategierna först på måndagen. Vid exakt lika poäng prioriteras befintligt innehav enligt nuvarande regel.</div>
 <div class="rowcard"><b>Två modeller – inte en vald modell</b><br>
@@ -2592,8 +2592,40 @@ function weeklySnapshotIsActive(snapshot,now=new Date()){
   const activation=weeklySnapshotActivationDate(snapshot);
   return !activation||activation<=isoDate(now)
 }
+
+function snapshotWeekMonday(snapshot){
+  const key=String(snapshot?.weekKey||'');
+  const match=key.match(/^(\d{4})-W(\d{2})$/);
+  if(!match)return '';
+  const year=Number(match[1]),week=Number(match[2]);
+  const jan4=new Date(year,0,4,12,0,0,0);
+  const jan4Day=jan4.getDay()||7;
+  const monday=new Date(jan4);
+  monday.setDate(jan4.getDate()-(jan4Day-1)+(week-1)*7);
+  return isoDate(monday)
+}
+function rollingSnapshotDate(snapshot){
+  // Veckans etikett är den stabila sanningskällan för kronologin.
+  // savedAt och lockDate kan ändras när en snapshot byggs om och får därför
+  // aldrig flytta strategins historiska startdatum.
+  return snapshotWeekMonday(snapshot)
+    ||String(snapshot?.activationDate||snapshot?.savedDate||snapshot?.savedAt||'').slice(0,10)
+}
+function rollingSnapshotSortValue(snapshot){
+  const date=rollingSnapshotDate(snapshot);
+  return `${date}|${String(snapshot?.weekKey||'')}|${String(snapshot?.savedAt||'')}`
+}
+function sameRollingMembers(holdings,wanted){
+  if(holdings.size!==wanted.size)return false;
+  for(const key of holdings.keys())if(!wanted.has(key))return false;
+  return true
+}
+
 function rollingPortfolio(model){
-  const snaps=weeklyPortfolios.filter(snapshot=>weeklySnapshotIsActive(snapshot)).slice().sort((a,b)=>String(a.savedAt||'').localeCompare(String(b.savedAt||'')));
+  const snaps=weeklyPortfolios
+    .filter(snapshot=>weeklySnapshotIsActive(snapshot))
+    .slice()
+    .sort((a,b)=>rollingSnapshotSortValue(a).localeCompare(rollingSnapshotSortValue(b)));
   if(!snaps.length)return null;
   let cash=ROLLING_START_CAPITAL,fees=0,buyCount=0,sellCount=0,turnoverValue=0;
   const holdings=new Map(),transactions=[];
@@ -2602,8 +2634,7 @@ function rollingPortfolio(model){
     const members=snapshot.portfolios?.[model]?.members||[];
     if(members.length<1)continue;
     const wanted=new Map(members.map(m=>[canonicalTicker(m.ticker)||normalizedIdentity(m.company),m]));
-    const date=weeklySnapshotActivationDate(snapshot)||snapshot.savedDate||String(snapshot.savedAt||'').slice(0,10);
-    lastUpdateDate=date||lastUpdateDate;
+    const date=rollingSnapshotDate(snapshot);
     if(!initialized){
       startDate=date;
       benchmarkStart=num(snapshot.benchmarkStart);
@@ -2617,9 +2648,15 @@ function rollingPortfolio(model){
         holdings.set(key,{...m,shares,buyDate:date,buyWeek:snapshot.weekKey,buyPrice:price,cost:allocation});
       }
       cash=Math.max(0,ROLLING_START_CAPITAL-invested);
+      lastUpdateDate=startDate;
       initialized=true;
       continue;
     }
+
+    // Om Top 10 är identisk sker ingen affär, ingen omstart och inget nytt
+    // startdatum. Portföljen fortsätter exakt från tidigare anskaffningskurser.
+    if(sameRollingMembers(holdings,wanted))continue;
+
     const outgoing=[...holdings.entries()].filter(([key])=>!wanted.has(key));
     let released=0;
     for(const [key,h] of outgoing){
@@ -2648,6 +2685,7 @@ function rollingPortfolio(model){
       }
       cash=Math.max(0,cash-used)
     }
+    if(outgoing.length||incoming.length)lastUpdateDate=date||lastUpdateDate;
   }
   const memberReturns=[...holdings.values()].map(h=>{
     const currentPrice=rollingCurrentPrice(h),value=Number.isFinite(currentPrice)?h.shares*currentPrice:NaN;
@@ -2659,9 +2697,10 @@ function rollingPortfolio(model){
   const ret=(value/ROLLING_START_CAPITAL-1)*100;
   const days=Math.max(1,(Date.now()-new Date(startDate).getTime())/86400000),years=days/365.25;
   const cagr=years>0&&value>0?(Math.pow(value/ROLLING_START_CAPITAL,1/years)-1)*100:NaN;
-  const benchCurrent=currentBenchmarkValue(snaps[0].benchmarkMarket||'SE');
+  const firstSnapshot=snaps.find(s=>(s.portfolios?.[model]?.members||[]).length>0)||snaps[0];
+  const benchCurrent=currentBenchmarkValue(firstSnapshot.benchmarkMarket||'SE');
   const benchmarkReturn=Number.isFinite(benchmarkStart)&&benchmarkStart!==0&&Number.isFinite(benchCurrent)?(benchCurrent/benchmarkStart-1)*100:NaN;
-  return{type:'rolling',model,startDate,lastUpdateDate:lastUpdateDate||startDate,value,profit,returnPct:ret,cagr,benchmarkReturn,excess:Number.isFinite(ret)&&Number.isFinite(benchmarkReturn)?ret-benchmarkReturn:NaN,fees,buyCount,sellCount,trades:buyCount+sellCount,turnover:turnoverValue/ROLLING_START_CAPITAL*100,cash,memberReturns,transactions,snapshot:snaps[0]}
+  return{type:'rolling',model,startDate,lastUpdateDate:lastUpdateDate||startDate,value,profit,returnPct:ret,cagr,benchmarkReturn,excess:Number.isFinite(ret)&&Number.isFinite(benchmarkReturn)?ret-benchmarkReturn:NaN,fees,buyCount,sellCount,trades:buyCount+sellCount,turnover:turnoverValue/ROLLING_START_CAPITAL*100,cash,memberReturns,transactions,snapshot:firstSnapshot}
 }
 function rollingValueAtDate(portfolio,date){
   if(!portfolio)return NaN;
