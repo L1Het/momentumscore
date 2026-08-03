@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.2.22</title>
+<title>MomentumScore v20.2.23</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -271,7 +271,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.2.22 – korrekt rullande historik</h1>
+<h1>MomentumScore v20.2.23 – ny rullande portföljmotor</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -575,7 +575,9 @@ När Nytt kvartal aktiveras låses ticker, bolag, börs, Yahoo-symbol, kurs och 
 Utveckling kan växlas mellan Aktier och Veckoportföljer. Portföljläget visar varje sparad veckas Blå-, Vit- och Snittportfölj, avkastning mot index, antal vinnare samt bästa och sämsta innehav. En klickbar detaljvy visar samtliga tio aktier.</div>
 <div class="rowcard"><b>Fas 1 – stabil grund</b><br>
 Gemensam bolagsvy används från Översikt, Poäng, Topplista, Utveckling och portföljtabeller. Äldre felkopplad bolagshistorik bevaras men filtreras i visningen, ofullständiga historikposter kan inte krascha bolagsvyn och Topplistan är fortsatt enda sanningskälla för nya Top 10-portföljer.</div>
-<div class="rowcard"><b>Rullande Top 10-portföljer</b><br>Under Utveckling → Veckoportföljer visas tre rullande strategier för Blå, Vit och Snitt. Startkapitalet är 100 000 kr. Innehav som ligger kvar i nästa veckas Top 10 behålls utan omviktning, ursprungligt köpdatum och ursprunglig anskaffningskurs. Vid exakt lika poäng prioriteras alltid aktien som redan ingick i föregående veckas Top 10, så lika poäng utlöser inget byte. Aktier som lämnar säljs och nettolikviden delas lika mellan nya aktier. Courtage 0,069 % tas vid både köp och försäljning. Portföljerna sorteras kronologiskt efter veckonummer och återskapas deterministiskt från sparade veckosnapshots och följer med genom den befintliga veckoportföljhistoriken.</div>
+<div class="rowcard"><b>Rullande portföljmotor Ledger v2</b><br>
+Varje köp skapar ett permanent innehav med köpdatum, köpvecka, exakt startPrice, antal aktier och anskaffningsvärde. Oförändrade innehav skrivs aldrig om. Försäljningar beräknas från faktiskt antal aktier och sparat anskaffningsvärde. Dag-, vecko- och månadsresultat räknas genom att hela transaktionskedjan spelas upp på respektive historiskt datum.</div>
+<div class="rowcard"><b>Rullande Top 10-portföljer</b><br>Under Utveckling → Veckoportföljer visas tre rullande strategier för Blå, Vit och Snitt. Startkapitalet är 100 000 kr. Innehav som ligger kvar i nästa veckas Top 10 behålls utan omviktning. Köpdatum, antal aktier, exakt startPrice och anskaffningsvärde ändras aldrig förrän aktien säljs. Vid exakt lika poäng prioriteras alltid aktien som redan ingick i föregående veckas Top 10, så lika poäng utlöser inget byte. Aktier som lämnar säljs och nettolikviden delas lika mellan nya aktier. Courtage 0,069 % tas vid både köp och försäljning. Portföljerna sorteras kronologiskt efter veckonummer och återskapas deterministiskt från sparade veckosnapshots och följer med genom den befintliga veckoportföljhistoriken.</div>
 <div class="rowcard"><b>Veckoportföljer</b><br>
 Efter en lyckad kursuppdatering fredag 17:46 eller senare skapas nästa veckas tre frysta Top 10-portföljer direkt från den färdigräknade Topplistan. Topplistan är den enda sanningskällan: samma kvalificering, poäng och sorteringsordning kopieras, och startkursen hämtas uttryckligen från fredagens sista stängningskurs i kurshistoriken. Portföljerna visas direkt som kommande frysta portföljer men aktiveras i de rullande strategierna först på måndagen. Vid exakt lika poäng prioriteras befintligt innehav enligt nuvarande regel.</div>
 <div class="rowcard"><b>Två modeller – inte en vald modell</b><br>
@@ -2621,102 +2623,306 @@ function sameRollingMembers(holdings,wanted){
   return true
 }
 
-function rollingPortfolio(model){
-  const snaps=weeklyPortfolios
-    .filter(snapshot=>weeklySnapshotIsActive(snapshot))
+
+function rollingSnapshotExecutionDate(snapshot){
+  return String(
+    snapshot?.lockDate
+    ||snapshot?.savedDate
+    ||snapshot?.savedAt
+    ||snapshotWeekMonday(snapshot)
+    ||''
+  ).slice(0,10)
+}
+function rollingEntryPrice(member,snapshot){
+  // Den frysta Top 10-portföljens exakta startPrice är sanningskällan.
+  // Då blir första rullande portföljen matematiskt identisk med den
+  // ursprungliga frysta portföljen.
+  const stored=num(member?.startPrice);
+  if(Number.isFinite(stored)&&stored>0)return stored;
+  return rollingPriceAt(member,rollingSnapshotExecutionDate(snapshot))
+}
+function rollingSalePrice(holding,snapshot){
+  const date=rollingSnapshotExecutionDate(snapshot);
+  return rollingPriceAt(holding,date)
+}
+function rollingValuationPrice(holding,asOfDate=''){
+  if(asOfDate)return rollingPriceAt(holding,asOfDate);
+  return rollingCurrentPrice(holding)
+}
+function rollingSnapshotsForModel(model,asOfDate=''){
+  return weeklyPortfolios
+    .filter(snapshot=>{
+      if(!(snapshot?.portfolios?.[model]?.members||[]).length)return false;
+      if(!weeklySnapshotIsActive(snapshot))return false;
+      const executionDate=rollingSnapshotExecutionDate(snapshot);
+      return !asOfDate||!executionDate||executionDate<=asOfDate
+    })
     .slice()
-    .sort((a,b)=>rollingSnapshotSortValue(a).localeCompare(rollingSnapshotSortValue(b)));
+    .sort((a,b)=>rollingSnapshotSortValue(a).localeCompare(rollingSnapshotSortValue(b)))
+}
+function buildRollingPortfolio(model,asOfDate=''){
+  const snaps=rollingSnapshotsForModel(model,asOfDate);
   if(!snaps.length)return null;
-  let cash=ROLLING_START_CAPITAL,fees=0,buyCount=0,sellCount=0,turnoverValue=0;
-  const holdings=new Map(),transactions=[];
-  let startDate='',lastUpdateDate='',benchmarkStart=NaN,initialized=false;
-  for(const snapshot of snaps){
+
+  let cash=ROLLING_START_CAPITAL;
+  let fees=0,buyCount=0,sellCount=0,turnoverValue=0;
+  let startDate='',lastUpdateDate='',benchmarkStart=NaN;
+  const holdings=new Map();
+  const transactions=[];
+  const warnings=[];
+
+  for(let snapshotIndex=0;snapshotIndex<snaps.length;snapshotIndex++){
+    const snapshot=snaps[snapshotIndex];
     const members=snapshot.portfolios?.[model]?.members||[];
-    if(members.length<1)continue;
-    const wanted=new Map(members.map(m=>[canonicalTicker(m.ticker)||normalizedIdentity(m.company),m]));
-    const date=rollingSnapshotDate(snapshot);
-    if(!initialized){
-      startDate=date;
+    const wanted=new Map(
+      members.map(member=>[
+        canonicalTicker(member.ticker)||normalizedIdentity(member.company),
+        member
+      ])
+    );
+    const tradeDate=rollingSnapshotExecutionDate(snapshot);
+
+    if(snapshotIndex===0){
+      startDate=String(snapshot.savedDate||snapshot.savedAt||tradeDate).slice(0,10);
+      lastUpdateDate=startDate;
       benchmarkStart=num(snapshot.benchmarkStart);
+
       const allocation=ROLLING_START_CAPITAL/wanted.size;
       let invested=0;
-      for(const [key,m] of wanted){
-        const price=rollingPriceAt(m,date);
-        if(!Number.isFinite(price)||price<=0)continue;
-        const shares=allocation/price;
+
+      for(const [key,member] of wanted){
+        const buyPrice=rollingEntryPrice(member,snapshot);
+        if(!Number.isFinite(buyPrice)||buyPrice<=0){
+          warnings.push(`${member.ticker||member.company}: startkurs saknas`);
+          continue
+        }
+        const shares=allocation/buyPrice;
         invested+=allocation;
-        holdings.set(key,{...m,shares,buyDate:date,buyWeek:snapshot.weekKey,buyPrice:price,cost:allocation});
+        holdings.set(key,{
+          ...member,
+          key,
+          shares,
+          buyDate:startDate,
+          buyWeek:snapshot.weekKey,
+          buyPrice,
+          cost:allocation,
+          costBasis:allocation
+        })
       }
       cash=Math.max(0,ROLLING_START_CAPITAL-invested);
-      lastUpdateDate=startDate;
-      initialized=true;
-      continue;
+      continue
     }
 
-    // Om Top 10 är identisk sker ingen affär, ingen omstart och inget nytt
-    // startdatum. Portföljen fortsätter exakt från tidigare anskaffningskurser.
+    // Identisk Top 10 innebär absolut inga affärer och ingen förändring
+    // av köpdatum, inköpskurs, antal aktier eller anskaffningsvärde.
     if(sameRollingMembers(holdings,wanted))continue;
 
     const outgoing=[...holdings.entries()].filter(([key])=>!wanted.has(key));
-    let released=0;
-    for(const [key,h] of outgoing){
-      const price=rollingPriceAt(h,date);
-      if(!Number.isFinite(price)||price<=0)continue;
-      const gross=h.shares*price,fee=gross*ROLLING_FEE_RATE,net=gross-fee;
-      const cost=Number.isFinite(num(h.cost))?num(h.cost):h.shares*num(h.buyPrice);
-      const profit=gross-fee-cost;
-      const returnPct=Number.isFinite(num(h.buyPrice))&&num(h.buyPrice)!==0?(price/num(h.buyPrice)-1)*100:NaN;
-      released+=net;fees+=fee;sellCount++;turnoverValue+=gross;
-      transactions.push({date,weekKey:snapshot.weekKey,type:'Sälj',ticker:h.ticker,company:h.company,price,value:gross,fee,buyDate:h.buyDate,buyWeek:h.buyWeek,buyPrice:h.buyPrice,cost,profit,returnPct});
-      holdings.delete(key)
-    }
-    cash+=released;
-    const incoming=[...wanted.entries()].filter(([key])=>!holdings.has(key));
-    if(incoming.length){
-      const budget=cash/incoming.length;
-      let used=0;
-      for(const [key,m] of incoming){
-        const price=rollingPriceAt(m,date);
-        if(!Number.isFinite(price)||price<=0)continue;
-        const marketValue=budget/(1+ROLLING_FEE_RATE),fee=marketValue*ROLLING_FEE_RATE,shares=marketValue/price;
-        used+=marketValue+fee;fees+=fee;buyCount++;
-        holdings.set(key,{...m,shares,buyDate:date,buyWeek:snapshot.weekKey,buyPrice:price,cost:marketValue});
-        transactions.push({date,weekKey:snapshot.weekKey,type:'Köp',ticker:m.ticker,company:m.company,price,value:marketValue,fee})
+    const soldKeys=new Set();
+    let releasedCash=0;
+
+    for(const [key,holding] of outgoing){
+      const sellPrice=rollingSalePrice(holding,snapshot);
+      if(!Number.isFinite(sellPrice)||sellPrice<=0){
+        warnings.push(`${holding.ticker||holding.company}: säljkurs saknas ${tradeDate}`);
+        continue
       }
-      cash=Math.max(0,cash-used)
+
+      const gross=holding.shares*sellPrice;
+      const fee=gross*ROLLING_FEE_RATE;
+      const net=gross-fee;
+      const costBasis=Number.isFinite(num(holding.costBasis))
+        ?num(holding.costBasis)
+        :Number.isFinite(num(holding.cost))
+          ?num(holding.cost)
+          :holding.shares*num(holding.buyPrice);
+      const profit=net-costBasis;
+      const returnPct=costBasis>0?(net/costBasis-1)*100:NaN;
+
+      releasedCash+=net;
+      fees+=fee;
+      sellCount++;
+      turnoverValue+=gross;
+      soldKeys.add(key);
+
+      transactions.push({
+        id:`${model}-${snapshot.weekKey}-sell-${key}`,
+        date:tradeDate,
+        weekKey:snapshot.weekKey,
+        type:'Sälj',
+        ticker:holding.ticker,
+        company:holding.company,
+        shares:holding.shares,
+        price:sellPrice,
+        value:gross,
+        netValue:net,
+        fee,
+        buyDate:holding.buyDate,
+        buyWeek:holding.buyWeek,
+        buyPrice:holding.buyPrice,
+        cost:costBasis,
+        costBasis,
+        profit,
+        returnPct
+      })
     }
-    if(outgoing.length||incoming.length)lastUpdateDate=date||lastUpdateDate;
+
+    // Ta endast bort innehav som verkligen kunde säljas.
+    for(const key of soldKeys)holdings.delete(key);
+    cash+=releasedCash;
+
+    const incoming=[...wanted.entries()].filter(([key])=>!holdings.has(key));
+
+    if(incoming.length){
+      const budgetPerStock=cash/incoming.length;
+      let usedCash=0;
+
+      for(const [key,member] of incoming){
+        const buyPrice=rollingEntryPrice(member,snapshot);
+        if(!Number.isFinite(buyPrice)||buyPrice<=0){
+          warnings.push(`${member.ticker||member.company}: köpkurs saknas ${tradeDate}`);
+          continue
+        }
+
+        const marketValue=budgetPerStock/(1+ROLLING_FEE_RATE);
+        const fee=marketValue*ROLLING_FEE_RATE;
+        const shares=marketValue/buyPrice;
+        const totalCost=marketValue+fee;
+
+        usedCash+=totalCost;
+        fees+=fee;
+        buyCount++;
+
+        holdings.set(key,{
+          ...member,
+          key,
+          shares,
+          buyDate:tradeDate,
+          buyWeek:snapshot.weekKey,
+          buyPrice,
+          cost:marketValue,
+          costBasis:marketValue
+        });
+
+        transactions.push({
+          id:`${model}-${snapshot.weekKey}-buy-${key}`,
+          date:tradeDate,
+          weekKey:snapshot.weekKey,
+          type:'Köp',
+          ticker:member.ticker,
+          company:member.company,
+          shares,
+          price:buyPrice,
+          value:marketValue,
+          totalCost,
+          fee
+        })
+      }
+      cash=Math.max(0,cash-usedCash)
+    }
+
+    if(soldKeys.size||incoming.length)lastUpdateDate=tradeDate||lastUpdateDate;
   }
-  const memberReturns=[...holdings.values()].map(h=>{
-    const currentPrice=rollingCurrentPrice(h),value=Number.isFinite(currentPrice)?h.shares*currentPrice:NaN;
-    return{...h,currentPrice,value,returnPct:Number.isFinite(currentPrice)?(currentPrice/h.buyPrice-1)*100:NaN,weight:NaN}
+
+  const memberReturns=[...holdings.values()].map(holding=>{
+    const currentPrice=rollingValuationPrice(holding,asOfDate);
+    const value=Number.isFinite(currentPrice)&&currentPrice>0
+      ?holding.shares*currentPrice
+      :NaN;
+    const costBasis=num(holding.costBasis);
+    const returnPct=Number.isFinite(value)&&Number.isFinite(costBasis)&&costBasis>0
+      ?(value/costBasis-1)*100
+      :NaN;
+    return{
+      ...holding,
+      currentPrice,
+      value,
+      returnPct,
+      weight:NaN
+    }
   });
-  const invested=memberReturns.reduce((sum,h)=>sum+(Number.isFinite(h.value)?h.value:0),0),value=invested+cash;
-  memberReturns.forEach(h=>h.weight=Number.isFinite(h.value)&&value>0?h.value/value*100:NaN);
+
+  const invested=memberReturns.reduce(
+    (sum,holding)=>sum+(Number.isFinite(holding.value)?holding.value:0),
+    0
+  );
+  const value=invested+cash;
+  memberReturns.forEach(holding=>{
+    holding.weight=Number.isFinite(holding.value)&&value>0
+      ?holding.value/value*100
+      :NaN
+  });
+
   const profit=value-ROLLING_START_CAPITAL;
-  const ret=(value/ROLLING_START_CAPITAL-1)*100;
-  const days=Math.max(1,(Date.now()-new Date(startDate).getTime())/86400000),years=days/365.25;
-  const cagr=years>0&&value>0?(Math.pow(value/ROLLING_START_CAPITAL,1/years)-1)*100:NaN;
-  const firstSnapshot=snaps.find(s=>(s.portfolios?.[model]?.members||[]).length>0)||snaps[0];
-  const benchCurrent=currentBenchmarkValue(firstSnapshot.benchmarkMarket||'SE');
-  const benchmarkReturn=Number.isFinite(benchmarkStart)&&benchmarkStart!==0&&Number.isFinite(benchCurrent)?(benchCurrent/benchmarkStart-1)*100:NaN;
-  return{type:'rolling',model,startDate,lastUpdateDate:lastUpdateDate||startDate,value,profit,returnPct:ret,cagr,benchmarkReturn,excess:Number.isFinite(ret)&&Number.isFinite(benchmarkReturn)?ret-benchmarkReturn:NaN,fees,buyCount,sellCount,trades:buyCount+sellCount,turnover:turnoverValue/ROLLING_START_CAPITAL*100,cash,memberReturns,transactions,snapshot:firstSnapshot}
+  const returnPct=ROLLING_START_CAPITAL>0
+    ?(value/ROLLING_START_CAPITAL-1)*100
+    :NaN;
+
+  const valuationDate=asOfDate||todayISO();
+  const days=Math.max(
+    1,
+    (dateAtLocalNoon(valuationDate)-dateAtLocalNoon(startDate))/86400000
+  );
+  const years=days/365.25;
+  const cagr=years>0&&value>0
+    ?(Math.pow(value/ROLLING_START_CAPITAL,1/years)-1)*100
+    :NaN;
+
+  const firstSnapshot=snaps[0];
+  const market=firstSnapshot.benchmarkMarket||'SE';
+  const benchmarkCurrent=asOfDate
+    ?benchmarkValueOnOrBefore(market,asOfDate)
+    :currentBenchmarkValue(market);
+  const benchmarkReturn=
+    Number.isFinite(benchmarkStart)&&benchmarkStart!==0&&Number.isFinite(benchmarkCurrent)
+      ?(benchmarkCurrent/benchmarkStart-1)*100
+      :NaN;
+
+  return{
+    type:'rolling',
+    engineVersion:2,
+    model,
+    startDate,
+    lastUpdateDate:lastUpdateDate||startDate,
+    valuationDate,
+    value,
+    profit,
+    returnPct,
+    cagr,
+    benchmarkReturn,
+    excess:Number.isFinite(returnPct)&&Number.isFinite(benchmarkReturn)
+      ?returnPct-benchmarkReturn
+      :NaN,
+    fees,
+    buyCount,
+    sellCount,
+    trades:buyCount+sellCount,
+    turnover:turnoverValue/ROLLING_START_CAPITAL*100,
+    cash,
+    memberReturns,
+    transactions,
+    warnings,
+    snapshot:firstSnapshot
+  }
+}
+function rollingPortfolio(model){
+  return buildRollingPortfolio(model,'')
 }
 function rollingValueAtDate(portfolio,date){
-  if(!portfolio)return NaN;
-  let value=num(portfolio.cash)||0,available=0;
-  for(const h of portfolio.memberReturns||[]){
-    const price=rollingPriceAt(h,date);
-    if(Number.isFinite(price)&&price>0){value+=h.shares*price;available++}
-  }
-  return available?value:NaN
+  if(!portfolio?.model)return NaN;
+  return num(buildRollingPortfolio(portfolio.model,date)?.value)
 }
 function rollingPeriodReturn(portfolio,days){
   const nowValue=num(portfolio?.value);
-  const d=new Date();d.setDate(d.getDate()-days);
-  const oldValue=rollingValueAtDate(portfolio,isoDate(d));
-  return Number.isFinite(nowValue)&&Number.isFinite(oldValue)&&oldValue!==0?(nowValue/oldValue-1)*100:NaN
+  const date=dateAtLocalNoon(portfolio?.valuationDate||todayISO());
+  date.setDate(date.getDate()-days);
+  const historical=buildRollingPortfolio(portfolio.model,isoDate(date));
+  const oldValue=num(historical?.value);
+  return Number.isFinite(nowValue)&&Number.isFinite(oldValue)&&oldValue!==0
+    ?(nowValue/oldValue-1)*100
+    :NaN
 }
+
 function rollingPortfolioRows(){
   const filter=document.getElementById('devPortfolioModel')?.value||'all';
   return ['blue','white','average'].filter(m=>filter==='all'||filter===m).map(m=>rollingPortfolio(m)).filter(Boolean).map(r=>{
@@ -2871,7 +3077,9 @@ function openRollingDevelopmentPortfolio(model){
     ['Försäljningar',x.sellCount],
     ['Handlad omsättning',signed(x.turnover,' %')],
     ['Resultat sålda',signed(soldProfit,' kr')],
-    ['Kontanter',`${Math.round(x.cash).toLocaleString('sv-SE')} kr`]
+    ['Kontanter',`${Math.round(x.cash).toLocaleString('sv-SE')} kr`],
+    ['Portföljmotor',x.engineVersion===2?'Ledger v2':'Äldre motor'],
+    ['Datavarningar',x.warnings?.length||0]
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
   const table=document.getElementById('devPortfolioMembersTable');
   const items=x.memberReturns.slice().sort((a,b)=>(b.weight||0)-(a.weight||0));
