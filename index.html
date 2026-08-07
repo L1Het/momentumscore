@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.2.23</title>
+<title>MomentumScore v20.2.24</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -267,11 +267,17 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .detail-chart-tooltip .price{color:#47d18c}.detail-chart-tooltip .blue{color:#4ca6ff}.detail-chart-tooltip .white{color:#f2f2f2}.detail-chart-tooltip .average{color:#9d7cff}
 .detail-chart-guide{stroke:rgba(255,255,255,.55);stroke-width:1;stroke-dasharray:4 4;display:none}
 .detail-chart-hover-point{display:none;stroke-width:2;stroke:var(--card2)}
+
+.generic-sortable-head{cursor:pointer;user-select:none}
+.generic-sortable-head:hover{background:rgba(76,166,255,.08)}
+.generic-sort-active::after{content:" ▼";font-size:.8em;opacity:.85}
+.generic-sort-active.generic-sort-asc::after{content:" ▲"}
+
 </style>
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.2.23 – ny rullande portföljmotor</h1>
+<h1>MomentumScore v20.2.24 – korrekt veckostart och sortering</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -575,6 +581,10 @@ När Nytt kvartal aktiveras låses ticker, bolag, börs, Yahoo-symbol, kurs och 
 Utveckling kan växlas mellan Aktier och Veckoportföljer. Portföljläget visar varje sparad veckas Blå-, Vit- och Snittportfölj, avkastning mot index, antal vinnare samt bästa och sämsta innehav. En klickbar detaljvy visar samtliga tio aktier.</div>
 <div class="rowcard"><b>Fas 1 – stabil grund</b><br>
 Gemensam bolagsvy används från Översikt, Poäng, Topplista, Utveckling och portföljtabeller. Äldre felkopplad bolagshistorik bevaras men filtreras i visningen, ofullständiga historikposter kan inte krascha bolagsvyn och Topplistan är fortsatt enda sanningskälla för nya Top 10-portföljer.</div>
+<div class="rowcard"><b>Veckostart och fredagsstängning</b><br>
+Nästa veckas portfölj låses efter fredagens uppdatering med fredagens verkliga slutkurs som startPrice. Fredagens rörelse räknas aldrig som portföljavkastning. Den förberedda portföljen visar 0 % fram till aktiveringsdagen och börjar därefter mäta avkastning från fredagens slutkurs.</div>
+<div class="rowcard"><b>Sortering i alla tabeller</b><br>
+Kolumnrubriker är klickbara även i tabeller som tidigare saknade egen sortering. Första klick sorterar normalt högsta först för tal och A–Ö för text; nästa klick vänder ordningen. Rullande Top 10 har separat sortering för nuvarande och sålda innehav.</div>
 <div class="rowcard"><b>Rullande portföljmotor Ledger v2</b><br>
 Varje köp skapar ett permanent innehav med köpdatum, köpvecka, exakt startPrice, antal aktier och anskaffningsvärde. Oförändrade innehav skrivs aldrig om. Försäljningar beräknas från faktiskt antal aktier och sparat anskaffningsvärde. Dag-, vecko- och månadsresultat räknas genom att hela transaktionskedjan spelas upp på respektive historiskt datum.</div>
 <div class="rowcard"><b>Rullande Top 10-portföljer</b><br>Under Utveckling → Veckoportföljer visas tre rullande strategier för Blå, Vit och Snitt. Startkapitalet är 100 000 kr. Innehav som ligger kvar i nästa veckas Top 10 behålls utan omviktning. Köpdatum, antal aktier, exakt startPrice och anskaffningsvärde ändras aldrig förrän aktien säljs. Vid exakt lika poäng prioriteras alltid aktien som redan ingick i föregående veckas Top 10, så lika poäng utlöser inget byte. Aktier som lämnar säljs och nettolikviden delas lika mellan nya aktier. Courtage 0,069 % tas vid både köp och försäljning. Portföljerna sorteras kronologiskt efter veckonummer och återskapas deterministiskt från sparade veckosnapshots och följer med genom den befintliga veckoportföljhistoriken.</div>
@@ -2992,7 +3002,7 @@ function renderDevelopmentPortfolioMembers(x){
   const items=x.result.memberReturns.map(member=>{
     const values=Object.fromEntries(['day','week','month','start'].map(period=>[
       period,
-      holdingPeriodReturn(member,period)
+      holdingPeriodReturn(member,period,x.snapshot)
     ]));
     const relative=Number.isFinite(values.start)&&Number.isFinite(x.indexReturns.start)
       ?values.start-x.indexReturns.start
@@ -3059,6 +3069,102 @@ function renderDevelopmentPortfolioMembers(x){
   bindUnifiedStockRows(table)
 }
 
+
+const genericTableSortState=new WeakMap();
+function headerHasCustomSorter(th){
+  if(th.classList.contains('sortable-head'))return true;
+  return [...th.attributes].some(attr=>/^data-.*sort/.test(attr.name))
+}
+function sortableCellValue(cell){
+  const text=String(cell?.textContent||'').replace(/\u00a0/g,' ').trim();
+  if(!text)return {type:'empty',value:''};
+
+  // Svenskt formaterade tal: +3 026,77 kr, -0,41 p.e., 91,2 %, 8/10 osv.
+  const ratio=text.match(/^([+-]?\d+(?:[.,]\d+)?)\s*\/\s*(\d+(?:[.,]\d+)?)$/);
+  if(ratio){
+    const a=Number(ratio[1].replace(',','.')),b=Number(ratio[2].replace(',','.'));
+    return {type:'number',value:b?100*a/b:a}
+  }
+
+  const cleaned=text
+    .replace(/\s+/g,'')
+    .replace(/p\.?e\.?/gi,'')
+    .replace(/kr/gi,'')
+    .replace(/%/g,'')
+    .replace(/[+]/g,'')
+    .replace(/,/g,'.');
+  if(/^-?\d+(?:\.\d+)?$/.test(cleaned)){
+    return {type:'number',value:Number(cleaned)}
+  }
+
+  const dateMatch=text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(dateMatch)return {type:'number',value:Number(dateMatch.slice(1).join(''))};
+
+  const weekMatch=text.match(/^(\d{4})-W(\d{2})/);
+  if(weekMatch)return {type:'number',value:Number(weekMatch[1])*100+Number(weekMatch[2])};
+
+  return {type:'string',value:text.toLocaleLowerCase('sv-SE')}
+}
+function compareSortableCells(a,b,direction){
+  const av=sortableCellValue(a),bv=sortableCellValue(b);
+  if(av.type==='empty'&&bv.type!=='empty')return 1;
+  if(av.type!=='empty'&&bv.type==='empty')return -1;
+  let cmp=0;
+  if(av.type==='number'&&bv.type==='number')cmp=av.value-bv.value;
+  else cmp=String(av.value).localeCompare(String(bv.value),'sv',{numeric:true,sensitivity:'base'});
+  return direction==='asc'?cmp:-cmp
+}
+function rowsBelongingToClickedHeader(th){
+  const table=th.closest('table'),headerRow=th.closest('tr');
+  if(!table||!headerRow)return [];
+  const all=[...table.querySelectorAll('tr')];
+  const headerIndex=all.indexOf(headerRow);
+  const rows=[];
+
+  for(let i=headerIndex+1;i<all.length;i++){
+    const row=all[i];
+    if(row.classList.contains('portfolio-section-row'))break;
+    if(row.querySelector('th'))break;
+    if(row.querySelectorAll('td').length)rows.push(row)
+  }
+  return rows
+}
+function genericSortFromHeader(th){
+  const table=th.closest('table');
+  const headerRow=th.closest('tr');
+  if(!table||!headerRow)return;
+
+  const column=[...headerRow.children].indexOf(th);
+  if(column<0)return;
+
+  const previous=genericTableSortState.get(table)||{};
+  const same=previous.header===th;
+  const direction=same?(previous.direction==='desc'?'asc':'desc'):
+    (['ticker','bolag','modell','status'].includes(String(th.textContent||'').trim().toLocaleLowerCase('sv-SE'))?'asc':'desc');
+
+  const rows=rowsBelongingToClickedHeader(th);
+  if(rows.length<2)return;
+
+  rows.sort((a,b)=>compareSortableCells(a.children[column],b.children[column],direction));
+  const parent=rows[0].parentNode;
+  rows.forEach(row=>parent.appendChild(row));
+
+  table.querySelectorAll('.generic-sort-active').forEach(h=>h.classList.remove('generic-sort-active','generic-sort-asc'));
+  th.classList.add('generic-sort-active');
+  if(direction==='asc')th.classList.add('generic-sort-asc');
+  genericTableSortState.set(table,{header:th,direction})
+}
+document.addEventListener('click',event=>{
+  const th=event.target.closest('th');
+  if(!th||!th.closest('table')||headerHasCustomSorter(th))return;
+  th.classList.add('generic-sortable-head');
+  genericSortFromHeader(th)
+});
+document.addEventListener('mouseover',event=>{
+  const th=event.target.closest('th');
+  if(th&&th.closest('table')&&!headerHasCustomSorter(th))th.classList.add('generic-sortable-head')
+});
+
 function openRollingDevelopmentPortfolio(model){
   const x=rollingPortfolio(model);if(!x)return;
   const detail=document.getElementById('devPortfolioDetail');detail.classList.remove('hidden');
@@ -3082,14 +3188,83 @@ function openRollingDevelopmentPortfolio(model){
     ['Datavarningar',x.warnings?.length||0]
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
   const table=document.getElementById('devPortfolioMembersTable');
-  const items=x.memberReturns.slice().sort((a,b)=>(b.weight||0)-(a.weight||0));
-  const currentHtml='<tr class="portfolio-section-row"><td colspan="8">Nuvarande innehav</td></tr><tr><th>Ticker</th><th>Bolag</th><th>Vikt</th><th>Inköpsvecka</th><th>Inköpskurs</th><th>Kurs nu</th><th>Sedan köp</th><th>Värde</th></tr>'+items.map(h=>`<tr class="unified-stock-row" data-stock-index="${findStockIndex(h)}"><td><b>${h.ticker}</b></td><td>${h.company}</td><td>${signed(h.weight,' %')}</td><td>${h.buyWeek||'–'}</td><td>${fmt(h.buyPrice)}</td><td>${fmt(h.currentPrice)}</td><td class="${portfolioReturnClass(h.returnPct)}"><b>${signed(h.returnPct,' %')}</b></td><td>${Number.isFinite(h.value)?Math.round(h.value).toLocaleString('sv-SE')+' kr':'–'}</td></tr>`).join('');
-  const soldHtml='<tr class="portfolio-section-row"><td colspan="8">Sålda innehav</td></tr>'+
-    (sold.length?'<tr><th>Ticker</th><th>Bolag</th><th>Köpt</th><th>Såld</th><th>Köpkurs</th><th>Säljkurs</th><th>Utveckling</th><th>Resultat kr</th></tr>'+sold.map(t=>`<tr class="unified-stock-row" data-stock-index="${findStockIndex(t)}"><td><b>${t.ticker}</b></td><td>${t.company}</td><td>${t.buyWeek||dateFmt(t.buyDate)||'–'}</td><td>${t.weekKey||dateFmt(t.date)||'–'}</td><td>${fmt(num(t.buyPrice))}</td><td>${fmt(num(t.price))}</td><td class="${portfolioReturnClass(num(t.returnPct))}"><b>${signed(num(t.returnPct),' %')}</b></td><td class="${portfolioReturnClass(num(t.profit))}"><b>${signed(num(t.profit),' kr')}</b></td></tr>`).join(''):'<tr><td colspan="8" class="note">Inga aktier har sålts ännu.</td></tr>');
-  table.innerHTML=currentHtml+soldHtml;
-  bindUnifiedStockRows(table);detail.scrollIntoView({behavior:'smooth',block:'start'})
-}
 
+  const currentValue=(h,key)=>{
+    if(key==='ticker')return String(h.ticker||'');
+    if(key==='company')return String(h.company||'');
+    if(key==='weight')return num(h.weight);
+    if(key==='buyWeek')return String(h.buyWeek||'');
+    if(key==='buyPrice')return num(h.buyPrice);
+    if(key==='currentPrice')return num(h.currentPrice);
+    if(key==='returnPct')return num(h.returnPct);
+    if(key==='value')return num(h.value);
+    return NaN
+  };
+  const soldValue=(t,key)=>{
+    if(key==='ticker')return String(t.ticker||'');
+    if(key==='company')return String(t.company||'');
+    if(key==='buyWeek')return String(t.buyWeek||t.buyDate||'');
+    if(key==='sellWeek')return String(t.weekKey||t.date||'');
+    if(key==='buyPrice')return num(t.buyPrice);
+    if(key==='sellPrice')return num(t.price);
+    if(key==='returnPct')return num(t.returnPct);
+    if(key==='profit')return num(t.profit);
+    return NaN
+  };
+  const sortItems=(list,key,direction,valueFn)=>list.slice().sort((a,b)=>{
+    const av=valueFn(a,key),bv=valueFn(b,key);
+    if(typeof av==='string'||typeof bv==='string'){
+      const cmp=String(av||'').localeCompare(String(bv||''),'sv',{numeric:true,sensitivity:'base'});
+      return direction==='asc'?cmp:-cmp
+    }
+    const ao=Number.isFinite(av),bo=Number.isFinite(bv);
+    if(ao&&!bo)return-1;if(!ao&&bo)return 1;if(!ao&&!bo)return 0;
+    return direction==='asc'?av-bv:bv-av
+  });
+
+  if(!window.rollingDetailSort)window.rollingDetailSort={currentKey:'weight',currentDirection:'desc',soldKey:'sellWeek',soldDirection:'desc'};
+
+  const renderRollingTables=()=>{
+    const state=window.rollingDetailSort;
+    const items=sortItems(x.memberReturns,state.currentKey,state.currentDirection,currentValue);
+    const soldItems=sortItems(sold,state.soldKey,state.soldDirection,soldValue);
+
+    const ch=(key,label)=>`<th class="sortable-head${state.currentKey===key?' active-sort'+(state.currentDirection==='asc'?' sort-asc':''):''}" data-rolling-current-sort="${key}">${label}</th>`;
+    const sh=(key,label)=>`<th class="sortable-head${state.soldKey===key?' active-sort'+(state.soldDirection==='asc'?' sort-asc':''):''}" data-rolling-sold-sort="${key}">${label}</th>`;
+
+    const currentHtml='<tr class="portfolio-section-row"><td colspan="8">Nuvarande innehav</td></tr><tr>'+
+      ch('ticker','Ticker')+ch('company','Bolag')+ch('weight','Vikt')+ch('buyWeek','Inköpsvecka')+
+      ch('buyPrice','Inköpskurs')+ch('currentPrice','Kurs nu')+ch('returnPct','Sedan köp')+ch('value','Värde')+
+      '</tr>'+items.map(h=>`<tr class="unified-stock-row" data-stock-index="${findStockIndex(h)}"><td><b>${h.ticker}</b></td><td>${h.company}</td><td>${signed(h.weight,' %')}</td><td>${h.buyWeek||'–'}</td><td>${fmt(h.buyPrice)}</td><td>${fmt(h.currentPrice)}</td><td class="${portfolioReturnClass(h.returnPct)}"><b>${signed(h.returnPct,' %')}</b></td><td>${Number.isFinite(h.value)?Math.round(h.value).toLocaleString('sv-SE')+' kr':'–'}</td></tr>`).join('');
+
+    const soldHtml='<tr class="portfolio-section-row"><td colspan="8">Sålda innehav</td></tr>'+
+      (soldItems.length?'<tr>'+
+        sh('ticker','Ticker')+sh('company','Bolag')+sh('buyWeek','Köpt')+sh('sellWeek','Såld')+
+        sh('buyPrice','Köpkurs')+sh('sellPrice','Säljkurs')+sh('returnPct','Utveckling')+sh('profit','Resultat kr')+
+        '</tr>'+soldItems.map(t=>`<tr class="unified-stock-row" data-stock-index="${findStockIndex(t)}"><td><b>${t.ticker}</b></td><td>${t.company}</td><td>${t.buyWeek||dateFmt(t.buyDate)||'–'}</td><td>${t.weekKey||dateFmt(t.date)||'–'}</td><td>${fmt(num(t.buyPrice))}</td><td>${fmt(num(t.price))}</td><td class="${portfolioReturnClass(num(t.returnPct))}"><b>${signed(num(t.returnPct),' %')}</b></td><td class="${portfolioReturnClass(num(t.profit))}"><b>${signed(num(t.profit),' kr')}</b></td></tr>`).join('')
+        :'<tr><td colspan="8" class="note">Inga aktier har sålts ännu.</td></tr>');
+
+    table.innerHTML=currentHtml+soldHtml;
+
+    table.querySelectorAll('[data-rolling-current-sort]').forEach(header=>header.onclick=()=>{
+      const key=header.dataset.rollingCurrentSort;
+      if(state.currentKey===key)state.currentDirection=state.currentDirection==='desc'?'asc':'desc';
+      else{state.currentKey=key;state.currentDirection=['ticker','company','buyWeek'].includes(key)?'asc':'desc'}
+      renderRollingTables()
+    });
+    table.querySelectorAll('[data-rolling-sold-sort]').forEach(header=>header.onclick=()=>{
+      const key=header.dataset.rollingSoldSort;
+      if(state.soldKey===key)state.soldDirection=state.soldDirection==='desc'?'asc':'desc';
+      else{state.soldKey=key;state.soldDirection=['ticker','company','buyWeek','sellWeek'].includes(key)?'asc':'desc'}
+      renderRollingTables()
+    });
+
+    bindUnifiedStockRows(table)
+  };
+
+  renderRollingTables();
+  detail.scrollIntoView({behavior:'smooth',block:'start'})
+}
 function openDevelopmentPortfolio(index){
   const x=developmentPortfolioRows()[index];
   if(!x)return;
@@ -3193,8 +3368,24 @@ function benchmarkReferenceHtml(market,periods){
 function rowReturnAtPeriod(r,period){
   const vals=pricePeriodReturns(r);return vals[period]
 }
+function snapshotDaysActive(snapshot){
+  const activation=weeklySnapshotActivationDate(snapshot);
+  if(!activation)return Infinity;
+  const today=dateAtLocalNoon(todayISO()),start=dateAtLocalNoon(activation);
+  return Math.floor((today-start)/86400000)
+}
+function periodCalendarDays(period){
+  return period==='day'?1:period==='week'?7:period==='month'?30:period==='year'?365:Infinity
+}
+function snapshotPeriodUsesStart(snapshot,period){
+  if(!weeklySnapshotIsActive(snapshot))return true;
+  return snapshotDaysActive(snapshot)<periodCalendarDays(period)
+}
 function portfolioPeriodReturn(snapshot,model,period){
   if(period==='start')return weeklyPortfolioReturn(snapshot,model).value;
+  if(!weeklySnapshotIsActive(snapshot))return 0;
+  if(snapshotPeriodUsesStart(snapshot,period))return weeklyPortfolioReturn(snapshot,model).value;
+
   const members=snapshot.portfolios?.[model]?.members||[];
   const vals=members.map(m=>{
     const rowIndex=findStockIndex(m),row=rowIndex>=0?rows[rowIndex]:null;
@@ -3204,15 +3395,22 @@ function portfolioPeriodReturn(snapshot,model,period){
 }
 function benchmarkReturnForSnapshot(snapshot,period){
   if(period==='start')return weeklyBenchmarkReturn(snapshot);
+  if(!weeklySnapshotIsActive(snapshot))return 0;
+  if(snapshotPeriodUsesStart(snapshot,period))return weeklyBenchmarkReturn(snapshot);
   const market=snapshot.benchmarkMarket||'SE';
   return benchmarkPeriodReturns(market)[period]
 }
-function holdingPeriodReturn(m,period){
-  const row=rows.find(r=>(r.ticker||'').toUpperCase()===(m.ticker||'').toUpperCase()&&(r.market||'SE')===(m.market||'SE'));
+function holdingPeriodReturn(m,period,snapshot=null){
+  const rowIndex=findStockIndex(m),row=rowIndex>=0?rows[rowIndex]:null;
   if(!row)return NaN;
-  if(period==='start'){
-    const current=num(row.price);
-    return Number.isFinite(current)&&Number.isFinite(num(m.startPrice))&&num(m.startPrice)!==0?(current/num(m.startPrice)-1)*100:NaN
+
+  if(snapshot&&!weeklySnapshotIsActive(snapshot))return 0;
+
+  if(period==='start'||(snapshot&&snapshotPeriodUsesStart(snapshot,period))){
+    const current=snapshot&&!weeklySnapshotIsActive(snapshot)?num(m.startPrice):num(row.price);
+    return Number.isFinite(current)&&Number.isFinite(num(m.startPrice))&&num(m.startPrice)!==0
+      ?(current/num(m.startPrice)-1)*100
+      :NaN
   }
   return rowReturnAtPeriod(row,period)
 }
@@ -6244,6 +6442,15 @@ function historicalCandidate(row,cutoffDate){
 
 function fridayClosingPrice(row,cutoffDate){
   const cutoff=String(cutoffDate||'').slice(0,10);
+  const updatedDate=String(row?.marketUpdatedAt||row?.technicalSourceDate||'').slice(0,10);
+
+  // Om bolaget just uppdaterades på själva fredagen är row.price den säkraste
+  // slutkursen. Yahoo chart-historiken kan under fredagskvällen fortfarande
+  // sluta på torsdagens datapunkt.
+  if(updatedDate===cutoff&&Number.isFinite(num(row?.price))&&num(row.price)>0){
+    return num(row.price)
+  }
+
   const history=(Array.isArray(row?.priceHistory)?row.priceHistory:[])
     .filter(point=>String(point?.date||'').slice(0,10)<=cutoff&&Number.isFinite(num(point?.close)))
     .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
@@ -6591,10 +6798,20 @@ function rowIndexForMember(m){return findStockIndex(m)}
 function weeklyPortfolioReturn(snapshot,model){
   const portfolio=snapshot.portfolios?.[model];
   if(!portfolio?.members?.length)return{value:NaN,available:0,total:0,memberReturns:[]};
+
+  const active=weeklySnapshotIsActive(snapshot);
   const memberReturns=portfolio.members.map(m=>{
     const rowIndex=findStockIndex(m),row=rowIndex>=0?rows[rowIndex]:null;
-    const current=row?num(row.price):NaN;
-    const ret=Number.isFinite(current)&&Number.isFinite(m.startPrice)&&m.startPrice!==0?(current/m.startPrice-1)*100:NaN;
+
+    // En portfölj som är förberedd på fredagen börjar först leva när nästa
+    // vecka aktiveras. Fram till dess är startkurs = aktuell värderingskurs.
+    const current=!active
+      ?num(m.startPrice)
+      :(row?num(row.price):NaN);
+
+    const ret=Number.isFinite(current)&&Number.isFinite(num(m.startPrice))&&num(m.startPrice)!==0
+      ?(current/num(m.startPrice)-1)*100
+      :NaN;
     return{...m,currentPrice:current,returnPct:ret}
   });
   const valid=memberReturns.filter(x=>Number.isFinite(x.returnPct));
@@ -6604,6 +6821,7 @@ function weeklyPortfolioReturn(snapshot,model){
   }
 }
 function weeklyBenchmarkReturn(snapshot){
+  if(!weeklySnapshotIsActive(snapshot))return 0;
   const current=currentBenchmarkValue(snapshot.benchmarkMarket||'SE');
   const start=Number.isFinite(num(snapshot.benchmarkStart))?num(snapshot.benchmarkStart):benchmarkValueOnOrBefore(snapshot.benchmarkMarket||'SE',snapshot.savedDate);
   return Number.isFinite(current)&&Number.isFinite(start)&&start!==0?(current/start-1)*100:NaN
@@ -6763,7 +6981,7 @@ function renderWeeklyHoldingsMode(s){
   const idxVals=Object.fromEntries(periods.map(p=>[p,benchmarkReturnForSnapshot(s,p)]));
   document.getElementById('weeklyAnalysisTable').innerHTML='<tr><th>Rank</th><th>Ticker</th><th>Bolag</th><th>Dag</th><th>Vecka</th><th>Månad</th><th>Sedan start</th><th>Mot OMXSPI sedan start</th></tr>'+
     members.map(m=>{
-      const vals=Object.fromEntries(periods.map(p=>[p,holdingPeriodReturn(m,p)]));
+      const vals=Object.fromEntries(periods.map(p=>[p,holdingPeriodReturn(m,p,s)]));
       const excess=Number.isFinite(vals.start)&&Number.isFinite(idxVals.start)?vals.start-idxVals.start:NaN;
       const stockIndex=rowIndexForMember(m);
       return `<tr class="unified-stock-row" data-stock-index="${stockIndex}"><td>${m.rank}</td><td>${m.ticker}</td><td>${m.company}</td>${periods.map(p=>`<td class="${classByValue(vals[p])}">${signed(vals[p],' %')}</td>`).join('')}<td class="${classByValue(excess)}">${signed(excess,' p.e.')}</td></tr>`
