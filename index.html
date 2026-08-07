@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.2.25</title>
+<title>MomentumScore v20.2.26</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -277,7 +277,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.2.25 – fredag 18:00 och korrekt aktivering</h1>
+<h1>MomentumScore v20.2.26 – fredagsbyte i rullande Top 10</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -581,12 +581,12 @@ När Nytt kvartal aktiveras låses ticker, bolag, börs, Yahoo-symbol, kurs och 
 Utveckling kan växlas mellan Aktier och Veckoportföljer. Portföljläget visar varje sparad veckas Blå-, Vit- och Snittportfölj, avkastning mot index, antal vinnare samt bästa och sämsta innehav. En klickbar detaljvy visar samtliga tio aktier.</div>
 <div class="rowcard"><b>Fas 1 – stabil grund</b><br>
 Gemensam bolagsvy används från Översikt, Poäng, Topplista, Utveckling och portföljtabeller. Äldre felkopplad bolagshistorik bevaras men filtreras i visningen, ofullständiga historikposter kan inte krascha bolagsvyn och Topplistan är fortsatt enda sanningskälla för nya Top 10-portföljer.</div>
-<div class="rowcard"><b>Veckostart och fredag 18:00</b><br>
-Nästa veckas Top 10 skapas först efter en faktisk kursuppdatering klockan 18:00 eller senare på fredagen (eller vid nästa senare uppdatering). Fredagens färdiga kurs sparas som startPrice. Portföljen visas direkt som kommande vecka men är inaktiv fram till måndag, så fredagens kursrörelse och helgen ger alltid 0 % avkastning.</div>
+<div class="rowcard"><b>Fredag 18:00 – två separata regler</b><br>
+När nästa veckas Top 10 skapas efter fredagens kursuppdatering ombalanseras de rullande portföljerna omedelbart på samma fredagsstängning. Utgående innehav säljs till stängningskurs minus säljcourtage och nya innehav köps till stängningskurs plus köpcourtage. Den frysta nya veckoportföljen ligger samtidigt kvar på 0 % till måndag, eftersom fredagens rörelse redan är avslutad när portföljen skapas.</div>
 <div class="rowcard"><b>Sortering i alla tabeller</b><br>
 Kolumnrubriker är klickbara även i tabeller som tidigare saknade egen sortering. Första klick sorterar normalt högsta först för tal och A–Ö för text; nästa klick vänder ordningen. Rullande Top 10 har separat sortering för nuvarande och sålda innehav.</div>
 <div class="rowcard"><b>Rullande portföljmotor Ledger v2</b><br>
-Varje köp skapar ett permanent innehav med köpdatum, köpvecka, exakt startPrice, antal aktier och anskaffningsvärde. Oförändrade innehav skrivs aldrig om. Försäljningar beräknas från faktiskt antal aktier och sparat anskaffningsvärde. Dag-, vecko- och månadsresultat räknas genom att hela transaktionskedjan spelas upp på respektive historiskt datum.</div>
+Varje köp skapar ett permanent innehav med köpdatum, köpvecka, exakt startPrice, antal aktier och anskaffningsvärde inklusive köpcourtage. Oförändrade innehav skrivs aldrig om. Försäljningar beräknas från faktiskt antal aktier och sparat anskaffningsvärde. Dag-, vecko- och månadsresultat räknas genom att hela transaktionskedjan spelas upp på respektive historiskt datum.</div>
 <div class="rowcard"><b>Rullande Top 10-portföljer</b><br>Under Utveckling → Veckoportföljer visas tre rullande strategier för Blå, Vit och Snitt. Startkapitalet är 100 000 kr. Innehav som ligger kvar i nästa veckas Top 10 behålls utan omviktning. Köpdatum, antal aktier, exakt startPrice och anskaffningsvärde ändras aldrig förrän aktien säljs. Vid exakt lika poäng prioriteras alltid aktien som redan ingick i föregående veckas Top 10, så lika poäng utlöser inget byte. Aktier som lämnar säljs och nettolikviden delas lika mellan nya aktier. Courtage 0,069 % tas vid både köp och försäljning. Portföljerna sorteras kronologiskt efter veckonummer och återskapas deterministiskt från sparade veckosnapshots och följer med genom den befintliga veckoportföljhistoriken.</div>
 <div class="rowcard"><b>Veckoportföljer</b><br>
 Efter en lyckad kursuppdatering fredag 18:00 eller senare skapas nästa veckas tre frysta Top 10-portföljer direkt från den färdigräknade Topplistan. Topplistan är den enda sanningskällan: samma kvalificering, poäng och sorteringsordning kopieras, och startkursen hämtas uttryckligen från fredagens sista stängningskurs i kurshistoriken. Portföljerna visas direkt som kommande frysta portföljer men aktiveras i de rullande strategierna först på måndagen. Vid exakt lika poäng prioriteras befintligt innehav enligt nuvarande regel.</div>
@@ -2649,6 +2649,15 @@ function rollingEntryPrice(member,snapshot){
 }
 function rollingSalePrice(holding,snapshot){
   const date=rollingSnapshotExecutionDate(snapshot);
+  const rowIndex=findStockIndex(holding);
+  const row=rowIndex>=0?rows[rowIndex]:null;
+
+  // Vid fredagsombalansering används exakt samma stängningskursprincip
+  // för försäljning som för de nya portföljernas startPrice.
+  if(row&&String(snapshot?.cutoffTime||'')==='18:00'){
+    const close=fridayClosingPrice(row,date);
+    if(Number.isFinite(close)&&close>0)return close
+  }
   return rollingPriceAt(holding,date)
 }
 function rollingValuationPrice(holding,asOfDate=''){
@@ -2656,12 +2665,17 @@ function rollingValuationPrice(holding,asOfDate=''){
   return rollingCurrentPrice(holding)
 }
 function rollingSnapshotsForModel(model,asOfDate=''){
+  const valuationDate=asOfDate||todayISO();
   return weeklyPortfolios
     .filter(snapshot=>{
       if(!(snapshot?.portfolios?.[model]?.members||[]).length)return false;
-      if(!weeklySnapshotIsActive(snapshot))return false;
+
+      // Fryst veckoportfölj: aktiveras först på måndag för avkastningsmätning.
+      // Rullande portfölj: ombalanseras däremot redan på snapshotens lockDate,
+      // dvs fredag efter 18:00 när den nya Top 10-listan faktiskt skapas.
       const executionDate=rollingSnapshotExecutionDate(snapshot);
-      return !asOfDate||!executionDate||executionDate<=asOfDate
+      if(!executionDate)return false;
+      return executionDate<=valuationDate
     })
     .slice()
     .sort((a,b)=>rollingSnapshotSortValue(a).localeCompare(rollingSnapshotSortValue(b)))
@@ -2766,6 +2780,7 @@ function buildRollingPortfolio(model,asOfDate=''){
         buyDate:holding.buyDate,
         buyWeek:holding.buyWeek,
         buyPrice:holding.buyPrice,
+        buyFee:num(holding.buyFee),
         cost:costBasis,
         costBasis,
         profit,
@@ -2807,7 +2822,11 @@ function buildRollingPortfolio(model,asOfDate=''){
           buyWeek:snapshot.weekKey,
           buyPrice,
           cost:marketValue,
-          costBasis:marketValue
+          // Anskaffningsvärdet inkluderar köpcourtage. Därmed börjar ett
+          // nyköpt innehav svagt negativt motsvarande courtaget, vilket är
+          // den verkliga ekonomiska kostnaden för affären.
+          costBasis:totalCost,
+          buyFee:fee
         });
 
         transactions.push({
