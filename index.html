@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.2.24</title>
+<title>MomentumScore v20.2.25</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -277,7 +277,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.2.24 – korrekt veckostart och sortering</h1>
+<h1>MomentumScore v20.2.25 – fredag 18:00 och korrekt aktivering</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -581,15 +581,15 @@ När Nytt kvartal aktiveras låses ticker, bolag, börs, Yahoo-symbol, kurs och 
 Utveckling kan växlas mellan Aktier och Veckoportföljer. Portföljläget visar varje sparad veckas Blå-, Vit- och Snittportfölj, avkastning mot index, antal vinnare samt bästa och sämsta innehav. En klickbar detaljvy visar samtliga tio aktier.</div>
 <div class="rowcard"><b>Fas 1 – stabil grund</b><br>
 Gemensam bolagsvy används från Översikt, Poäng, Topplista, Utveckling och portföljtabeller. Äldre felkopplad bolagshistorik bevaras men filtreras i visningen, ofullständiga historikposter kan inte krascha bolagsvyn och Topplistan är fortsatt enda sanningskälla för nya Top 10-portföljer.</div>
-<div class="rowcard"><b>Veckostart och fredagsstängning</b><br>
-Nästa veckas portfölj låses efter fredagens uppdatering med fredagens verkliga slutkurs som startPrice. Fredagens rörelse räknas aldrig som portföljavkastning. Den förberedda portföljen visar 0 % fram till aktiveringsdagen och börjar därefter mäta avkastning från fredagens slutkurs.</div>
+<div class="rowcard"><b>Veckostart och fredag 18:00</b><br>
+Nästa veckas Top 10 skapas först efter en faktisk kursuppdatering klockan 18:00 eller senare på fredagen (eller vid nästa senare uppdatering). Fredagens färdiga kurs sparas som startPrice. Portföljen visas direkt som kommande vecka men är inaktiv fram till måndag, så fredagens kursrörelse och helgen ger alltid 0 % avkastning.</div>
 <div class="rowcard"><b>Sortering i alla tabeller</b><br>
 Kolumnrubriker är klickbara även i tabeller som tidigare saknade egen sortering. Första klick sorterar normalt högsta först för tal och A–Ö för text; nästa klick vänder ordningen. Rullande Top 10 har separat sortering för nuvarande och sålda innehav.</div>
 <div class="rowcard"><b>Rullande portföljmotor Ledger v2</b><br>
 Varje köp skapar ett permanent innehav med köpdatum, köpvecka, exakt startPrice, antal aktier och anskaffningsvärde. Oförändrade innehav skrivs aldrig om. Försäljningar beräknas från faktiskt antal aktier och sparat anskaffningsvärde. Dag-, vecko- och månadsresultat räknas genom att hela transaktionskedjan spelas upp på respektive historiskt datum.</div>
 <div class="rowcard"><b>Rullande Top 10-portföljer</b><br>Under Utveckling → Veckoportföljer visas tre rullande strategier för Blå, Vit och Snitt. Startkapitalet är 100 000 kr. Innehav som ligger kvar i nästa veckas Top 10 behålls utan omviktning. Köpdatum, antal aktier, exakt startPrice och anskaffningsvärde ändras aldrig förrän aktien säljs. Vid exakt lika poäng prioriteras alltid aktien som redan ingick i föregående veckas Top 10, så lika poäng utlöser inget byte. Aktier som lämnar säljs och nettolikviden delas lika mellan nya aktier. Courtage 0,069 % tas vid både köp och försäljning. Portföljerna sorteras kronologiskt efter veckonummer och återskapas deterministiskt från sparade veckosnapshots och följer med genom den befintliga veckoportföljhistoriken.</div>
 <div class="rowcard"><b>Veckoportföljer</b><br>
-Efter en lyckad kursuppdatering fredag 17:46 eller senare skapas nästa veckas tre frysta Top 10-portföljer direkt från den färdigräknade Topplistan. Topplistan är den enda sanningskällan: samma kvalificering, poäng och sorteringsordning kopieras, och startkursen hämtas uttryckligen från fredagens sista stängningskurs i kurshistoriken. Portföljerna visas direkt som kommande frysta portföljer men aktiveras i de rullande strategierna först på måndagen. Vid exakt lika poäng prioriteras befintligt innehav enligt nuvarande regel.</div>
+Efter en lyckad kursuppdatering fredag 18:00 eller senare skapas nästa veckas tre frysta Top 10-portföljer direkt från den färdigräknade Topplistan. Topplistan är den enda sanningskällan: samma kvalificering, poäng och sorteringsordning kopieras, och startkursen hämtas uttryckligen från fredagens sista stängningskurs i kurshistoriken. Portföljerna visas direkt som kommande frysta portföljer men aktiveras i de rullande strategierna först på måndagen. Vid exakt lika poäng prioriteras befintligt innehav enligt nuvarande regel.</div>
 <div class="rowcard"><b>Två modeller – inte en vald modell</b><br>
 Blå och Vit är separata modeller. Snitt är endast ett visat medelvärde. Vit får ingen poängförändring förrän separat Vit-historik har börjat samlas in. I Utveckling bestäms Status och radfärg av den poäng som tabellen är sorterad på.</div>
 <div class="rowcard"><b>Blå, Vit och Snitt</b><br>
@@ -2579,15 +2579,10 @@ function rollingCurrentPrice(member){
   return r&&Number.isFinite(num(r.price))?num(r.price):NaN
 }
 function weeklySnapshotActivationDate(snapshot){
-  const lock=String(snapshot?.lockDate||snapshot?.savedDate||snapshot?.savedAt||'').slice(0,10);
-  if(lock){
-    const d=dateAtLocalNoon(lock);
-    // En portfölj som låses efter fredagens stängning får börja styra den
-    // rullande Top 10-portföljen direkt. Inga byten sker före veckans slut,
-    // men vi väntar inte till måndag när fredagens urval redan är färdigt.
-    if(d.getDay()===5)return lock
-  }
+  // En portfölj för nästa vecka kan förberedas fredag efter 18:00,
+  // men den är INTE aktiv på fredagen eller under helgen.
   if(snapshot?.activationDate)return String(snapshot.activationDate).slice(0,10);
+
   const key=String(snapshot?.weekKey||'');
   const match=key.match(/^(\d{4})-W(\d{2})$/);
   if(match){
@@ -2598,7 +2593,8 @@ function weeklySnapshotActivationDate(snapshot){
     monday.setDate(jan4.getDate()-(day-1)+(week-1)*7);
     return isoDate(monday)
   }
-  return lock
+
+  return String(snapshot?.savedDate||snapshot?.savedAt||'').slice(0,10)
 }
 function weeklySnapshotIsActive(snapshot,now=new Date()){
   const activation=weeklySnapshotActivationDate(snapshot);
@@ -6361,17 +6357,36 @@ function dateAtLocalNoon(value){
   const d=value instanceof Date?new Date(value):new Date(String(value).slice(0,10)+'T12:00:00');
   return d
 }
+function fridayCutoffMoment(friday){
+  const d=new Date(friday);
+  d.setHours(18,0,0,0);
+  return d
+}
 function latestCompletedFriday(now=new Date()){
   const d=new Date(now);
   const day=d.getDay();
   let daysBack=(day+2)%7;
   if(day===5){
-    const afterClose=d.getHours()>17||(d.getHours()===17&&d.getMinutes()>=46);
-    daysBack=afterClose?0:7
+    const afterCutoff=d.getHours()>=18;
+    daysBack=afterCutoff?0:7
   }
   d.setDate(d.getDate()-daysBack);
   d.setHours(12,0,0,0);
   return d
+}
+function marketUpdateIsAfterFridayCutoff(friday){
+  const lastUpdate=loadMarketSettings()?.lastUpdate;
+  if(!lastUpdate)return false;
+  const updateTime=new Date(lastUpdate);
+  const cutoff=fridayCutoffMoment(friday);
+  return Number.isFinite(updateTime.getTime())&&updateTime>=cutoff
+}
+function rowUpdatedAfterFridayCutoff(row,friday){
+  const stamp=row?.marketUpdatedAt||row?.technicalSourceDate;
+  if(!stamp)return false;
+  const updateTime=new Date(stamp);
+  const cutoff=fridayCutoffMoment(friday);
+  return Number.isFinite(updateTime.getTime())&&updateTime>=cutoff
 }
 function followingMonday(friday){
   const monday=new Date(friday);
@@ -6442,20 +6457,23 @@ function historicalCandidate(row,cutoffDate){
 
 function fridayClosingPrice(row,cutoffDate){
   const cutoff=String(cutoffDate||'').slice(0,10);
-  const updatedDate=String(row?.marketUpdatedAt||row?.technicalSourceDate||'').slice(0,10);
+  const friday=dateAtLocalNoon(cutoff);
 
-  // Om bolaget just uppdaterades på själva fredagen är row.price den säkraste
-  // slutkursen. Yahoo chart-historiken kan under fredagskvällen fortfarande
-  // sluta på torsdagens datapunkt.
-  if(updatedDate===cutoff&&Number.isFinite(num(row?.price))&&num(row.price)>0){
+  // En kurs får vara startkurs först när just det bolaget har uppdaterats
+  // efter fredagens 18:00-gräns (eller vid en senare uppdatering under helgen).
+  // Då är row.price Yahoo:s senaste färdiga kurs och blir sanningskällan.
+  if(rowUpdatedAfterFridayCutoff(row,friday)&&Number.isFinite(num(row?.price))&&num(row.price)>0){
     return num(row.price)
   }
 
-  const history=(Array.isArray(row?.priceHistory)?row.priceHistory:[])
-    .filter(point=>String(point?.date||'').slice(0,10)<=cutoff&&Number.isFinite(num(point?.close)))
+  // Historiken används bara om den uttryckligen innehåller fredagens datapunkt.
+  // Vi faller INTE tillbaka till torsdagens kurs för en ny veckoportfölj.
+  const exact=(Array.isArray(row?.priceHistory)?row.priceHistory:[])
+    .filter(point=>String(point?.date||'').slice(0,10)===cutoff&&Number.isFinite(num(point?.close)))
     .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
-  if(history.length)return num(history[history.length-1].close);
-  return num(row?.price)
+  if(exact.length)return num(exact[exact.length-1].close);
+
+  return NaN
 }
 function topListCandidateFromCurrent(row,model,cutoffDate){
   const selected=selectedModelValues(row,model);
@@ -6490,13 +6508,13 @@ function topListMembersForSnapshot(model,cutoffDate,previousSnapshot=null){
     averageScore:candidate.average,
     selectionScore:candidate.score,
     selectionModel:model,
-    selectionSource:'toplist-friday-close-v1'
+    selectionSource:'toplist-friday-1800-v2'
   }))
 }
 function snapshotUsesTopListClose(snapshot){
-  return snapshot?.selectionSource==='toplist-friday-close-v1'&&
+  return snapshot?.selectionSource==='toplist-friday-1800-v2'&&
     ['blue','white','average'].every(model=>(snapshot?.portfolios?.[model]?.members||[]).length===10&&
-      snapshot.portfolios[model].members.every(member=>member.selectionSource==='toplist-friday-close-v1'))
+      snapshot.portfolios[model].members.every(member=>member.selectionSource==='toplist-friday-1800-v2'))
 }
 
 function weeklyMemberKey(ref){
@@ -6566,11 +6584,11 @@ function createHistoricalWeeklySnapshot(friday,automatic=true){
     weekKey:targetInfo.key,
     year:targetInfo.year,
     week:targetInfo.week,
-    savedAt:`${cutoffDate}T17:46:00`,
+    savedAt:`${cutoffDate}T18:00:00`,
     savedDate:cutoffDate,
     lockDate:cutoffDate,
     activationDate:isoDate(followingMonday(friday)),
-    selectionSource:'toplist-friday-close-v1',
+    selectionSource:'toplist-friday-1800-v2',
     benchmarkMarket,
     benchmarkSymbol:benchmarkSymbol(benchmarkMarket),
     benchmarkStart,
@@ -6625,7 +6643,8 @@ function createCurrentDataWeeklySnapshot(friday,automatic=true,forceRebuild=fals
   const white=topListMembersForSnapshot('white',cutoffDate,previousSnapshot);
   const average=topListMembersForSnapshot('average',cutoffDate,previousSnapshot);
   if(blue.length<10||white.length<10||average.length<10){
-    console.warn('Nästa veckas Top 10 kunde inte skapas från Topplistan',{blue:blue.length,white:white.length,average:average.length});
+    console.warn('Nästa veckas Top 10 kunde inte skapas: för få bolag har säker fredagskurs efter 18:00',
+      {blue:blue.length,white:white.length,average:average.length,cutoffDate});
     return false
   }
 
@@ -6639,9 +6658,9 @@ function createCurrentDataWeeklySnapshot(friday,automatic=true,forceRebuild=fals
   const snapshot={
     id:`${targetInfo.key}-${cutoffDate}`,
     weekKey:targetInfo.key,year:targetInfo.year,week:targetInfo.week,
-    savedAt:nowISO(),savedDate:cutoffDate,lockDate:cutoffDate,activationDate,
+    savedAt:nowISO(),savedDate:cutoffDate,lockDate:cutoffDate,cutoffTime:'18:00',activationDate,
     preparedFrom:'friday-close-toplist',
-    selectionSource:'toplist-friday-close-v1',
+    selectionSource:'toplist-friday-1800-v2',
     benchmarkMarket,benchmarkSymbol:benchmarkSymbol(benchmarkMarket),benchmarkStart,
     portfolios:{blue:{name:'Blå',members:blue},white:{name:'Vit',members:white},average:{name:'Snitt',members:average}}
   };
@@ -6656,12 +6675,18 @@ function createCurrentDataWeeklySnapshot(friday,automatic=true,forceRebuild=fals
 function ensureNextWeekPortfolioAfterFriday(){
   const settings=loadWeeklySettings();
   if(settings.autoSave!=='on')return false;
+
   const friday=latestCompletedFriday(new Date());
+
+  // Ny vecka får inte skapas enbart för att klockan passerat 18:00.
+  // Det måste också finnas en genomförd marknadsuppdatering efter 18:00
+  // (eller en senare uppdatering under helgen).
+  if(!marketUpdateIsAfterFridayCutoff(friday))return false;
+
   const targetInfo=isoWeekInfo(followingMonday(friday));
   const existing=weeklyPortfolios.find(snapshot=>snapshot.weekKey===targetInfo.key);
 
-  // Gamla snapshots för samma vecka byggs om en gång så att både urval och
-  // startkurs kommer från fredagens färdiga Topplista och fredagens slutkurs.
+  // v2 tvingar en gammal W33/Wxx att byggas om en gång med korrekt 18:00-data.
   if(existing&&!snapshotUsesTopListClose(existing)){
     return createCurrentDataWeeklySnapshot(new Date(friday),true,true)
   }
@@ -6896,7 +6921,7 @@ function renderWeeklyPortfolios(){
   if(old&&weeklyPortfolios.some(s=>s.id===old))select.value=old;
 
   document.getElementById('weeklyStatus').textContent=weeklyPortfolios.length
-    ?`${weeklyPortfolios.length} veckor sparade. Nästa veckas Top 10 skapas efter fredag 17:46 eller vid den första senare kursuppdateringen. Den visas som fryst vecka direkt och blir samtidigt nästa steg i de rullande portföljerna, eftersom veckans handel redan är avslutad.`
+    ?`${weeklyPortfolios.length} veckor sparade. Nästa veckas Top 10 skapas efter fredag 18:00 eller vid den första senare kursuppdateringen. Den visas som fryst vecka direkt och blir samtidigt nästa steg i de rullande portföljerna, eftersom veckans handel redan är avslutad.`
     :'Ingen veckoportfölj sparad ännu.';
 
   const s=weeklyPortfolios.find(x=>x.id===select.value)||weeklyPortfolios[0];
