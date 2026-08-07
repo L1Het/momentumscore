@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.2.26</title>
+<title>MomentumScore v20.3.0</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -277,7 +277,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.2.26 – fredagsbyte i rullande Top 10</h1>
+<h1>MomentumScore v20.3.0 – Vit 2.0 med trendstabilitet</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -581,6 +581,8 @@ När Nytt kvartal aktiveras låses ticker, bolag, börs, Yahoo-symbol, kurs och 
 Utveckling kan växlas mellan Aktier och Veckoportföljer. Portföljläget visar varje sparad veckas Blå-, Vit- och Snittportfölj, avkastning mot index, antal vinnare samt bästa och sämsta innehav. En klickbar detaljvy visar samtliga tio aktier.</div>
 <div class="rowcard"><b>Fas 1 – stabil grund</b><br>
 Gemensam bolagsvy används från Översikt, Poäng, Topplista, Utveckling och portföljtabeller. Äldre felkopplad bolagshistorik bevaras men filtreras i visningen, ofullständiga historikposter kan inte krascha bolagsvyn och Topplistan är fortsatt enda sanningskälla för nya Top 10-portföljer.</div>
+<div class="rowcard"><b>Vit 2.0 – fyra pucklar á 25 poäng</b><br>
+Vit består av Kurs/MA200, MA50/MA200, MA200-trend 1 månad och Trendstabilitet 5 dagar. Trendstabilitet mäter förändringen i avståndet Kurs–MA200 under fem handelsdagar och får full poäng ungefär mellan −2 och +1 procentenheter. Befintliga Vit- och Snittveckor räknas om historiskt med den nya modellen; Blå lämnas oförändrad.</div>
 <div class="rowcard"><b>Fredag 18:00 – två separata regler</b><br>
 När nästa veckas Top 10 skapas efter fredagens kursuppdatering ombalanseras de rullande portföljerna omedelbart på samma fredagsstängning. Utgående innehav säljs till stängningskurs minus säljcourtage och nya innehav köps till stängningskurs plus köpcourtage. Den frysta nya veckoportföljen ligger samtidigt kvar på 0 % till måndag, eftersom fredagens rörelse redan är avslutad när portföljen skapas.</div>
 <div class="rowcard"><b>Sortering i alla tabeller</b><br>
@@ -1284,7 +1286,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
 <script>
 const ids=['companyType','ticker','company','market','yahooSymbol','price','ma200','ma1w','ma1m','ma3m','rev1','rev2','rev3','rev4','rev3y','ekYoy','ek3y','eps1','eps2','eps3','eps4','eps3y','pe','pe3','pe5','roe','debt','fcf'];
 const numericIds=['price','ma200','ma1w','ma1m','ma3m','rev1','rev2','rev3','rev4','rev3y','ekYoy','ek3y','eps1','eps2','eps3','eps4','eps3y','pe','pe3','pe5','roe','debt','fcf'], storageKey='momentumScore_v4_rows', backupKey='momentumScore_v4_rows_backup_before_update', oldKeys=['momentumScore_v3_rows','momentumRows'];
-const settingsKey='momentumScore_market_settings', dbVersionKey='momentumScore_db_version', benchmarkKey='momentumScore_benchmark_history', weeklyPortfolioKey='momentumScore_weekly_portfolios_v1', weeklySettingsKey='momentumScore_weekly_settings_v1', appDbVersion=15;
+const settingsKey='momentumScore_market_settings', dbVersionKey='momentumScore_db_version', benchmarkKey='momentumScore_benchmark_history', weeklyPortfolioKey='momentumScore_weekly_portfolios_v1', weeklySettingsKey='momentumScore_weekly_settings_v1', appDbVersion=16;
 function loadBenchmarkHistories(){try{return JSON.parse(localStorage.getItem(benchmarkKey)||'{}')||{}}catch{return {}}}
 let benchmarkHistories=loadBenchmarkHistories();
 function loadWeeklyPortfolios(){try{return JSON.parse(localStorage.getItem(weeklyPortfolioKey)||'[]')||[]}catch{return []}}
@@ -1458,14 +1460,16 @@ function returnAtOffset(history,offset){
 
 const WHITE_PLATEAU_KEY='momentumscore_white_plateaus_v17';
 const DEFAULT_WHITE_PLATEAUS={
-  distanceMa200:{name:'Kurs mot MA200',min:2.20,max:4.48,leftZero:-8,rightZero:25,maxPoints:33.33},
-  ma50Spread:{name:'MA50 mot MA200',min:8.40,max:13.20,leftZero:-2,rightZero:30,maxPoints:33.33},
-  ma200Slope1m:{name:'MA200-trend 1 månad',min:0.69,max:1.23,leftZero:-2.5,rightZero:5.5,maxPoints:33.34}
+  distanceMa200:{name:'Kurs mot MA200',min:2.20,max:4.48,leftZero:-8,rightZero:25,maxPoints:25},
+  ma50Spread:{name:'MA50 mot MA200',min:8.40,max:13.20,leftZero:-2,rightZero:30,maxPoints:25},
+  ma200Slope1m:{name:'MA200-trend 1 månad',min:0.69,max:1.23,leftZero:-2.5,rightZero:5.5,maxPoints:25},
+  trendStability5d:{name:'Trendstabilitet 5 dagar',min:-2.0,max:1.0,leftZero:-8,rightZero:8,maxPoints:25}
 };
 function loadWhitePlateaus(){
   try{
     const saved=JSON.parse(localStorage.getItem(WHITE_PLATEAU_KEY)||'null');
-    return saved&&saved.distanceMa200&&saved.ma50Spread&&saved.ma200Slope1m?saved:structuredClone(DEFAULT_WHITE_PLATEAUS)
+    if(saved&&saved.distanceMa200&&saved.ma50Spread&&saved.ma200Slope1m&&saved.trendStability5d)return saved;
+    return structuredClone(DEFAULT_WHITE_PLATEAUS)
   }catch{return structuredClone(DEFAULT_WHITE_PLATEAUS)}
 }
 function saveWhitePlateaus(config){
@@ -1492,7 +1496,21 @@ function currentTechnicalValues(r){
   const ma50=movingAverageAtOffset(closes,50,0);
   const ma200Level=movingAverageAtOffset(closes,200,0);
   const ma50Spread=Number.isFinite(ma50)&&Number.isFinite(ma200Level)&&ma200Level!==0?(ma50/ma200Level-1)*100:NaN;
-  return{distanceMa200:v.ma200,ma50Spread,ma200Slope1m:v.ma1m,ma50,ma200Level}
+  const ma200Past5=movingAverageAtOffset(closes,200,5);
+  const past5=closes.length>=6?closes[closes.length-6]:NaN;
+  const currentDistance=Number.isFinite(ma200Level)&&ma200Level!==0&&closes.length
+    ?(closes[closes.length-1]/ma200Level-1)*100
+    :v.ma200;
+  const pastDistance=Number.isFinite(past5)&&Number.isFinite(ma200Past5)&&ma200Past5!==0
+    ?(past5/ma200Past5-1)*100
+    :NaN;
+  const trendStability5d=Number.isFinite(currentDistance)&&Number.isFinite(pastDistance)
+    ?currentDistance-pastDistance
+    :NaN;
+  return{
+    distanceMa200:Number.isFinite(currentDistance)?currentDistance:v.ma200,
+    ma50Spread,ma200Slope1m:v.ma1m,trendStability5d,ma50,ma200Level
+  }
 }
 function whiteCalc(r){
   const cfg=loadWhitePlateaus();
@@ -1500,21 +1518,25 @@ function whiteCalc(r){
   const parts={
     distanceMa200:plateauPoints(t.distanceMa200,cfg.distanceMa200),
     ma50Spread:plateauPoints(t.ma50Spread,cfg.ma50Spread),
-    ma200Slope1m:plateauPoints(t.ma200Slope1m,cfg.ma200Slope1m)
+    ma200Slope1m:plateauPoints(t.ma200Slope1m,cfg.ma200Slope1m),
+    trendStability5d:plateauPoints(t.trendStability5d,cfg.trendStability5d)
   };
-  const total=Math.max(0,Math.min(100,parts.distanceMa200+parts.ma50Spread+parts.ma200Slope1m));
+  const total=Math.max(0,Math.min(100,
+    parts.distanceMa200+parts.ma50Spread+parts.ma200Slope1m+parts.trendStability5d
+  ));
   const missing=[];
   if(!Number.isFinite(t.distanceMa200))missing.push('kurs mot MA200');
   if(!Number.isFinite(t.ma50Spread))missing.push('MA50 mot MA200');
   if(!Number.isFinite(t.ma200Slope1m))missing.push('MA200-trend 1 månad');
+  if(!Number.isFinite(t.trendStability5d))missing.push('trendstabilitet 5 dagar');
   const dataReady=missing.length===0;
   const qualified=dataReady;
   const rating=!dataReady?'Underlag saknas':total>=90?'Extremt stark':total>=80?'Stark':total>=70?'Intressant':total>=60?'Neutral':'Svag';
   const warning=missing.length?'Saknar '+missing.join(', '):
-    `Kurs/MA200 ${whitePartText(parts.distanceMa200)} p · MA50/MA200 ${whitePartText(parts.ma50Spread)} p · MA200-trend ${whitePartText(parts.ma200Slope1m)} p`;
+    `Kurs/MA200 ${whitePartText(parts.distanceMa200)} p · MA50/MA200 ${whitePartText(parts.ma50Spread)} p · MA200-trend ${whitePartText(parts.ma200Slope1m)} p · Trendstabilitet ${whitePartText(parts.trendStability5d)} p`;
   return{
     trend:total,relative:0,fundamental:0,quality:0,valuation:0,total,qualified,dataReady,rating,
-    warning,failReasons:missing,parts,technicalValues:t,plateaus:cfg,
+    warning,failReasons:missing,parts,technicalValues:t,plateaus:cfg,modelVersion:'white-2.0',
     rs3:NaN,rs6:NaN,rs12:NaN,stock3:NaN,stock6:NaN,stock12:NaN,index3:NaN,index6:NaN,index12:NaN,
     ma50:t.ma50,ma200Level:t.ma200Level,golden:Number.isFinite(t.ma50Spread)&&t.ma50Spread>0?3:0
   }
@@ -2187,9 +2209,10 @@ function selectedScoreHtml(s,model,chip=true){
 }
 function whitePartsHtml(w){
   return [
-    ['Kurs/MA200',w.parts?.distanceMa200,33.33],
-    ['MA50/MA200',w.parts?.ma50Spread,33.33],
-    ['MA200-trend',w.parts?.ma200Slope1m,33.34]
+    ['Kurs/MA200',w.parts?.distanceMa200,25],
+    ['MA50/MA200',w.parts?.ma50Spread,25],
+    ['MA200-trend',w.parts?.ma200Slope1m,25],
+    ['Trendstabilitet 5 d',w.parts?.trendStability5d,25]
   ].map(([name,value,max])=>`<div class="metric"><small>${name}</small><b>${whitePartText(value)} / ${max.toFixed(1).replace('.',',')}</b></div>`).join('')
 }
 
@@ -6455,21 +6478,20 @@ function historicalCandidate(row,cutoffDate){
 
   let blue,white,average,blueQualified,whiteReady;
   const savedBlue=num(marketPoint?.blueScore??marketPoint?.score);
-  const savedWhite=num(marketPoint?.whiteScore);
 
-  if(Number.isFinite(savedBlue)&&Number.isFinite(savedWhite)){
+  if(Number.isFinite(savedBlue)){
     blue={total:savedBlue,qualified:marketPoint?.blueQualified!==false};
-    white={total:savedWhite,dataReady:true,qualified:marketPoint?.whiteQualified!==false};
-    average=(savedBlue+savedWhite)/2;
-    blueQualified=blue.qualified;
-    whiteReady=true
+    blueQualified=blue.qualified
   }else{
     blue=calc(historicalRow);
-    white=whiteCalc(historicalRow);
-    average=averageScoreFromResults(blue,white);
-    blueQualified=blue.qualified;
-    whiteReady=white.dataReady
+    blueQualified=blue.qualified
   }
+
+  // Vit 1.0-värden i marketHistory återanvänds inte. Historisk Vit 2.0
+  // räknas om från den kurshistorik som faktiskt fanns på datumet.
+  white=whiteCalc(historicalRow);
+  whiteReady=white.dataReady;
+  average=Number.isFinite(blue.total)&&whiteReady?(blue.total+white.total)/2:NaN;
 
   return{row:historicalRow,price,blue,white,average,blueQualified,whiteReady}
 }
@@ -6527,13 +6549,13 @@ function topListMembersForSnapshot(model,cutoffDate,previousSnapshot=null){
     averageScore:candidate.average,
     selectionScore:candidate.score,
     selectionModel:model,
-    selectionSource:'toplist-friday-1800-v2'
+    selectionSource:'toplist-friday-1800-white2-v3'
   }))
 }
 function snapshotUsesTopListClose(snapshot){
-  return snapshot?.selectionSource==='toplist-friday-1800-v2'&&
+  return snapshot?.selectionSource==='toplist-friday-1800-white2-v3'&&
     ['blue','white','average'].every(model=>(snapshot?.portfolios?.[model]?.members||[]).length===10&&
-      snapshot.portfolios[model].members.every(member=>member.selectionSource==='toplist-friday-1800-v2'))
+      snapshot.portfolios[model].members.every(member=>member.selectionSource==='toplist-friday-1800-white2-v3'))
 }
 
 function weeklyMemberKey(ref){
@@ -6607,7 +6629,7 @@ function createHistoricalWeeklySnapshot(friday,automatic=true){
     savedDate:cutoffDate,
     lockDate:cutoffDate,
     activationDate:isoDate(followingMonday(friday)),
-    selectionSource:'toplist-friday-1800-v2',
+    selectionSource:'toplist-friday-1800-white2-v3',
     benchmarkMarket,
     benchmarkSymbol:benchmarkSymbol(benchmarkMarket),
     benchmarkStart,
@@ -6679,7 +6701,7 @@ function createCurrentDataWeeklySnapshot(friday,automatic=true,forceRebuild=fals
     weekKey:targetInfo.key,year:targetInfo.year,week:targetInfo.week,
     savedAt:nowISO(),savedDate:cutoffDate,lockDate:cutoffDate,cutoffTime:'18:00',activationDate,
     preparedFrom:'friday-close-toplist',
-    selectionSource:'toplist-friday-1800-v2',
+    selectionSource:'toplist-friday-1800-white2-v3',
     benchmarkMarket,benchmarkSymbol:benchmarkSymbol(benchmarkMarket),benchmarkStart,
     portfolios:{blue:{name:'Blå',members:blue},white:{name:'Vit',members:white},average:{name:'Snitt',members:average}}
   };
@@ -6711,6 +6733,72 @@ function ensureNextWeekPortfolioAfterFriday(){
   }
   if(existing)return false;
   return createCurrentDataWeeklySnapshot(new Date(friday),true,false)
+}
+
+
+const WHITE2_WEEKLY_REBUILD_KEY='momentumscore_white2_weekly_rebuild_v1';
+
+function white2RebuildSnapshot(snapshot,previousSnapshot=null){
+  const friday=snapshotLockFriday(snapshot);
+  if(!friday)return false;
+  const cutoffDate=isoDate(friday);
+
+  const white=historicalWeeklyMembers('white',cutoffDate,previousSnapshot);
+  const average=historicalWeeklyMembers('average',cutoffDate,previousSnapshot);
+  if(white.length<10||average.length<10)return false;
+
+  const blue=(snapshot.portfolios?.blue?.members||[]).map((member,index)=>({
+    ...member,
+    rank:index+1,
+    selectionModel:'blue',
+    selectionSource:'toplist-friday-1800-white2-v3'
+  }));
+  const decorate=(members,model)=>members.map((member,index)=>({
+    ...member,
+    rank:index+1,
+    closeDate:cutoffDate,
+    selectionModel:model,
+    selectionSource:'toplist-friday-1800-white2-v3'
+  }));
+
+  snapshot.lockDate=cutoffDate;
+  snapshot.activationDate=isoDate(followingMonday(friday));
+  snapshot.cutoffTime=snapshot.cutoffTime||'18:00';
+  snapshot.selectionSource='toplist-friday-1800-white2-v3';
+  snapshot.whiteModelVersion='2.0';
+  snapshot.whiteRebuiltAt=nowISO();
+  snapshot.portfolios={
+    ...snapshot.portfolios,
+    blue:{name:'Blå',members:blue},
+    white:{name:'Vit',members:decorate(white,'white')},
+    average:{name:'Snitt',members:decorate(average,'average')}
+  };
+  return true
+}
+
+function rebuildWhite2WeeklyPortfolios(force=false){
+  if(!weeklyPortfolios.length)return 0;
+  if(!force&&localStorage.getItem(WHITE2_WEEKLY_REBUILD_KEY)==='done')return 0;
+
+  const ordered=weeklyPortfolios.slice().sort((a,b)=>{
+    const af=snapshotLockFriday(a),bf=snapshotLockFriday(b);
+    return (af?.getTime()||0)-(bf?.getTime()||0)
+  });
+
+  let previous=null,rebuilt=0;
+  for(const snapshot of ordered){
+    const hasWhite=(snapshot.portfolios?.white?.members||[]).length>0;
+    const hasAverage=(snapshot.portfolios?.average?.members||[]).length>0;
+    if(hasWhite&&hasAverage&&white2RebuildSnapshot(snapshot,previous))rebuilt++;
+    previous=snapshot
+  }
+
+  if(rebuilt){
+    weeklyPortfolios.sort((a,b)=>String(b.lockDate||b.savedDate||b.savedAt||'').localeCompare(String(a.lockDate||a.savedDate||a.savedAt||'')));
+    weeklyPersist()
+  }
+  localStorage.setItem(WHITE2_WEEKLY_REBUILD_KEY,'done');
+  return rebuilt
 }
 
 function backfillMissingWeeklyPortfolios(){
@@ -7320,6 +7408,8 @@ async function importSelectedFile(file){
   rows=result.clean;
   benchmarkHistories=importedBenchmarks;
   weeklyPortfolios=importedWeekly;
+  localStorage.removeItem(WHITE2_WEEKLY_REBUILD_KEY);
+  const rebuiltWhiteWeeks=rebuildWhite2WeeklyPortfolios(true);
   const uiErrors=[];
   for(const [name,fn] of [
     ['Poäng/översikt',()=>render()],
@@ -7330,7 +7420,7 @@ async function importSelectedFile(file){
   ]){
     try{fn()}catch(e){uiErrors.push(name+': '+e.message);console.error(name,e)}
   }
-  setImportStatus(`Import klar: ${rows.length} bolag. ${Object.keys(benchmarkHistories).length?'Jämförelseindex följde med.':'Jämförelseindex saknas – kör kursuppdatering för full uppföljning.'} ${weeklyPortfolios.length?weeklyPortfolios.length+' veckoportföljer återställdes. ':''}${result.skipped.length?result.skipped.length+' dubbletter hoppades över. ':''}${uiErrors.length?'Visningsvarning: '+uiErrors.join(' · '):''}`,uiErrors.length>0);
+  setImportStatus(`Import klar: ${rows.length} bolag. ${Object.keys(benchmarkHistories).length?'Jämförelseindex följde med.':'Jämförelseindex saknas – kör kursuppdatering för full uppföljning.'} ${weeklyPortfolios.length?weeklyPortfolios.length+' veckoportföljer återställdes. ':''}${rebuiltWhiteWeeks?rebuiltWhiteWeeks+' veckor räknades om med Vit 2.0. ':''}${result.skipped.length?result.skipped.length+' dubbletter hoppades över. ':''}${uiErrors.length?'Visningsvarning: '+uiErrors.join(' · '):''}`,uiErrors.length>0);
   toast(`Import klar: ${rows.length} bolag`);
 }
 document.getElementById('saveWeeklyNow').onclick=()=>createWeeklySnapshot(false,false);
@@ -7383,7 +7473,12 @@ document.getElementById('exportAutoLabCsv').onclick=exportAutoLabCsv;
 document.getElementById('labMode').onchange=toggleLaboratoryMode;
 document.getElementById('runLaboratory').onclick=runLaboratory;
 document.getElementById('exportLaboratoryCsv').onclick=exportLaboratoryCsv;
-document.getElementById('saveSettings').onclick=saveMarketSettings;document.getElementById('checkDatabase').onclick=renderDatabaseHealth;document.getElementById('restoreLocalBackup').onclick=restoreLocalBackup;document.getElementById('updatePrices').onclick=()=>updateAllPrices(false);for(const [name,fn] of [
+document.getElementById('saveSettings').onclick=saveMarketSettings;document.getElementById('checkDatabase').onclick=renderDatabaseHealth;document.getElementById('restoreLocalBackup').onclick=restoreLocalBackup;document.getElementById('updatePrices').onclick=()=>updateAllPrices(false);
+try{
+  const rebuiltWhiteWeeks=rebuildWhite2WeeklyPortfolios(false);
+  if(rebuiltWhiteWeeks)console.info(`${rebuiltWhiteWeeks} historiska veckor räknades om med Vit 2.0.`);
+}catch(error){console.error('Vit 2.0-veckoåterbyggnad misslyckades',error)}
+for(const [name,fn] of [
   ['Poäng/översikt',()=>render()],
   ['Förhandsvisning',()=>renderPreview()],
   ['Inställningar',()=>renderMarketSettings()],
