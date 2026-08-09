@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.5.9</title>
+<title>MomentumScore v20.6.0</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.5.9 – Finviktning + årstest</h1>
+<h1>MomentumScore v20.6.0 – Koncentrations- och vinnartest</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -664,6 +664,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
   <div class="card" style="margin-top:12px">
     <h3>Diagnostik – stresstester + tröghet + årstest + viktfördelning</h3>
     <p class="note"><b>Vikttest:</b> 21 tydligt skilda fördelningar av de fyra Vit-delarna testas med Top10-in/Top20-ut fryst. 25/25/25/25 är referens. Rankningen görs på robusthet mellan utvecklingsperioden 2022–2024 och OOS 2025–2026, inte bara på högsta femårsavkastning.</p>
+    <p class="note"><b>Koncentrationstest v20.6.0:</b> Den frysta huvudkandidaten 10/30/30/30 + Top10-in/Top20-ut körs först med bidrag per aktie. Därefter körs hela femårsperioden om efter att den största bidragsgivaren, Top 3 respektive Top 5 bidragsgivare tagits bort ur universum. Det visar om överavkastningen är bred eller beroende av några få jackpot-aktier.</p>
     <p class="note">Körs automatiskt på samma femårsdata efter huvudtestet. Syftet är att avslöja tidsläckage och resultat som är alltför känsliga för exekvering, kostnader, portföljbredd eller ombalanseringsfrekvens. Dessutom testas hur långt ett befintligt Top 10-innehav får falla i rankingen innan det säljs, samt minsta innehavstid på 2 och 4 veckor.</p>
     <div id="fiveYearDiagnosticSummary" class="summary"></div>
     <div class="tablewrap"><table id="fiveYearDiagnosticTable"></table></div>
@@ -6602,6 +6603,14 @@ function fiveYearRunVariant(options={}){
   const exitRank=Math.max(topN,Math.floor(Number(options.exitRank)||topN));
   const minHoldWeeks=Math.max(0,Math.floor(Number(options.minHoldWeeks)||0));
   const whiteWeights=options.whiteWeights?normalizedWhiteWeights(options.whiteWeights):null;
+  const excludeTickers=new Set((options.excludeTickers||[]).map(String));
+  const contributions={};
+  const addContribution=(ticker,pnl)=>{if(Number.isFinite(pnl))contributions[ticker]=(contributions[ticker]||0)+pnl};
+  const variantTopN=(date,previous,depth)=>{
+    const want=Math.max(1,depth);
+    const fetchDepth=Math.min(fiveYearBacktestData.stocks.length,want+excludeTickers.size+15);
+    return fiveYearTopN(date,previous,fetchDepth,whiteWeights).filter(x=>!excludeTickers.has(String(x.ticker))).slice(0,want);
+  };
   let signals=fiveYearWeeklySignals(fiveYearBacktestData.index);
   const startSignalDate=options.startSignalDate?String(options.startSignalDate):null;
   const endSignalDate=options.endSignalDate?String(options.endSignalDate):null;
@@ -6625,7 +6634,7 @@ function fiveYearRunVariant(options={}){
         :[];
       if((exitRank>topN || protectedTickers.length) && started){
         const rankingDepth=Math.max(exitRank,topN,protectedTickers.length+topN);
-        const ranked=fiveYearTopN(signal.date,Object.keys(state.positions),rankingDepth,whiteWeights);
+        const ranked=variantTopN(signal.date,Object.keys(state.positions),rankingDepth);
         if(ranked.length<Math.min(5,topN))continue;
         const rankMap=new Map(ranked.map((x,i)=>[x.ticker,i+1]));
         const selected=[];
@@ -6646,14 +6655,14 @@ function fiveYearRunVariant(options={}){
           }
         }
         // Fyll eventuella lediga platser med högst rankade aktier.
-        const fillRanked=fiveYearTopN(signal.date,Object.keys(state.positions),Math.max(topN,exitRank),whiteWeights);
+        const fillRanked=variantTopN(signal.date,Object.keys(state.positions),Math.max(topN,exitRank));
         for(const item of fillRanked){
           if(selected.length>=topN)break;
           if(!selected.some(x=>x.ticker===item.ticker))selected.push(item);
         }
         target=selected;
       }else{
-        target=fiveYearTopN(signal.date,previousTarget,topN,whiteWeights);
+        target=variantTopN(signal.date,previousTarget,topN);
       }
       if(target.length<Math.min(5,topN))continue;
     }
@@ -6665,7 +6674,7 @@ function fiveYearRunVariant(options={}){
       for(const item of usable){
         const price=fiveYearPriceOnOrAfter(item.series,executionDate);
         const gross=per/(1+feeRate),fee=gross*feeRate;
-        state.positions[item.ticker]={shares:gross/price,buySignalIndex:s};
+        state.positions[item.ticker]={shares:gross/price,buySignalIndex:s,costBasis:gross+fee};
         state.cash-=gross+fee;state.fees+=fee;state.turnover+=gross;state.trades++
       }
       benchmarkStart=fiveYearPriceOnOrAfter(fiveYearBacktestData.index,executionDate);
@@ -6677,8 +6686,9 @@ function fiveYearRunVariant(options={}){
         const item=fiveYearBacktestData.stockMap[ticker],pos=state.positions[ticker];
         const price=item?fiveYearPriceOnOrAfter(item.series,executionDate):NaN;
         if(!Number.isFinite(price))continue;
-        const gross=pos.shares*price,fee=gross*feeRate;
-        proceeds+=gross-fee;state.fees+=fee;state.turnover+=gross;state.trades++;delete state.positions[ticker]
+        const gross=pos.shares*price,fee=gross*feeRate,net=gross-fee;
+        addContribution(ticker,net-(Number(pos.costBasis)||0));
+        proceeds+=net;state.fees+=fee;state.turnover+=gross;state.trades++;delete state.positions[ticker]
       }
       state.cash+=proceeds;
       const incoming=target.filter(x=>!state.positions[x.ticker]&&Number.isFinite(fiveYearPriceOnOrAfter(x.series,executionDate)));
@@ -6701,9 +6711,17 @@ function fiveYearRunVariant(options={}){
   const years=Math.max((new Date(last.date)-new Date(first.date))/86400000/365.25,0.01);
   const totalReturn=(last.value/100000-1)*100;
   const benchmarkReturn=Number.isFinite(benchmarkStart)&&benchmarkStart>0?(last.indexValue/benchmarkStart-1)*100:NaN;
+  const contributionMap={...contributions};
+  for(const [ticker,pos] of Object.entries(state.positions)){
+    const item=fiveYearBacktestData.stockMap[ticker];
+    const price=item?fiveYearPriceOnOrBefore(item.series,last.date):NaN;
+    if(Number.isFinite(price))contributionMap[ticker]=(contributionMap[ticker]||0)+(pos.shares*price-(Number(pos.costBasis)||0));
+  }
+  const contributionRows=Object.entries(contributionMap).map(([ticker,pnl])=>({ticker,company:fiveYearBacktestData.stockMap[ticker]?.company||'',pnl})).sort((a,b)=>b.pnl-a.pnl);
   return{totalReturn,benchmarkReturn,excess:Number.isFinite(benchmarkReturn)?totalReturn-benchmarkReturn:NaN,
     cagr:(Math.pow(last.value/100000,1/years)-1)*100,maxDrawdown:fiveYearMaxDrawdown(points),volatility:fiveYearVolatility(points),
-    trades:state.trades,fees:state.fees,turnover:state.turnover/100000*100,finalValue:last.value,startDate:first.date,endDate:last.date}
+    trades:state.trades,fees:state.fees,turnover:state.turnover/100000*100,finalValue:last.value,startDate:first.date,endDate:last.date,
+    contributions:contributionRows,excludedTickers:[...excludeTickers]}
 }
 function fiveYearTimeLeakAudit(){
   const signals=fiveYearWeeklySignals(fiveYearBacktestData.index);
@@ -6794,6 +6812,24 @@ function runFiveYearRollingWeights(){
   });
   return{candidates,windows,summary};
 }
+function runFiveYearConcentrationTest(){
+  const keys=['distanceMa200','ma50Spread','ma200Slope1m','trendStability5d'];
+  const weights=Object.fromEntries(keys.map((k,i)=>[k,[10,30,30,30][i]]));
+  const opts={topN:10,exitRank:20,whiteWeights:weights};
+  const fixedBase=fiveYearRunVariant(opts);
+  if(!fixedBase)return{fixedBase:null,contributors:[],reruns:[],top1Share:NaN,top3Share:NaN,top5Share:NaN};
+  const contributors=(fixedBase.contributions||[]).filter(x=>Number.isFinite(x.pnl)).sort((a,b)=>b.pnl-a.pnl);
+  const positives=contributors.filter(x=>x.pnl>0);
+  const positiveTotal=positives.reduce((a,b)=>a+b.pnl,0);
+  const share=n=>positiveTotal>0?positives.slice(0,n).reduce((a,b)=>a+b.pnl,0)/positiveTotal*100:NaN;
+  const reruns=[1,3,5].map(n=>{
+    const excluded=positives.slice(0,n).map(x=>x.ticker);
+    const result=fiveYearRunVariant({...opts,excludeTickers:excluded});
+    return{n,excluded,result};
+  });
+  return{fixedBase,contributors,reruns,top1Share:share(1),top3Share:share(3),top5Share:share(5),positiveTotal};
+}
+
 function runFiveYearDiagnostics(base){
   const audit=fiveYearTimeLeakAudit();
   const delayed=fiveYearRunVariant({extraDelay:1});
@@ -6823,6 +6859,7 @@ function runFiveYearDiagnostics(base){
   const weightSensitivity=runFiveYearWeightSensitivity();
   const weightTop=weightSensitivity.slice(0,8);
   const rollingWeights=runFiveYearRollingWeights();
+  const concentration=runFiveYearConcentrationTest();
   const rows=[
     {name:'1. Tids-/look-ahead-audit',detail:`${audit.checks.toLocaleString('sv-SE')} tidskontroller`,status:audit.pass?'PASS':'FAIL',result:audit.pass?'Inga framtida datapunkter hittades':audit.violations[0]},
     {name:'2. Exekvering +1 handelsdag',detail:'Alla köp/sälj skjuts en extra handelsdag',status:delayed?'KÖRD':'FEL',result:delayed?`Vit ${signed(delayed.totalReturn,' %')} · över OMX ${signed(delayed.excess,' p.e.')} · Δ bas ${signed(delayed.totalReturn-base.totalReturn,' p.e.')}`:'Kunde inte köras'},
@@ -6844,7 +6881,9 @@ function runFiveYearDiagnostics(base){
       {name:`9B. Årstest ${y} · Top10/20`,detail:'Top20-tröghet med separat startkapital för kalenderåret',status:yearly[y].top20?'KÖRD':'FEL',result:yearly[y].top20?`Vit ${signed(yearly[y].top20.totalReturn,' %')} · OMX ${signed(yearly[y].top20.benchmarkReturn,' %')} · över OMX ${signed(yearly[y].top20.excess,' p.e.')}`:'Kunde inte köras'}
     ]),
     ...weightTop.map((x,i)=>({name:`10. Viktkänslighet #${i+1} · ${x.weightLabel}`,detail:'Kurs/MA200 · MA50/MA200 · MA200-trend · Trendstabilitet. Top10 in/Top20 ut är fryst.',status:x.full&&x.development&&x.oos?'KÖRD':'FEL',result:x.full&&x.development&&x.oos?`5 år ${signed(x.full.totalReturn,' %')} · utveckling över OMX ${signed(x.development.excess,' p.e.')} · OOS över OMX ${signed(x.oos.excess,' p.e.')} · robusthetsgolv ${signed(x.robustFloor,' p.e.')}`:'Kunde inte köras'})),
-    ...rollingWeights.summary.map(x=>({name:`11. Rullande 12 mån · ${x.label}`,detail:'12-månadersfönster med start förskjuten kvartalsvis; Top10/20 fryst.',status:x.total?'KÖRD':'FEL',result:x.total?`${x.wins}/${x.total} fönstervinster · över OMX i ${x.positive}/${x.total} · snitt över OMX ${signed(x.avgExcess,' p.e.')} · sämsta ${signed(x.minExcess,' p.e.')}`:'Kunde inte köras'}))
+    ...rollingWeights.summary.map(x=>({name:`11. Rullande 12 mån · ${x.label}`,detail:'12-månadersfönster med start förskjuten kvartalsvis; Top10/20 fryst.',status:x.total?'KÖRD':'FEL',result:x.total?`${x.wins}/${x.total} fönstervinster · över OMX i ${x.positive}/${x.total} · snitt över OMX ${signed(x.avgExcess,' p.e.')} · sämsta ${signed(x.minExcess,' p.e.')}`:'Kunde inte köras'})),
+    {name:'12A. Koncentration · bidragsandel',detail:'Fryst 10/30/30/30 + Top10/20. Andel av alla positiva aktiebidrag som kommer från de största vinnarna.',status:concentration.fixedBase?'KÖRD':'FEL',result:concentration.fixedBase?`Top 1 ${concentration.top1Share.toFixed(1)} % · Top 3 ${concentration.top3Share.toFixed(1)} % · Top 5 ${concentration.top5Share.toFixed(1)} %`:'Kunde inte köras'},
+    ...concentration.reruns.map(x=>({name:`12B. Utan Top ${x.n} bidragsgivare`,detail:`Hela testet körs om från början efter att ${x.excluded.join(', ')} tagits bort ur universum.`,status:x.result?'KÖRD':'FEL',result:x.result?`Vit ${signed(x.result.totalReturn,' %')} · över OMX ${signed(x.result.excess,' p.e.')} · Δ mot fryst bas ${signed(x.result.totalReturn-concentration.fixedBase.totalReturn,' p.e.')}`:'Kunde inte köras'}))
   ];
   const table=document.getElementById('fiveYearDiagnosticTable'),summary=document.getElementById('fiveYearDiagnosticSummary');
   if(table)table.innerHTML='<tr><th>Test</th><th>Vad ändras</th><th>Status</th><th>Resultat</th></tr>'+rows.map(x=>`<tr><td style="text-align:left"><b>${x.name}</b></td><td style="text-align:left">${x.detail}</td><td><b>${x.status}</b></td><td style="text-align:left">${x.result}</td></tr>`).join('');
@@ -6856,7 +6895,7 @@ function runFiveYearDiagnostics(base){
     ['Stressvarianter över OMX',`${stillBeat}/${variants.length}`],
     ['Diagnostisk bedömning',robust?'Robust i dessa tester':'Känslighet finns']
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
-  return{audit,delayed,highFee,top5,top15,biweekly,hold15,hold20,hold25,hold30,hold40,hold50,minHold2,minHold4,development,outOfSample,yearly,weightSensitivity,rollingWeights,rows}
+  return{audit,delayed,highFee,top5,top15,biweekly,hold15,hold20,hold25,hold30,hold40,hold50,minHold2,minHold4,development,outOfSample,yearly,weightSensitivity,rollingWeights,concentration,rows}
 }
 
 function fiveYearChart(result){
@@ -7008,9 +7047,23 @@ function exportFiveYearBacktestCsv(){
     lines.push([]);
     lines.push(['RULLANDE SAMMANFATTNING','Fönstervinster','Över OMX antal','Antal fönster','Snitt över OMX p.e.','Sämsta över OMX p.e.','Snittavkastning %']);
     for(const x of (d.rollingWeights?.summary||[]))lines.push([x.label,x.wins,x.positive,x.total,x.avgExcess,x.minExcess,x.avgReturn]);
+    lines.push([]);
+    lines.push(['KONCENTRATIONSTEST – fryst 10/30/30/30 + Top10 in / Top20 ut']);
+    lines.push(['Mått','Värde']);
+    lines.push(['Fryst bas avkastning %',d.concentration?.fixedBase?.totalReturn??'']);
+    lines.push(['Fryst bas över OMX p.e.',d.concentration?.fixedBase?.excess??'']);
+    lines.push(['Top 1 andel av positiva bidrag %',d.concentration?.top1Share??'']);
+    lines.push(['Top 3 andel av positiva bidrag %',d.concentration?.top3Share??'']);
+    lines.push(['Top 5 andel av positiva bidrag %',d.concentration?.top5Share??'']);
+    lines.push([]);
+    lines.push(['Bidragsranking','Ticker','Bolag','Bidrag kr']);
+    (d.concentration?.contributors||[]).forEach((x,i)=>lines.push([i+1,x.ticker,x.company,x.pnl]));
+    lines.push([]);
+    lines.push(['Borttagningstest','Borttagna aktier','Avkastning %','OMXSPI %','Över OMX p.e.','Skillnad mot fryst bas p.e.','CAGR %','Max DD %','Volatilitet %','Affärer']);
+    for(const x of (d.concentration?.reruns||[]))lines.push([`Utan Top ${x.n}`,x.excluded.join('|'),x.result?.totalReturn??'',x.result?.benchmarkReturn??'',x.result?.excess??'',x.result&&d.concentration?.fixedBase?x.result.totalReturn-d.concentration.fixedBase.totalReturn:'',x.result?.cagr??'',x.result?.maxDrawdown??'',x.result?.volatility??'',x.result?.trades??'']);
   }
   const csv='\ufeff'+lines.map(row=>row.map(csvEscape).join(';')).join('\n');
-  downloadTextFile(csv,`MomentumScore_v20_5_9_Vit_5ar_${todayISO()}.csv`,'text/csv;charset=utf-8')
+  downloadTextFile(csv,`MomentumScore_v20_6_0_Vit_5ar_${todayISO()}.csv`,'text/csv;charset=utf-8')
 }
 
 function movingAverageAtOffset(closes,period=200,offset=0){
