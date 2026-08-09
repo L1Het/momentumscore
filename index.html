@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.6.5</title>
+<title>MomentumScore v20.6.6</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.6.5 – Blockhämtad 10-årshistorik · fryst modell</h1>
+<h1>MomentumScore v20.6.6 – Historikdiagnostik · fryst modell</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -648,6 +648,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
 </div>
 
 <div class="card" id="whiteFiveYearBacktestCard">
+  <div class="card" style="margin-bottom:16px"><h2>🔎 Historikdiagnostik</h2><p class="note">Inventerar den historik som redan finns i appens lokala databas och jämförelseindex. Ingen data ändras.</p><button id="runHistoryDiagnostic" class="secondary">Analysera befintlig historik</button><div id="historyDiagnosticResult" class="status" style="margin-top:12px">Inte körd ännu.</div></div>
   <h2>⚪ Vit – 10-årstest mot OMXSPI</h2>
   <p class="note">Hämtar Yahoo-historik i flera separata datumblock och slår ihop dem till en lång serie. Det kringgår gränsen på cirka 500 punkter per svar. De första cirka 200 handelsdagarna används som uppvärmning för MA200; därefter körs den frysta modellen historiskt utan framtidsdata. Den frysta huvudmodellen är 10/30/30/30 i faktorvikter samt Top10 in / Top20 ut. Varje fredags stängning används som signal, affärer genomförs på nästa tillgängliga handelsdag och courtage är 0,069 % vid köp och försäljning. Referenslogik och årsdeltester exporteras också.</p>
   <div class="actions">
@@ -8058,6 +8059,21 @@ function exportWeeklyPortfoliosCsv(){
   downloadTextFile(csv,`MomentumScore_Veckoportfoljer_${todayISO()}.csv`,'text/csv;charset=utf-8')
 }
 
+
+function historyDateOf(x){return String(x?.date||x?.savedDate||x?.savedAt||'').slice(0,10)}
+function validDates(arr){return (Array.isArray(arr)?arr:[]).map(historyDateOf).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)).sort()}
+function runHistoryDiagnostic(){
+  const out=document.getElementById('historyDiagnosticResult');
+  const cutoffs=['2016-08-01','2017-01-01','2018-01-01','2019-01-01','2020-01-01','2021-01-01','2022-01-01','2023-01-01','2024-01-01'];
+  const stockStats=rows.map(r=>{const p=validDates(r.priceHistory),m=validDates(r.marketHistory),h=validDates(r.history);return{ticker:r.ticker||r.company||'?',p,m,h,oldestP:p[0]||'',oldestM:m[0]||'',oldestH:h[0]||''}});
+  const oldest=(key)=>stockStats.map(x=>x[key]).filter(Boolean).sort()[0]||'–';
+  const counts=cutoffs.map(c=>({c,n:stockStats.filter(x=>x.oldestP&&x.oldestP<=c).length}));
+  const bh=loadBenchmarkHistories(); const se=validDates(bh.SE||[]);
+  const histCounts=cutoffs.map(c=>({c,n:stockStats.filter(x=>x.oldestH&&x.oldestH<=c).length}));
+  const marketCounts=cutoffs.map(c=>({c,n:stockStats.filter(x=>x.oldestM&&x.oldestM<=c).length}));
+  const examples=stockStats.slice().sort((a,b)=>(a.oldestP||'9999').localeCompare(b.oldestP||'9999')).slice(0,10);
+  out.innerHTML=`<b>Lokalt sparad rå kurshistorik (priceHistory)</b><br>Äldsta aktiepunkt: ${oldest('oldestP')} · totalt ${stockStats.reduce((a,x)=>a+x.p.length,0)} handelsdagsposter.<br>${counts.map(x=>`${x.c.slice(0,4)}: ${x.n}/${rows.length} bolag`).join(' · ')}<br><br><b>marketHistory (sparade uppdateringsögonblick)</b><br>Äldsta: ${oldest('oldestM')} · ${marketCounts.map(x=>`${x.c.slice(0,4)}: ${x.n}/${rows.length}`).join(' · ')}<br><br><b>Fundamental/poäng-history</b><br>Äldsta: ${oldest('oldestH')} · ${histCounts.map(x=>`${x.c.slice(0,4)}: ${x.n}/${rows.length}`).join(' · ')}<br><br><b>Lokalt OMXSPI/jämförelseindex (benchmarkHistory SE)</b><br>${se.length?`${se.length} punkter, ${se[0]}–${se[se.length-1]}`:'Ingen lokal SE-indexhistorik hittades.'}<br><br><b>10 aktier med äldst priceHistory</b><br>${examples.map(x=>`${x.ticker}: ${x.oldestP||'–'} (${x.p.length} dagar)`).join(' · ')}<br><br><b>Slutsats för tidigare femårstest</b><br>Om priceHistory inte går tillbaka till femårsperioden men history/marketHistory gör det, byggdes det tidigare testet från sparade snapshots snarare än dagliga Yahoo-kurser. Om priceHistory faktiskt går tillbaka dit finns råkurserna lokalt och kan återanvändas.`;
+}
 async function updateBenchmarksForMarkets(markets,status){
   const failed=[];
   for(const market of markets){
@@ -8433,5 +8449,7 @@ setTimeout(()=>{
   try{backfillMissingWeeklyPortfolios()}catch(error){console.error('Veckoportföljernas återställning misslyckades',error)}
   maybeAutoUpdate()
 },600);
+
+const _histDiagBtn=document.getElementById('runHistoryDiagnostic'); if(_histDiagBtn)_histDiagBtn.addEventListener('click',runHistoryDiagnostic);
 </script>
 </body></html>
