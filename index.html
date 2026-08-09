@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.6.4</title>
+<title>MomentumScore v20.6.5</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.6.4 – 10-årsdata via fungerande Yahoo-metod · fryst modell</h1>
+<h1>MomentumScore v20.6.5 – Blockhämtad 10-årshistorik · fryst modell</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -649,7 +649,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
 
 <div class="card" id="whiteFiveYearBacktestCard">
   <h2>⚪ Vit – 10-årstest mot OMXSPI</h2>
-  <p class="note">Hämtar exakt Yahoo range=10y med samma metod som det fungerande femårstestet (range=5y). De första cirka 200 handelsdagarna används som uppvärmning för MA200, så den investerbara testperioden börjar först när signalerna faktiskt kan beräknas utan framtidsdata. Den frysta huvudmodellen är 10/30/30/30 i faktorvikter samt Top10 in / Top20 ut. Varje fredags stängning används som signal, affärer genomförs på nästa tillgängliga handelsdag och courtage är 0,069 % vid köp och försäljning. Referenslogik och årsdeltester exporteras också.</p>
+  <p class="note">Hämtar Yahoo-historik i flera separata datumblock och slår ihop dem till en lång serie. Det kringgår gränsen på cirka 500 punkter per svar. De första cirka 200 handelsdagarna används som uppvärmning för MA200; därefter körs den frysta modellen historiskt utan framtidsdata. Den frysta huvudmodellen är 10/30/30/30 i faktorvikter samt Top10 in / Top20 ut. Varje fredags stängning används som signal, affärer genomförs på nästa tillgängliga handelsdag och courtage är 0,069 % vid köp och försäljning. Referenslogik och årsdeltester exporteras också.</p>
   <div class="actions">
     <button id="fetchFiveYearBacktest">Hämta 10 år och kör test</button>
     <button id="rerunFiveYearBacktest" class="secondary" disabled>Kör om med nuvarande Vit-platåer</button>
@@ -664,7 +664,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
   <div class="card" style="margin-top:12px">
     <h3>Diagnostik – stresstester + tröghet + årstest + viktfördelning</h3>
     <p class="note"><b>Vikttest:</b> 21 tydligt skilda fördelningar av de fyra Vit-delarna testas med Top10-in/Top20-ut fryst. 25/25/25/25 är referens. Rankningen görs på robusthet mellan utvecklingsperioden 2022–2024 och OOS 2025–2026, inte bara på högsta femårsavkastning.</p>
-    <p class="note"><b>10-årstest v20.6.4:</b> Den frysta huvudkandidaten 10/30/30/30 + Top10-in/Top20-ut körs först med bidrag per aktie. Därefter körs hela 10-årsperioden om efter att den största bidragsgivaren, Top 3 respektive Top 5 bidragsgivare tagits bort ur universum. Det visar om överavkastningen är bred eller beroende av några få jackpot-aktier.</p>
+    <p class="note"><b>10-årstest v20.6.5:</b> Den frysta huvudkandidaten 10/30/30/30 + Top10-in/Top20-ut körs först med bidrag per aktie. Därefter körs hela 10-årsperioden om efter att den största bidragsgivaren, Top 3 respektive Top 5 bidragsgivare tagits bort ur universum. Det visar om överavkastningen är bred eller beroende av några få jackpot-aktier.</p>
     <p class="note">Körs automatiskt på samma 10-årsdata efter huvudtestet. Syftet är att avslöja tidsläckage och resultat som är alltför känsliga för exekvering, kostnader, portföljbredd eller ombalanseringsfrekvens. Dessutom testas hur långt ett befintligt Top 10-innehav får falla i rankingen innan det säljs, samt minsta innehavstid på 2 och 4 veckor.</p>
     <div id="fiveYearDiagnosticSummary" class="summary"></div>
     <div class="tablewrap"><table id="fiveYearDiagnosticTable"></table></div>
@@ -6304,10 +6304,12 @@ const FIVE_YEAR_FEE_RATE=0.00069;
 const HISTORICAL_BACKTEST_YEARS=10;
 const FROZEN_WHITE_WEIGHTS={distanceMa200:10,ma50Spread:30,ma200Slope1m:30,trendStability5d:30};
 function historicalBacktestStartDate(indexSeries){
-  if(!Array.isArray(indexSeries)||!indexSeries.length)return null;
-  const latest=new Date(indexSeries[indexSeries.length-1].date+'T12:00:00Z');
-  latest.setUTCFullYear(latest.getUTCFullYear()-HISTORICAL_BACKTEST_YEARS);
-  return latest.toISOString().slice(0,10);
+  // För ett rent point-in-time-test krävs MA200 innan första signalen.
+  // Vi använder därför de första 200 handelsdagarna som uppvärmning och
+  // startar handeln först därefter, precis som femårstestet i praktiken gjorde.
+  if(!Array.isArray(indexSeries)||indexSeries.length<220)return null;
+  const warmupIndex=Math.min(199,indexSeries.length-1);
+  return indexSeries[warmupIndex].date;
 }
 
 function fiveYearSetProgress(done,total,text=''){
@@ -6334,25 +6336,96 @@ function normalizeYahooSeries(result){
   }
   return [...map.values()].sort((a,b)=>a.date.localeCompare(b.date))
 }
-async function fetchYahooFiveYears(symbol){
-  // Samma anropsmetod som bevisligen fungerar för 5 år, endast range ändras från 5y till 10y.
-  const url='https://momentumscore-yahoo.e-latth.workers.dev/?symbol='+encodeURIComponent(symbol)+'&range=10y';
+const LONG_HISTORY_CACHE_DB='MomentumScoreLongHistory_v1';
+const LONG_HISTORY_CACHE_STORE='series';
+function longHistoryDb(){
+  return new Promise((resolve,reject)=>{
+    if(!('indexedDB' in window))return resolve(null);
+    const req=indexedDB.open(LONG_HISTORY_CACHE_DB,1);
+    req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains(LONG_HISTORY_CACHE_STORE))db.createObjectStore(LONG_HISTORY_CACHE_STORE,{keyPath:'symbol'})};
+    req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)
+  })
+}
+async function longHistoryCacheGet(symbol){
+  try{const db=await longHistoryDb();if(!db)return null;return await new Promise((resolve,reject)=>{const tx=db.transaction(LONG_HISTORY_CACHE_STORE,'readonly');const req=tx.objectStore(LONG_HISTORY_CACHE_STORE).get(symbol);req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error)})}catch(e){return null}
+}
+async function longHistoryCachePut(symbol,series,method){
+  if(!Array.isArray(series)||series.length<1000)return;
+  try{const db=await longHistoryDb();if(!db)return;await new Promise((resolve,reject)=>{const tx=db.transaction(LONG_HISTORY_CACHE_STORE,'readwrite');tx.objectStore(LONG_HISTORY_CACHE_STORE).put({symbol,series,method,savedAt:Date.now()});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}catch(e){}
+}
+async function fetchYahooLongAttempt(symbol,params,label){
+  const base='https://momentumscore-yahoo.e-latth.workers.dev/';
+  const qs=new URLSearchParams({symbol,...params});
   const controller=new AbortController();
-  const timeout=setTimeout(()=>controller.abort(),30000);
+  const timeout=setTimeout(()=>controller.abort(),35000);
   let response;
-  try{
-    response=await fetch(url,{cache:'no-store',signal:controller.signal})
-  }catch(e){
-    if(e?.name==='AbortError')throw new Error('Tidsgränsen 30 sekunder överskreds');
-    throw e
-  }finally{clearTimeout(timeout)}
-  if(!response.ok)throw new Error('HTTP '+response.status);
+  try{response=await fetch(base+'?'+qs.toString(),{cache:'no-store',signal:controller.signal})}
+  catch(e){if(e?.name==='AbortError')throw new Error(label+': tidsgräns');throw e}
+  finally{clearTimeout(timeout)}
+  if(!response.ok)throw new Error(label+': HTTP '+response.status);
   const data=await response.json();
   const result=data?.chart?.result?.[0];
-  if(!result)throw new Error(data?.chart?.error?.description||'Ingen kursdata');
+  if(!result)throw new Error(label+': '+(data?.chart?.error?.description||'ingen kursdata'));
   const series=normalizeYahooSeries(result);
-  if(series.length<230)throw new Error('För få historiska kurspunkter');
-  return series
+  return {series,label}
+}
+async function fetchYahooFiveYears(symbol){
+  // v20.6.5: workern verkar returnera högst cirka 500 dagspunkter per svar.
+  // Begär därför historiken i separata ~20-månadersblock och slå ihop på datum.
+  // Vi försöker cirka 10 år + liten marginal. Om Yahoo bara har 10 år blir
+  // första ~200 handelsdagarna uppvärmning och den investerbara perioden något kortare.
+  const latest=new Date();
+  latest.setUTCDate(latest.getUTCDate()+1);
+  const rawStart=new Date(latest);
+  rawStart.setUTCFullYear(rawStart.getUTCFullYear()-10);
+  rawStart.setUTCMonth(rawStart.getUTCMonth()-2); // liten marginal om datakällan tillåter
+
+  const blockMonths=20;
+  const blocks=[];
+  let cursor=new Date(rawStart);
+  let blockNo=1;
+  while(cursor<latest){
+    const blockStart=new Date(cursor);
+    const blockEnd=new Date(cursor);
+    blockEnd.setUTCMonth(blockEnd.getUTCMonth()+blockMonths);
+    if(blockEnd>latest)blockEnd.setTime(latest.getTime());
+    blocks.push({start:blockStart,end:blockEnd,no:blockNo++});
+    cursor=new Date(blockEnd);
+  }
+
+  const merged=new Map();
+  const errors=[];
+  let successful=0;
+  for(const b of blocks){
+    const p1=Math.floor(b.start.getTime()/1000);
+    const p2=Math.floor(b.end.getTime()/1000);
+    const label=`block ${b.no}/${blocks.length} ${b.start.toISOString().slice(0,10)}–${b.end.toISOString().slice(0,10)}`;
+    try{
+      const got=await fetchYahooLongAttempt(symbol,{period1:String(p1),period2:String(p2),interval:'1d'},label);
+      // Skydd mot proxy som ignorerar perioderna: behåll endast punkter som faktiskt ligger i blocket.
+      const from=b.start.toISOString().slice(0,10);
+      const to=b.end.toISOString().slice(0,10);
+      const inBlock=got.series.filter(p=>p.date>=from&&p.date<=to);
+      if(inBlock.length<20){
+        errors.push(label+`: endast ${inBlock.length} punkter i begärt intervall`);
+        continue;
+      }
+      successful++;
+      for(const p of inBlock)merged.set(p.date,p);
+    }catch(e){errors.push(String(e?.message||e))}
+  }
+
+  // Som reserv lägger vi på det fungerande senaste 2-årssvaret; det kan fylla luckor i slutet.
+  try{
+    const recent=await fetchYahooLongAttempt(symbol,{range:'2y',interval:'1d'},'reserv range=2y');
+    for(const p of recent.series)merged.set(p.date,p);
+  }catch(e){errors.push(String(e?.message||e))}
+
+  const series=[...merged.values()].sort((a,b)=>a.date.localeCompare(b.date));
+  if(series.length<230)throw new Error(`För få historiska kurspunkter efter blockhämtning (${series.length}). `+errors.slice(0,4).join(' · '));
+  series.fetchMethod=`${successful}/${blocks.length} datumblock + merge (${series.length} punkter)`;
+  series.blockErrors=errors;
+  return series;
 }
 async function fiveYearPool(items,limit,worker){
   let cursor=0,done=0;
@@ -6365,7 +6438,7 @@ async function fiveYearPool(items,limit,worker){
       try{await worker(item,index)}
       catch(error){failures.push({item,error:String(error?.message||error)})}
       done++;
-      fiveYearSetProgress(done,items.length,`Hämtar Yahoo 10y-historik: ${done}/${items.length} · ${item.label||item.symbol}`)
+      fiveYearSetProgress(done,items.length,`Hämtar 10-årshistorik: ${done}/${items.length} · ${item.label||item.symbol}`)
     }
   }
   await Promise.all(Array.from({length:Math.min(limit,items.length)},()=>runner()));
@@ -6984,7 +7057,7 @@ async function fetchAndRunFiveYearBacktest(){
   items.unshift({type:'index',symbol:'^OMXSPI',label:'OMXSPI'});
   const fetched={};
   const failures=await fiveYearPool(items,4,async item=>{
-    fetched[item.type==='index'?'INDEX':item.i]=await fetchYahooFiveYears(item.symbol)
+    {const series=await fetchYahooFiveYears(item.symbol);fetched[item.type==='index'?'INDEX':item.i]=series;item.fetchMethod=series.fetchMethod||''}
   });
   const index=fetched.INDEX||[];
   for(const item of items.filter(x=>x.type==='stock')){
@@ -6995,15 +7068,27 @@ async function fetchAndRunFiveYearBacktest(){
     }
   }
   fiveYearBacktestData={index,stocks,stockMap:Object.fromEntries(stocks.map(x=>[x.ticker,x])),failures};
-  const oldest=index[0]?.date||'';
-  const latest=index[index.length-1]?.date||'';
-  const spanYears=oldest&&latest?(new Date(latest)-new Date(oldest))/86400000/365.25:0;
-  if(index.length<2200||spanYears<9.4||stocks.length<5){
-    document.getElementById('fiveYearBacktestStatus').textContent=`STOPP: Yahoo range=10y gav ${index.length} OMX-punkter från ${oldest||'–'} till ${latest||'–'} (${spanYears.toFixed(2)} år). Ett verkligt 10-årsdataunderlag kräver minst cirka 9,4 års spann. Testet körs inte.`;
+  if(index.length<230||stocks.length<5){
+    document.getElementById('fiveYearBacktestStatus').textContent='10-årstestet kunde inte starta: för lite data hämtades.';
     button.disabled=false;return
   }
-  const warmupDate=index[Math.min(200,index.length-1)]?.date||oldest;
-  fiveYearSetProgress(items.length,items.length,`10-årsdata verifierad: OMX ${oldest}–${latest} (${index.length} punkter). MA200-uppvärmning till cirka ${warmupDate}. ${stocks.length} bolag hämtade. Kör fryst modell…`);
+  // v20.6.5: verifiera den sammanslagna råhistoriken innan testet tillåts.
+  const intendedStart=historicalBacktestStartDate(index);
+  const oldestIndex=index[0]?.date||'';
+  const latestIndex=index[index.length-1]?.date||'';
+  const spanYears=(oldestIndex&&latestIndex)?((new Date(latestIndex+'T12:00:00Z')-new Date(oldestIndex+'T12:00:00Z'))/(365.2425*86400000)):0;
+  const investableYears=(intendedStart&&latestIndex)?((new Date(latestIndex+'T12:00:00Z')-new Date(intendedStart+'T12:00:00Z'))/(365.2425*86400000)):0;
+  // Ett bolag räknas som täckande om det har data senast vid OMX-teststarten.
+  const stocksCovering=stocks.filter(x=>x.series?.[0]?.date && intendedStart && x.series[0].date<=intendedStart).length;
+  const coverageOk=spanYears>=9.4 && index.length>=2350 && investableYears>=8.5 && stocksCovering>=5;
+  const indexMethod=items.find(x=>x.type==='index')?.fetchMethod||'okänd metod';
+  document.getElementById('fiveYearBacktestStatus').textContent=`Datakontroll: OMX ${index.length} punkter ${oldestIndex||'–'}–${latestIndex||'–'} (${spanYears.toFixed(2)} år rådata) · första investerbara signal cirka ${intendedStart||'–'} (${investableYears.toFixed(2)} år test) · bolag med täckning vid teststart ${stocksCovering}/${stocks.length} · OMX-hämtning: ${indexMethod}.`;
+  if(!coverageOk){
+    const blockErr=index.blockErrors?.slice(0,2)?.join(' · ')||'';
+    document.getElementById('fiveYearBacktestStatus').textContent+=` STOPP: blockhämtningen gav inte tillräcklig verifierad historik.${blockErr?' '+blockErr:''} Testet körs inte.`;
+    button.disabled=false;rerun.disabled=true;exportBtn.disabled=true;return
+  }
+  fiveYearSetProgress(items.length,items.length,`Hämtning klar: ${stocks.length} bolag + OMXSPI. Kör historiskt test…`);
   rerun.disabled=false;
   runFiveYearWhiteBacktest();
   button.disabled=false
@@ -7079,7 +7164,7 @@ function exportFiveYearBacktestCsv(){
     for(const x of (d.concentration?.reruns||[]))lines.push([`Utan Top ${x.n}`,x.excluded.join('|'),x.result?.totalReturn??'',x.result?.benchmarkReturn??'',x.result?.excess??'',x.result&&d.concentration?.fixedBase?x.result.totalReturn-d.concentration.fixedBase.totalReturn:'',x.result?.cagr??'',x.result?.maxDrawdown??'',x.result?.volatility??'',x.result?.trades??'']);
   }
   const csv='\ufeff'+lines.map(row=>row.map(csvEscape).join(';')).join('\n');
-  downloadTextFile(csv,`MomentumScore_v20_6_4_Vit_10ar_${todayISO()}.csv`,'text/csv;charset=utf-8')
+  downloadTextFile(csv,`MomentumScore_v20_6_3_Vit_10ar_${todayISO()}.csv`,'text/csv;charset=utf-8')
 }
 
 function movingAverageAtOffset(closes,period=200,offset=0){
