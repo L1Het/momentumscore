@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.5.4</title>
+<title>MomentumScore v20.5.5</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.5.4 – Tröghetskurva + minsta innehavstid</h1>
+<h1>MomentumScore v20.5.5 – Out-of-sample + Top20-regel</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -6580,7 +6580,11 @@ function fiveYearRunVariant(options={}){
   const rebalanceEvery=Math.max(1,Math.floor(Number(options.rebalanceEvery)||1));
   const exitRank=Math.max(topN,Math.floor(Number(options.exitRank)||topN));
   const minHoldWeeks=Math.max(0,Math.floor(Number(options.minHoldWeeks)||0));
-  const signals=fiveYearWeeklySignals(fiveYearBacktestData.index);
+  let signals=fiveYearWeeklySignals(fiveYearBacktestData.index);
+  const startSignalDate=options.startSignalDate?String(options.startSignalDate):null;
+  const endSignalDate=options.endSignalDate?String(options.endSignalDate):null;
+  if(startSignalDate)signals=signals.filter(x=>String(x.date)>=startSignalDate);
+  if(endSignalDate)signals=signals.filter(x=>String(x.date)<=endSignalDate);
   const state={cash:100000,positions:{},fees:0,trades:0,turnover:0};
   const points=[];
   let benchmarkStart=NaN,started=false,previousTarget=[],activeTarget=[];
@@ -6715,6 +6719,10 @@ function runFiveYearDiagnostics(base){
   const hold50=fiveYearRunVariant({topN:10,exitRank:50});
   const minHold2=fiveYearRunVariant({topN:10,minHoldWeeks:2});
   const minHold4=fiveYearRunVariant({topN:10,minHoldWeeks:4});
+  // Out-of-sample: fasta kalenderperioder. 2022–2024 används som utvecklingsperiod, 2025–2026 som OOS.
+  const oosRanks=[10,15,20,25,30];
+  const development=Object.fromEntries(oosRanks.map(r=>[r,fiveYearRunVariant({topN:10,exitRank:r,startSignalDate:'2022-01-01',endSignalDate:'2024-12-31'})]));
+  const outOfSample=Object.fromEntries(oosRanks.map(r=>[r,fiveYearRunVariant({topN:10,exitRank:r,startSignalDate:'2025-01-01',endSignalDate:'2026-12-31'})]));
   const rows=[
     {name:'1. Tids-/look-ahead-audit',detail:`${audit.checks.toLocaleString('sv-SE')} tidskontroller`,status:audit.pass?'PASS':'FAIL',result:audit.pass?'Inga framtida datapunkter hittades':audit.violations[0]},
     {name:'2. Exekvering +1 handelsdag',detail:'Alla köp/sälj skjuts en extra handelsdag',status:delayed?'KÖRD':'FEL',result:delayed?`Vit ${signed(delayed.totalReturn,' %')} · över OMX ${signed(delayed.excess,' p.e.')} · Δ bas ${signed(delayed.totalReturn-base.totalReturn,' p.e.')}`:'Kunde inte köras'},
@@ -6728,11 +6736,13 @@ function runFiveYearDiagnostics(base){
     {name:'6E. Tröghet Top 10 in / Top 40 ut',detail:'Behåll innehav tills rankingen faller utanför Top 40',status:hold40?'KÖRD':'FEL',result:hold40?`Vit ${signed(hold40.totalReturn,' %')} · över OMX ${signed(hold40.excess,' p.e.')} · ${hold40.trades} affärer · oms ${hold40.turnover.toFixed(0)} %`:'Kunde inte köras'},
     {name:'6F. Tröghet Top 10 in / Top 50 ut',detail:'Behåll innehav tills rankingen faller utanför Top 50',status:hold50?'KÖRD':'FEL',result:hold50?`Vit ${signed(hold50.totalReturn,' %')} · över OMX ${signed(hold50.excess,' p.e.')} · ${hold50.trades} affärer · oms ${hold50.turnover.toFixed(0)} %`:'Kunde inte köras'},
     {name:'7A. Minsta innehavstid 2 veckor',detail:'Ett nyköpt innehav får inte säljas förrän två hela veckor har gått',status:minHold2?'KÖRD':'FEL',result:minHold2?`Vit ${signed(minHold2.totalReturn,' %')} · över OMX ${signed(minHold2.excess,' p.e.')} · ${minHold2.trades} affärer · oms ${minHold2.turnover.toFixed(0)} %`:'Kunde inte köras'},
-    {name:'7B. Minsta innehavstid 4 veckor',detail:'Ett nyköpt innehav får inte säljas förrän fyra hela veckor har gått',status:minHold4?'KÖRD':'FEL',result:minHold4?`Vit ${signed(minHold4.totalReturn,' %')} · över OMX ${signed(minHold4.excess,' p.e.')} · ${minHold4.trades} affärer · oms ${minHold4.turnover.toFixed(0)} %`:'Kunde inte köras'}
+    {name:'7B. Minsta innehavstid 4 veckor',detail:'Ett nyköpt innehav får inte säljas förrän fyra hela veckor har gått',status:minHold4?'KÖRD':'FEL',result:minHold4?`Vit ${signed(minHold4.totalReturn,' %')} · över OMX ${signed(minHold4.excess,' p.e.')} · ${minHold4.trades} affärer · oms ${minHold4.turnover.toFixed(0)} %`:'Kunde inte köras'},
+    ...oosRanks.map(r=>({name:`8A. Utveckling 2022–2024 · Top10/${r}`,detail:'Separat startkapital och endast signaler i utvecklingsperioden',status:development[r]?'KÖRD':'FEL',result:development[r]?`Vit ${signed(development[r].totalReturn,' %')} · över OMX ${signed(development[r].excess,' p.e.')} · CAGR ${signed(development[r].cagr,' %')}`:'Kunde inte köras'})),
+    ...oosRanks.map(r=>({name:`8B. OOS 2025–2026 · Top10/${r}`,detail:'Out-of-sample: separat startkapital och endast signaler från 2025',status:outOfSample[r]?'KÖRD':'FEL',result:outOfSample[r]?`Vit ${signed(outOfSample[r].totalReturn,' %')} · över OMX ${signed(outOfSample[r].excess,' p.e.')} · CAGR ${signed(outOfSample[r].cagr,' %')}`:'Kunde inte köras'}))
   ];
   const table=document.getElementById('fiveYearDiagnosticTable'),summary=document.getElementById('fiveYearDiagnosticSummary');
   if(table)table.innerHTML='<tr><th>Test</th><th>Vad ändras</th><th>Status</th><th>Resultat</th></tr>'+rows.map(x=>`<tr><td style="text-align:left"><b>${x.name}</b></td><td style="text-align:left">${x.detail}</td><td><b>${x.status}</b></td><td style="text-align:left">${x.result}</td></tr>`).join('');
-  const variants=[delayed,highFee,top5,top15,biweekly,hold15,hold20,hold25,hold30,hold40,hold50,minHold2,minHold4].filter(Boolean);
+  const variants=[delayed,highFee,top5,top15,biweekly,hold15,hold20,hold25,hold30,hold40,hold50,minHold2,minHold4,...Object.values(development),...Object.values(outOfSample)].filter(Boolean);
   const stillBeat=variants.filter(x=>Number.isFinite(x.excess)&&x.excess>0).length;
   const robust=audit.pass&&stillBeat>=4;
   if(summary)summary.innerHTML=[
@@ -6740,7 +6750,7 @@ function runFiveYearDiagnostics(base){
     ['Stressvarianter över OMX',`${stillBeat}/${variants.length}`],
     ['Diagnostisk bedömning',robust?'Robust i dessa tester':'Känslighet finns']
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
-  return{audit,delayed,highFee,top5,top15,biweekly,hold15,hold20,hold25,hold30,hold40,hold50,minHold2,minHold4,rows}
+  return{audit,delayed,highFee,top5,top15,biweekly,hold15,hold20,hold25,hold30,hold40,hold50,minHold2,minHold4,development,outOfSample,rows}
 }
 
 function fiveYearChart(result){
@@ -6868,9 +6878,13 @@ function exportFiveYearBacktestCsv(){
     addStress('6F. Tröghet Top 10 in / Top 50 ut',d.hold50?'KÖRD':'FEL',d.hold50,'Behåll innehav tills rankingen faller utanför Top 50');
     addStress('7A. Minsta innehavstid 2 veckor',d.minHold2?'KÖRD':'FEL',d.minHold2,'Nyköpta innehav skyddas från försäljning i två hela veckor');
     addStress('7B. Minsta innehavstid 4 veckor',d.minHold4?'KÖRD':'FEL',d.minHold4,'Nyköpta innehav skyddas från försäljning i fyra hela veckor');
+    for(const rank of [10,15,20,25,30]){
+      addStress(`8A. Utveckling 2022-2024 Top10/${rank}`,d.development?.[rank]?'KÖRD':'FEL',d.development?.[rank],'Separat utvecklingsperiod');
+      addStress(`8B. OOS 2025-2026 Top10/${rank}`,d.outOfSample?.[rank]?'KÖRD':'FEL',d.outOfSample?.[rank],'Separat out-of-sample-period');
+    }
   }
   const csv='\ufeff'+lines.map(row=>row.map(csvEscape).join(';')).join('\n');
-  downloadTextFile(csv,`MomentumScore_v20_5_4_Vit_5ar_${todayISO()}.csv`,'text/csv;charset=utf-8')
+  downloadTextFile(csv,`MomentumScore_v20_5_5_Vit_5ar_${todayISO()}.csv`,'text/csv;charset=utf-8')
 }
 
 function movingAverageAtOffset(closes,period=200,offset=0){
