@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.7.1 – Vit 2.1 · 10/30/30/30 + Top10/Top20</h1>
+<h1>MomentumScore v20.7.2 – portföljfix + innehavsanalys</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -670,6 +670,14 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
     <p class="note">Körs automatiskt på samma 10-årsdata efter huvudtestet. v20.7.0 lägger särskilt till frysta kalenderår samt rullande 12- och 24-månadersfönster över hela långperioden. Syftet är att avslöja tidsläckage och resultat som är alltför känsliga för exekvering, kostnader, portföljbredd eller ombalanseringsfrekvens. Dessutom testas hur långt ett befintligt Top 10-innehav får falla i rankingen innan det säljs, samt minsta innehavstid på 2 och 4 veckor.</p>
     <div id="fiveYearDiagnosticSummary" class="summary"></div>
     <div class="tablewrap"><table id="fiveYearDiagnosticTable"></table></div>
+    <div class="rowcard" style="margin-top:18px">
+      <h3>Vit 2.1 – vilka aktier fungerar?</h3>
+      <p class="note">Varje sammanhängande period som en aktie ligger i Vits historiska Top 10 mäts från inträde till utträde och jämförs med OMXSPI under exakt samma datum. Tabellen visar även om längre innehav och olika marknadsperioder har fungerat bättre eller sämre.</p>
+      <div id="whiteHoldingAnalysisSummary" class="summary"></div>
+      <div class="tablewrap"><table id="whiteHoldingAnalysisCompany"></table></div>
+      <div class="tablewrap" style="margin-top:14px"><table id="whiteHoldingAnalysisDuration"></table></div>
+      <div class="tablewrap" style="margin-top:14px"><table id="whiteHoldingAnalysisRegime"></table></div>
+    </div>
   </div>
   <p class="note backtest-warning"><b>Viktig begränsning:</b> testet använder bolagen som finns i din databas idag även bakåt i tiden. Bolag som lämnat databasen/börsen saknas, vilket ger survivorship bias. Resultatet är därför ett starkt diagnostiskt test av Vit-modellen men inte ett perfekt historiskt fondfacit.</p>
 </div>
@@ -2801,6 +2809,10 @@ function buildRollingPortfolio(model,asOfDate=''){
       ])
     );
     const tradeDate=rollingSnapshotExecutionDate(snapshot);
+
+    // v20.7.2: en oförändrad Top 10 är fortfarande en genomförd veckouppdatering.
+    // Köpdatum/priser/antal lämnas orörda, men portföljens senaste uppdateringsdatum flyttas fram.
+    if(snapshotIndex>0 && tradeDate) lastUpdateDate=tradeDate;
 
     if(snapshotIndex===0){
       startDate=String(snapshot.savedDate||snapshot.savedAt||tradeDate).slice(0,10);
@@ -6625,7 +6637,18 @@ function runFiveYearWhiteBacktest(){
     const prevPoint=points.length>=2?points[points.length-2]:null;
     const weekRet=prevPoint&&prevPoint.value>0?(value/prevPoint.value-1)*100:NaN;
     const weekIdx=prevPoint&&prevPoint.indexValue>0?(idx/prevPoint.indexValue-1)*100:NaN;
-    weeks.push({weekKey:signal.weekKey,signalDate:signal.date,executionDate,value,portfolioReturn,indexReturn,weekRet,weekIdx,excess:Number.isFinite(weekRet)&&Number.isFinite(weekIdx)?weekRet-weekIdx:NaN,top10:target.map(x=>x.ticker)})
+
+    // v20.7.2: spara varje Top10-akties egen kursutveckling under samma vecka.
+    // Detta används enbart av analysen "vilka aktier fungerar?" och påverkar inte portföljmotorn.
+    const memberReturns={};
+    if(prevPoint){
+      for(const item of target){
+        const p0=fiveYearPriceOnOrBefore(item.series,prevPoint.date);
+        const p1=fiveYearPriceOnOrBefore(item.series,executionDate);
+        if(Number.isFinite(p0)&&p0>0&&Number.isFinite(p1)) memberReturns[item.ticker]=(p1/p0-1)*100;
+      }
+    }
+    weeks.push({weekKey:signal.weekKey,signalDate:signal.date,executionDate,value,portfolioReturn,indexReturn,weekRet,weekIdx,excess:Number.isFinite(weekRet)&&Number.isFinite(weekIdx)?weekRet-weekIdx:NaN,top10:target.map(x=>x.ticker),memberReturns})
   }
   if(points.length<2)return alert('Testet kunde inte skapa tillräckligt många portföljveckor.');
   const first=points[0],last=points[points.length-1];
@@ -7037,6 +7060,78 @@ function fiveYearChart(result){
     <text x="${p+100}" y="${p+14}" fill="#9d7cff">OMXSPI</text>
   </svg>`
 }
+
+function whiteHoldingBucket(n){
+  if(n<=2)return '1–2 veckor'; if(n<=4)return '3–4 veckor';
+  if(n<=8)return '5–8 veckor'; if(n<=12)return '9–12 veckor'; return '>12 veckor';
+}
+function whitePeriodBucket(d){
+  const y=Number(String(d||'').slice(0,4));
+  if(y<=2019)return '2017–2019'; if(y<=2022)return '2020–2022'; return '2023–2026';
+}
+function whiteAvg(a){const v=a.filter(Number.isFinite);return v.length?v.reduce((s,x)=>s+x,0)/v.length:NaN}
+function whiteMedian(a){const v=a.filter(Number.isFinite).sort((a,b)=>a-b);if(!v.length)return NaN;const m=Math.floor(v.length/2);return v.length%2?v[m]:(v[m-1]+v[m])/2}
+function whiteHoldingEpisodes(r){
+  const weeks=r?.weeks||[], active=new Map(), out=[];
+  const close=(ticker,endIndex)=>{
+    const e=active.get(ticker); if(!e)return;
+    const slice=weeks.slice(e.startIndex,endIndex+1);
+    let stockFactor=1,indexFactor=1,usable=0;
+    for(const w of slice){
+      const memberRet=w.memberReturns?.[ticker];
+      if(Number.isFinite(memberRet)){stockFactor*=1+memberRet/100;usable++}
+      if(Number.isFinite(w.weekIdx))indexFactor*=1+w.weekIdx/100;
+    }
+    if(usable){
+      const stockRet=(stockFactor-1)*100, indexRet=(indexFactor-1)*100;
+      out.push({ticker,entryDate:e.entryDate,weeks:slice.length,stockRet,indexRet,excess:stockRet-indexRet});
+    }
+    active.delete(ticker);
+  };
+  weeks.forEach((w,i)=>{
+    const set=new Set(w.top10||[]);
+    for(const ticker of [...active.keys()])if(!set.has(ticker))close(ticker,i-1);
+    for(const ticker of set)if(!active.has(ticker))active.set(ticker,{startIndex:i,entryDate:w.executionDate||w.signalDate||w.weekKey});
+  });
+  for(const ticker of [...active.keys()])close(ticker,weeks.length-1);
+  return out;
+}
+function whiteGroupEpisodes(arr,keyFn){
+  const m=new Map();
+  for(const e of arr){const k=keyFn(e);if(!m.has(k))m.set(k,[]);m.get(k).push(e)}
+  return [...m].map(([key,v])=>({
+    key,n:v.length,beat:100*v.filter(x=>x.excess>0).length/v.length,
+    avgExcess:whiteAvg(v.map(x=>x.excess)),medianExcess:whiteMedian(v.map(x=>x.excess)),
+    avgStock:whiteAvg(v.map(x=>x.stockRet)),avgWeeks:whiteAvg(v.map(x=>x.weeks))
+  }));
+}
+function renderWhiteHoldingAnalysis(r){
+  const s=document.getElementById('whiteHoldingAnalysisSummary'),
+        c=document.getElementById('whiteHoldingAnalysisCompany'),
+        d=document.getElementById('whiteHoldingAnalysisDuration'),
+        g=document.getElementById('whiteHoldingAnalysisRegime');
+  if(!s||!c||!d||!g)return;
+  const ep=whiteHoldingEpisodes(r);
+  if(!ep.length){
+    s.innerHTML='<div class="metric"><small>Innehavsanalys</small><b>Ingen individdata</b></div>';
+    c.innerHTML='<tr><td style="text-align:left">Backtestresultatet saknar ännu memberReturns per aktie/vecka. Portföljtestet fungerar ändå som tidigare.</td></tr>';
+    d.innerHTML=g.innerHTML=''; return;
+  }
+  const beat=100*ep.filter(x=>x.excess>0).length/ep.length, avg=whiteAvg(ep.map(x=>x.excess)), med=whiteMedian(ep.map(x=>x.excess));
+  s.innerHTML=[
+    ['Innehavsperioder',ep.length],
+    ['Slår OMXSPI',beat.toFixed(1).replace('.',',')+' %'],
+    ['Snitt mot OMX',signed(avg,' p.e.')],
+    ['Median mot OMX',signed(med,' p.e.')]
+  ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
+  const rows=(arr,label)=>'<tr><th>'+label+'</th><th>Perioder</th><th>Slår OMX</th><th>Snitt mot OMX</th><th>Median mot OMX</th><th>Aktie snitt</th><th>Veckor snitt</th></tr>'+
+    arr.map(x=>`<tr><td style="text-align:left">${x.key}</td><td>${x.n}</td><td>${x.beat.toFixed(1).replace('.',',')} %</td><td class="${classByValue(x.avgExcess)}">${signed(x.avgExcess,' p.e.')}</td><td class="${classByValue(x.medianExcess)}">${signed(x.medianExcess,' p.e.')}</td><td>${signed(x.avgStock,' %')}</td><td>${x.avgWeeks.toFixed(1).replace('.',',')}</td></tr>`).join('');
+  c.innerHTML=rows(whiteGroupEpisodes(ep,x=>x.ticker).sort((a,b)=>b.avgExcess-a.avgExcess),'Bolag');
+  const order=['1–2 veckor','3–4 veckor','5–8 veckor','9–12 veckor','>12 veckor'];
+  d.innerHTML=rows(whiteGroupEpisodes(ep,x=>whiteHoldingBucket(x.weeks)).sort((a,b)=>order.indexOf(a.key)-order.indexOf(b.key)),'Innehavstid');
+  g.innerHTML=rows(whiteGroupEpisodes(ep,x=>whitePeriodBucket(x.entryDate)).sort((a,b)=>a.key.localeCompare(b.key)),'Period');
+}
+
 function renderFiveYearBacktest(r){
   const summary=document.getElementById('fiveYearBacktestSummary');
   const verdict=document.getElementById('fiveYearBacktestVerdict');
@@ -7108,6 +7203,8 @@ async function fetchAndRunFiveYearBacktest(){
   rerun.disabled=false;
   runFiveYearWhiteBacktest();
   button.disabled=false
+
+  renderWhiteHoldingAnalysis(r);
 }
 function exportFiveYearBacktestCsv(){
   const r=fiveYearBacktestResult;
