@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.6.1</title>
+<title>MomentumScore v20.6.2</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.6.1 – 10-årstest · fryst modell</h1>
+<h1>MomentumScore v20.6.2 – Verifierat 10-årstest · fryst modell</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -6509,7 +6509,7 @@ function fiveYearVolatility(points){
 }
 function runFiveYearWhiteBacktest(){
   if(!fiveYearBacktestData?.index?.length||!fiveYearBacktestData?.stocks?.length){
-    alert('Hämta 10-årshistoriken först.');
+    alert('Hämta femårshistoriken först.');
     return null
   }
   const testStart=historicalBacktestStartDate(fiveYearBacktestData.index);
@@ -6522,26 +6522,7 @@ function runFiveYearWhiteBacktest(){
     const signal=signals[s];
     const executionDate=fiveYearNextDate(fiveYearBacktestData.index,signal.date);
     if(!executionDate)continue;
-    // Fryst huvudmodell v20.6.1: 10/30/30/30 + Top10 in / Top20 ut.
-    const ranked=fiveYearTopN(signal.date,Object.keys(state.positions),20,FROZEN_WHITE_WEIGHTS);
-    let target;
-    if(!started){
-      target=ranked.slice(0,10);
-    }else{
-      const rankMap=new Map(ranked.map((x,i)=>[x.ticker,i+1]));
-      const selected=[];
-      for(const ticker of Object.keys(state.positions)){
-        if(rankMap.has(ticker)&&rankMap.get(ticker)<=20){
-          const item=ranked.find(x=>x.ticker===ticker);
-          if(item&&selected.length<10)selected.push(item);
-        }
-      }
-      for(const item of ranked){
-        if(selected.length>=10)break;
-        if(!selected.some(x=>x.ticker===item.ticker))selected.push(item);
-      }
-      target=selected;
-    }
+    const target=fiveYearTop10(signal.date,previousTarget);
     if(target.length<5)continue;
     const targetTickers=target.map(x=>x.ticker);
     if(!started){
@@ -6944,14 +6925,14 @@ function fiveYearChart(result){
   const y=v=>h-p-(v-min)/(max-min)*(h-p*2);
   const portfolio=pts.map((d,i)=>`${i?'L':'M'}${x(i).toFixed(1)} ${y(100*d.value/100000).toFixed(1)}`).join(' ');
   const index=pts.map((d,i)=>Number.isFinite(d.indexReturn)?`${i?'L':'M'}${x(i).toFixed(1)} ${y(100*(1+d.indexReturn/100)).toFixed(1)}`:'').filter(Boolean).join(' ');
-  return `<h3>Vit 10/30/30/30 · Top10/20 mot OMXSPI – indexerat till 100</h3><svg viewBox="0 0 ${w} ${h}">
+  return `<h3>Vit Top 10 mot OMXSPI – indexerat till 100</h3><svg viewBox="0 0 ${w} ${h}">
     <line class="chart-axis" x1="${p}" y1="${h-p}" x2="${w-p}" y2="${h-p}"></line>
     <line class="chart-axis" x1="${p}" y1="${p}" x2="${p}" y2="${h-p}"></line>
     <path d="${portfolio}" fill="none" stroke="#f2f2f2" stroke-width="3"></path>
     <path d="${index}" fill="none" stroke="#9d7cff" stroke-width="3"></path>
     <text class="chart-label" x="${p}" y="${h-10}">${dateFmt(result.startDate)}</text>
     <text class="chart-label" x="${w-p}" y="${h-10}" text-anchor="end">${dateFmt(result.endDate)}</text>
-    <text x="${p+8}" y="${p+14}" fill="#f2f2f2">Vit fryst modell</text>
+    <text x="${p+8}" y="${p+14}" fill="#f2f2f2">Vit Top 10</text>
     <text x="${p+100}" y="${p+14}" fill="#9d7cff">OMXSPI</text>
   </svg>`
 }
@@ -6962,10 +6943,10 @@ function renderFiveYearBacktest(r){
   const table=document.getElementById('fiveYearBacktestTable');
   summary.innerHTML=[
     ['Period',`${dateFmt(r.startDate)} – ${dateFmt(r.endDate)}`],
-    ['Fryst modell totalavkastning',signed(r.totalReturn,' %')],
+    ['Vit totalavkastning',signed(r.totalReturn,' %')],
     ['OMXSPI totalavkastning',signed(r.benchmarkReturn,' %')],
     ['Över/under OMXSPI',signed(r.excess,' p.e.')],
-    ['Fryst modell CAGR',signed(r.cagr,' %/år')],
+    ['Vit CAGR',signed(r.cagr,' %/år')],
     ['OMXSPI CAGR',signed(r.benchmarkCagr,' %/år')],
     ['Max drawdown',signed(r.maxDrawdown,' %')],
     ['Volatilitet',signed(r.volatility,' %')],
@@ -6975,7 +6956,7 @@ function renderFiveYearBacktest(r){
     ['Handlad omsättning',r.turnover.toFixed(0).replace('.',',')+' %']
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b style="${String(b).length>18?'font-size:14px':''}">${b}</b></div>`).join('');
   const beats=Number.isFinite(r.excess)&&r.excess>0;
-  verdict.innerHTML=`<div class="${beats?'backtest-ok':'backtest-warning'}"><b>${beats?'Den frysta modellen slog OMXSPI i detta test.':'Den frysta modellen slog inte OMXSPI i detta test.'}</b> ${Number.isFinite(r.excess)?`Skillnaden blev ${signed(r.excess,' procentenheter')} över hela perioden.`:''} Testet omfattar ${r.universe} nuvarande bolag och ${r.weekCount ?? r.weeks.length} portföljveckor.</div>`;
+  verdict.innerHTML=`<div class="${beats?'backtest-ok':'backtest-warning'}"><b>${beats?'Vit slog OMXSPI i detta test.':'Vit slog inte OMXSPI i detta test.'}</b> ${Number.isFinite(r.excess)?`Skillnaden blev ${signed(r.excess,' procentenheter')} över hela perioden.`:''} Testet omfattar ${r.universe} nuvarande bolag och ${r.weekCount ?? r.weeks.length} portföljveckor.</div>`;
   chart.classList.remove('hidden');chart.innerHTML=fiveYearChart(r);
   table.innerHTML='<tr><th>Vecka</th><th>Signal</th><th>Start</th><th>Vit vecka</th><th>OMXSPI vecka</th><th>Över/under</th><th>Vit sedan start</th><th>OMX sedan start</th><th>Top 10</th></tr>'+
     r.weeks.slice().reverse().map(w=>`<tr>
@@ -7021,6 +7002,18 @@ async function fetchAndRunFiveYearBacktest(){
   if(index.length<230||stocks.length<5){
     document.getElementById('fiveYearBacktestStatus').textContent='10-årstestet kunde inte starta: för lite data hämtades.';
     button.disabled=false;return
+  }
+  // v20.6.2: hård datakontroll. Ett 10-årstest får inte köras på kortare historik.
+  const intendedStart=historicalBacktestStartDate(index);
+  const oldestIndex=index[0]?.date||'';
+  const latestIndex=index[index.length-1]?.date||'';
+  const warmupTarget=(()=>{const d=new Date(intendedStart+'T12:00:00Z');d.setUTCFullYear(d.getUTCFullYear()-1);return d.toISOString().slice(0,10)})();
+  const stocksCovering=stocks.filter(x=>x.series?.[0]?.date && x.series[0].date<=warmupTarget).length;
+  const coverageOk=oldestIndex && intendedStart && oldestIndex<=warmupTarget && stocksCovering>=5;
+  document.getElementById('fiveYearBacktestStatus').textContent=`Datakontroll: äldsta OMX ${oldestIndex||'–'} · avsedd teststart ${intendedStart||'–'} · senaste data ${latestIndex||'–'} · bolag med minst 1 års uppvärmning ${stocksCovering}/${stocks.length}.`;
+  if(!coverageOk){
+    document.getElementById('fiveYearBacktestStatus').textContent+=` STOPP: datakällan täcker inte ett verifierat 10-årstest. Testet körs inte.`;
+    button.disabled=false;rerun.disabled=true;exportBtn.disabled=true;return
   }
   fiveYearSetProgress(items.length,items.length,`Hämtning klar: ${stocks.length} bolag + OMXSPI. Kör historiskt test…`);
   rerun.disabled=false;
@@ -7098,7 +7091,7 @@ function exportFiveYearBacktestCsv(){
     for(const x of (d.concentration?.reruns||[]))lines.push([`Utan Top ${x.n}`,x.excluded.join('|'),x.result?.totalReturn??'',x.result?.benchmarkReturn??'',x.result?.excess??'',x.result&&d.concentration?.fixedBase?x.result.totalReturn-d.concentration.fixedBase.totalReturn:'',x.result?.cagr??'',x.result?.maxDrawdown??'',x.result?.volatility??'',x.result?.trades??'']);
   }
   const csv='\ufeff'+lines.map(row=>row.map(csvEscape).join(';')).join('\n');
-  downloadTextFile(csv,`MomentumScore_v20_6_1_Vit_10ar_${todayISO()}.csv`,'text/csv;charset=utf-8')
+  downloadTextFile(csv,`MomentumScore_v20_6_2_Vit_10ar_${todayISO()}.csv`,'text/csv;charset=utf-8')
 }
 
 function movingAverageAtOffset(closes,period=200,offset=0){
