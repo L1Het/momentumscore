@@ -662,7 +662,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
   <div id="fiveYearBacktestChart" class="backtest-chart hidden"></div>
   <div class="card tablewrap" style="margin-top:12px"><table id="fiveYearBacktestTable"></table></div>
   <div class="card" style="margin-top:12px">
-    <h3>Diagnostik – 5 oberoende stresstester</h3>
+    <h3>Diagnostik – stresstester + tröghetsregler</h3>
     <p class="note">Körs automatiskt på samma femårsdata efter huvudtestet. Syftet är att avslöja tidsläckage och resultat som är alltför känsliga för exekvering, kostnader, portföljbredd eller ombalanseringsfrekvens.</p>
     <div id="fiveYearDiagnosticSummary" class="summary"></div>
     <div class="tablewrap"><table id="fiveYearDiagnosticTable"></table></div>
@@ -6578,6 +6578,7 @@ function fiveYearRunVariant(options={}){
   const feeRate=Number.isFinite(Number(options.feeRate))?Number(options.feeRate):FIVE_YEAR_FEE_RATE;
   const extraDelay=Math.max(0,Math.floor(Number(options.extraDelay)||0));
   const rebalanceEvery=Math.max(1,Math.floor(Number(options.rebalanceEvery)||1));
+  const exitRank=Math.max(topN,Math.floor(Number(options.exitRank)||topN));
   const signals=fiveYearWeeklySignals(fiveYearBacktestData.index);
   const state={cash:100000,positions:{},fees:0,trades:0,turnover:0};
   const points=[];
@@ -6590,7 +6591,24 @@ function fiveYearRunVariant(options={}){
     const shouldRebalance=!started||(s%rebalanceEvery===0);
     let target=activeTarget;
     if(shouldRebalance){
-      target=fiveYearTopN(signal.date,previousTarget,topN);
+      if(exitRank>topN && started){
+        const ranked=fiveYearTopN(signal.date,Object.keys(state.positions),exitRank);
+        if(ranked.length<Math.min(5,topN))continue;
+        const rankMap=new Map(ranked.map((x,i)=>[x.ticker,i+1]));
+        const kept=Object.keys(state.positions).filter(t=>rankMap.has(t)&&rankMap.get(t)<=exitRank);
+        const selected=[];
+        for(const t of kept){
+          const item=ranked.find(x=>x.ticker===t);
+          if(item&&selected.length<topN)selected.push(item);
+        }
+        for(const item of ranked){
+          if(selected.length>=topN)break;
+          if(!selected.some(x=>x.ticker===item.ticker))selected.push(item);
+        }
+        target=selected;
+      }else{
+        target=fiveYearTopN(signal.date,previousTarget,topN);
+      }
       if(target.length<Math.min(5,topN))continue;
     }
     const targetTickers=target.map(x=>x.ticker);
@@ -6669,16 +6687,22 @@ function runFiveYearDiagnostics(base){
   const highFee=fiveYearRunVariant({feeRate:0.0025});
   const top5=fiveYearRunVariant({topN:5}),top15=fiveYearRunVariant({topN:15});
   const biweekly=fiveYearRunVariant({rebalanceEvery:2});
+  const hold12=fiveYearRunVariant({topN:10,exitRank:12});
+  const hold15=fiveYearRunVariant({topN:10,exitRank:15});
+  const hold20=fiveYearRunVariant({topN:10,exitRank:20});
   const rows=[
     {name:'1. Tids-/look-ahead-audit',detail:`${audit.checks.toLocaleString('sv-SE')} tidskontroller`,status:audit.pass?'PASS':'FAIL',result:audit.pass?'Inga framtida datapunkter hittades':audit.violations[0]},
     {name:'2. Exekvering +1 handelsdag',detail:'Alla köp/sälj skjuts en extra handelsdag',status:delayed?'KÖRD':'FEL',result:delayed?`Vit ${signed(delayed.totalReturn,' %')} · över OMX ${signed(delayed.excess,' p.e.')} · Δ bas ${signed(delayed.totalReturn-base.totalReturn,' p.e.')}`:'Kunde inte köras'},
     {name:'3. Kostnadsstress 0,25 %',detail:'Courtage 0,25 % vid både köp och försäljning',status:highFee?'KÖRD':'FEL',result:highFee?`Vit ${signed(highFee.totalReturn,' %')} · över OMX ${signed(highFee.excess,' p.e.')} · courtage ${highFee.fees.toLocaleString('sv-SE',{maximumFractionDigits:0})} kr`:'Kunde inte köras'},
     {name:'4. Breddtest Top 5 / Top 15',detail:'Samma ranking men smalare respektive bredare portfölj',status:top5&&top15?'KÖRD':'FEL',result:top5&&top15?`Top 5 ${signed(top5.totalReturn,' %')} · Top 15 ${signed(top15.totalReturn,' %')} · bas Top 10 ${signed(base.totalReturn,' %')}`:'Kunde inte köras'},
-    {name:'5. Ombalansering varannan vecka',detail:'Nya signaler får bara ändra portföljen varannan vecka',status:biweekly?'KÖRD':'FEL',result:biweekly?`Vit ${signed(biweekly.totalReturn,' %')} · över OMX ${signed(biweekly.excess,' p.e.')} · ${biweekly.trades} affärer`:'Kunde inte köras'}
+    {name:'5. Ombalansering varannan vecka',detail:'Nya signaler får bara ändra portföljen varannan vecka',status:biweekly?'KÖRD':'FEL',result:biweekly?`Vit ${signed(biweekly.totalReturn,' %')} · över OMX ${signed(biweekly.excess,' p.e.')} · ${biweekly.trades} affärer`:'Kunde inte köras'},
+    {name:'6. Tröghet Top 10 in / Top 12 ut',detail:'Behåll innehav tills rankingen faller utanför Top 12',status:hold12?'KÖRD':'FEL',result:hold12?`Vit ${signed(hold12.totalReturn,' %')} · över OMX ${signed(hold12.excess,' p.e.')} · ${hold12.trades} affärer · oms ${hold12.turnover.toFixed(0)} %`:'Kunde inte köras'},
+    {name:'7. Tröghet Top 10 in / Top 15 ut',detail:'Behåll innehav tills rankingen faller utanför Top 15',status:hold15?'KÖRD':'FEL',result:hold15?`Vit ${signed(hold15.totalReturn,' %')} · över OMX ${signed(hold15.excess,' p.e.')} · ${hold15.trades} affärer · oms ${hold15.turnover.toFixed(0)} %`:'Kunde inte köras'},
+    {name:'8. Tröghet Top 10 in / Top 20 ut',detail:'Behåll innehav tills rankingen faller utanför Top 20',status:hold20?'KÖRD':'FEL',result:hold20?`Vit ${signed(hold20.totalReturn,' %')} · över OMX ${signed(hold20.excess,' p.e.')} · ${hold20.trades} affärer · oms ${hold20.turnover.toFixed(0)} %`:'Kunde inte köras'}
   ];
   const table=document.getElementById('fiveYearDiagnosticTable'),summary=document.getElementById('fiveYearDiagnosticSummary');
   if(table)table.innerHTML='<tr><th>Test</th><th>Vad ändras</th><th>Status</th><th>Resultat</th></tr>'+rows.map(x=>`<tr><td style="text-align:left"><b>${x.name}</b></td><td style="text-align:left">${x.detail}</td><td><b>${x.status}</b></td><td style="text-align:left">${x.result}</td></tr>`).join('');
-  const variants=[delayed,highFee,top5,top15,biweekly].filter(Boolean);
+  const variants=[delayed,highFee,top5,top15,biweekly,hold12,hold15,hold20].filter(Boolean);
   const stillBeat=variants.filter(x=>Number.isFinite(x.excess)&&x.excess>0).length;
   const robust=audit.pass&&stillBeat>=4;
   if(summary)summary.innerHTML=[
@@ -6686,7 +6710,7 @@ function runFiveYearDiagnostics(base){
     ['Stressvarianter över OMX',`${stillBeat}/${variants.length}`],
     ['Diagnostisk bedömning',robust?'Robust i dessa tester':'Känslighet finns']
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
-  return{audit,delayed,highFee,top5,top15,biweekly,rows}
+  return{audit,delayed,highFee,top5,top15,biweekly,hold12,hold15,hold20,rows}
 }
 
 function fiveYearChart(result){
@@ -6806,6 +6830,9 @@ function exportFiveYearBacktestCsv(){
     addStress('4A. Breddtest Top 5',d.top5?'KÖRD':'FEL',d.top5,'Top 5 i stället för Top 10');
     addStress('4B. Breddtest Top 15',d.top15?'KÖRD':'FEL',d.top15,'Top 15 i stället för Top 10');
     addStress('5. Ombalansering varannan vecka',d.biweekly?'KÖRD':'FEL',d.biweekly,'Portföljen får bara ändras varannan vecka');
+    addStress('6. Tröghet Top 10 in / Top 12 ut',d.hold12?'KÖRD':'FEL',d.hold12,'Behåll innehav tills rankingen faller utanför Top 12');
+    addStress('7. Tröghet Top 10 in / Top 15 ut',d.hold15?'KÖRD':'FEL',d.hold15,'Behåll innehav tills rankingen faller utanför Top 15');
+    addStress('8. Tröghet Top 10 in / Top 20 ut',d.hold20?'KÖRD':'FEL',d.hold20,'Behåll innehav tills rankingen faller utanför Top 20');
   }
   const csv='\ufeff'+lines.map(row=>row.map(csvEscape).join(';')).join('\n');
   downloadTextFile(csv,`MomentumScore_Vit_5ar_${todayISO()}.csv`,'text/csv;charset=utf-8')
