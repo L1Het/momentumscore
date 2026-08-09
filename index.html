@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.7.3 – portfölj-synk + innehavsanalys</h1>
+<h1>MomentumScore v20.7.4 – fungerande innehavsanalys</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -7103,11 +7103,24 @@ function renderWhiteHoldingAnalysis(r){
   const s=document.getElementById('whiteHoldingAnalysisSummary'),c=document.getElementById('whiteHoldingAnalysisCompany'),
         d=document.getElementById('whiteHoldingAnalysisDuration'),g=document.getElementById('whiteHoldingAnalysisRegime');
   if(!s||!c||!d||!g)return;
+  if(!r?.weeks?.length){
+    s.innerHTML='<div class="metric"><small>Innehavsanalys</small><b>Backtestdata saknas</b></div>';
+    c.innerHTML=d.innerHTML=g.innerHTML='';
+    return;
+  }
+  const weeksWithMemberData=r.weeks.filter(w=>w.memberReturns&&Object.keys(w.memberReturns).length).length;
   const ep=whiteHoldingEpisodes(r);
-  if(!ep.length){s.innerHTML='<div class="metric"><small>Innehavsanalys</small><b>Ingen individdata</b></div>';return}
+  if(!ep.length){
+    s.innerHTML=`<div class="metric"><small>Innehavsanalys</small><b>0 perioder</b></div>
+      <div class="metric"><small>Veckor med aktiedata</small><b>${weeksWithMemberData}/${r.weeks.length}</b></div>`;
+    c.innerHTML='<tr><td style="text-align:left">Ingen individuell innehavsperiod kunde räknas. Kör testet med ”Hämta 10 år och kör test” igen så att memberReturns skapas.</td></tr>';
+    d.innerHTML=g.innerHTML='';
+    return;
+  }
   const beat=100*ep.filter(x=>x.excess>0).length/ep.length,avg=whiteAvg(ep.map(x=>x.excess)),med=whiteMedian(ep.map(x=>x.excess));
   s.innerHTML=[['Innehavsperioder',ep.length],['Slår OMXSPI',beat.toFixed(1).replace('.',',')+' %'],
-    ['Snitt mot OMX',signed(avg,' p.e.')],['Median mot OMX',signed(med,' p.e.')]]
+    ['Snitt mot OMX',signed(avg,' p.e.')],['Median mot OMX',signed(med,' p.e.')],
+    ['Veckor med aktiedata',weeksWithMemberData+'/'+r.weeks.length]]
     .map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
   const rows=(arr,label)=>'<tr><th>'+label+'</th><th>Perioder</th><th>Slår OMX</th><th>Snitt mot OMX</th><th>Median mot OMX</th><th>Aktie snitt</th><th>Veckor snitt</th></tr>'+
     arr.map(x=>`<tr><td style="text-align:left">${x.key}</td><td>${x.n}</td><td>${x.beat.toFixed(1).replace('.',',')} %</td><td class="${classByValue(x.avgExcess)}">${signed(x.avgExcess,' p.e.')}</td><td class="${classByValue(x.medianExcess)}">${signed(x.medianExcess,' p.e.')}</td><td>${signed(x.avgStock,' %')}</td><td>${x.avgWeeks.toFixed(1).replace('.',',')}</td></tr>`).join('');
@@ -7150,7 +7163,10 @@ function renderFiveYearBacktest(r){
       <td style="text-align:left">${w.top10.join(', ')}</td>
     </tr>`).join('');
   document.getElementById('fiveYearBacktestStatus').textContent=
-    `Test klart: ${r.weekCount ?? r.weeks.length} veckor · ${r.universe} bolag · ${r.failures.length} bolag kunde inte hämtas. 10-årsdata ligger endast i minnet och påverkar inte din ordinarie databas.`
+    `Test klart: ${r.weekCount ?? r.weeks.length} veckor · ${r.universe} bolag · ${r.failures.length} bolag kunde inte hämtas. 10-årsdata ligger endast i minnet och påverkar inte din ordinarie databas.`;
+
+  // v20.7.4: kör analysen EFTER att backtestresultatet och veckodata är färdigbyggda.
+  renderWhiteHoldingAnalysis(r);
 }
 async function fetchAndRunFiveYearBacktest(){
   const button=document.getElementById('fetchFiveYearBacktest');
@@ -7189,7 +7205,6 @@ async function fetchAndRunFiveYearBacktest(){
   runFiveYearWhiteBacktest();
   button.disabled=false
 
-  renderWhiteHoldingAnalysis(r);
 }
 function exportFiveYearBacktestCsv(){
   const r=fiveYearBacktestResult;
