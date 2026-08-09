@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.5.1</title>
+<title>MomentumScore v20.5.2</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.5.1 – Vit 5-årstest mot OMXSPI</h1>
+<h1>MomentumScore v20.5.2 – Vit 5-årstest mot OMXSPI</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -6297,6 +6297,7 @@ function rsiClass(v){
 
 let fiveYearBacktestData=null;
 let fiveYearBacktestResult=null;
+let fiveYearDiagnosticsResult=null;
 const FIVE_YEAR_FEE_RATE=0.00069;
 
 function fiveYearSetProgress(done,total,text=''){
@@ -6558,7 +6559,7 @@ function runFiveYearWhiteBacktest(){
   };
   fiveYearBacktestResult=result;
   renderFiveYearBacktest(result);
-  runFiveYearDiagnostics(result);
+  fiveYearDiagnosticsResult=runFiveYearDiagnostics(result);
   document.getElementById('exportFiveYearBacktest').disabled=false;
   return result
 }
@@ -6793,6 +6794,19 @@ function exportFiveYearBacktestCsv(){
    ['Över/under OMXSPI p.e.',r.excess],['Vit CAGR %',r.cagr],['OMXSPI CAGR %',r.benchmarkCagr],['Max drawdown %',r.maxDrawdown],
    ['Volatilitet %',r.volatility],['Veckor över OMX %',r.beatWeeks],['Affärer',r.trades],['Courtage kr',r.fees],['Handlad omsättning %',r.turnover],
    ['Bolag i universum',r.universe],['Misslyckade hämtningar',r.failures.length]].forEach(x=>lines.push(x));
+  const d=fiveYearDiagnosticsResult;
+  if(d){
+    lines.push([]);
+    lines.push(['STRESSTESTER']);
+    lines.push(['Test','Status','Vit totalavkastning %','OMXSPI totalavkastning %','Över/under OMX p.e.','Skillnad mot bas p.e.','CAGR %','Max drawdown %','Volatilitet %','Affärer','Courtage kr','Handlad omsättning %','Detalj']);
+    const addStress=(name,status,x,detail='')=>lines.push([name,status,x?.totalReturn??'',x?.benchmarkReturn??'',x?.excess??'',x&&Number.isFinite(x.totalReturn)?x.totalReturn-r.totalReturn:'',x?.cagr??'',x?.maxDrawdown??'',x?.volatility??'',x?.trades??'',x?.fees??'',x?.turnover??'',detail]);
+    lines.push(['1. Tids-/look-ahead-audit',d.audit?.pass?'PASS':'FAIL','','','','','','','','','','',d.audit?`${d.audit.checks} tidskontroller; ${d.audit.violations.length} avvikelser`:'']);
+    addStress('2. Exekvering +1 handelsdag',d.delayed?'KÖRD':'FEL',d.delayed,'Alla köp/sälj skjuts en extra handelsdag');
+    addStress('3. Kostnadsstress 0,25 %',d.highFee?'KÖRD':'FEL',d.highFee,'Courtage 0,25 % vid köp och försäljning');
+    addStress('4A. Breddtest Top 5',d.top5?'KÖRD':'FEL',d.top5,'Top 5 i stället för Top 10');
+    addStress('4B. Breddtest Top 15',d.top15?'KÖRD':'FEL',d.top15,'Top 15 i stället för Top 10');
+    addStress('5. Ombalansering varannan vecka',d.biweekly?'KÖRD':'FEL',d.biweekly,'Portföljen får bara ändras varannan vecka');
+  }
   const csv='\ufeff'+lines.map(row=>row.map(csvEscape).join(';')).join('\n');
   downloadTextFile(csv,`MomentumScore_Vit_5ar_${todayISO()}.csv`,'text/csv;charset=utf-8')
 }
