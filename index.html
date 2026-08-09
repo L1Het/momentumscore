@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.5.0</title>
+<title>MomentumScore v20.5.1</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.5.0 – Vit 5-årstest mot OMXSPI</h1>
+<h1>MomentumScore v20.5.1 – Vit 5-årstest mot OMXSPI</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -660,13 +660,13 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
   <div id="fiveYearBacktestSummary" class="summary" style="margin-top:12px"></div>
   <div id="fiveYearBacktestVerdict"></div>
   <div id="fiveYearBacktestChart" class="backtest-chart hidden"></div>
+  <div class="card tablewrap" style="margin-top:12px"><table id="fiveYearBacktestTable"></table></div>
   <div class="card" style="margin-top:12px">
     <h3>Diagnostik – 5 oberoende stresstester</h3>
     <p class="note">Körs automatiskt på samma femårsdata efter huvudtestet. Syftet är att avslöja tidsläckage och resultat som är alltför känsliga för exekvering, kostnader, portföljbredd eller ombalanseringsfrekvens.</p>
     <div id="fiveYearDiagnosticSummary" class="summary"></div>
     <div class="tablewrap"><table id="fiveYearDiagnosticTable"></table></div>
   </div>
-  <div class="card tablewrap" style="margin-top:12px"><table id="fiveYearBacktestTable"></table></div>
   <p class="note backtest-warning"><b>Viktig begränsning:</b> testet använder bolagen som finns i din databas idag även bakåt i tiden. Bolag som lämnat databasen/börsen saknas, vilket ger survivorship bias. Resultatet är därför ett starkt diagnostiskt test av Vit-modellen men inte ett perfekt historiskt fondfacit.</p>
 </div>
 
@@ -6546,7 +6546,7 @@ function runFiveYearWhiteBacktest(){
   const benchmarkCagr=Number.isFinite(benchmarkReturn)?(Math.pow(1+benchmarkReturn/100,1/years)-1)*100:NaN;
   const validWeeks=weeks.filter(w=>Number.isFinite(w.excess));
   const result={
-    generatedAt:nowISO(),startDate:first.date,endDate:last.date,years,weeks:weeks.length,
+    generatedAt:nowISO(),startDate:first.date,endDate:last.date,years,weekCount:weeks.length,
     totalReturn,benchmarkReturn,excess:Number.isFinite(benchmarkReturn)?totalReturn-benchmarkReturn:NaN,
     cagr,benchmarkCagr,cagrExcess:Number.isFinite(benchmarkCagr)?cagr-benchmarkCagr:NaN,
     maxDrawdown:fiveYearMaxDrawdown(points),volatility:fiveYearVolatility(points),
@@ -6730,7 +6730,7 @@ function renderFiveYearBacktest(r){
     ['Handlad omsättning',r.turnover.toFixed(0).replace('.',',')+' %']
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b style="${String(b).length>18?'font-size:14px':''}">${b}</b></div>`).join('');
   const beats=Number.isFinite(r.excess)&&r.excess>0;
-  verdict.innerHTML=`<div class="${beats?'backtest-ok':'backtest-warning'}"><b>${beats?'Vit slog OMXSPI i detta test.':'Vit slog inte OMXSPI i detta test.'}</b> ${Number.isFinite(r.excess)?`Skillnaden blev ${signed(r.excess,' procentenheter')} över hela perioden.`:''} Testet omfattar ${r.universe} nuvarande bolag och ${r.weeks} portföljveckor.</div>`;
+  verdict.innerHTML=`<div class="${beats?'backtest-ok':'backtest-warning'}"><b>${beats?'Vit slog OMXSPI i detta test.':'Vit slog inte OMXSPI i detta test.'}</b> ${Number.isFinite(r.excess)?`Skillnaden blev ${signed(r.excess,' procentenheter')} över hela perioden.`:''} Testet omfattar ${r.universe} nuvarande bolag och ${r.weekCount ?? r.weeks.length} portföljveckor.</div>`;
   chart.classList.remove('hidden');chart.innerHTML=fiveYearChart(r);
   table.innerHTML='<tr><th>Vecka</th><th>Signal</th><th>Start</th><th>Vit vecka</th><th>OMXSPI vecka</th><th>Över/under</th><th>Vit sedan start</th><th>OMX sedan start</th><th>Top 10</th></tr>'+
     r.weeks.slice().reverse().map(w=>`<tr>
@@ -6743,7 +6743,7 @@ function renderFiveYearBacktest(r){
       <td style="text-align:left">${w.top10.join(', ')}</td>
     </tr>`).join('');
   document.getElementById('fiveYearBacktestStatus').textContent=
-    `Test klart: ${r.weeks} veckor · ${r.universe} bolag · ${r.failures.length} bolag kunde inte hämtas. Femårsdata ligger endast i minnet och påverkar inte din ordinarie databas.`
+    `Test klart: ${r.weekCount ?? r.weeks.length} veckor · ${r.universe} bolag · ${r.failures.length} bolag kunde inte hämtas. Femårsdata ligger endast i minnet och påverkar inte din ordinarie databas.`
 }
 async function fetchAndRunFiveYearBacktest(){
   const button=document.getElementById('fetchFiveYearBacktest');
