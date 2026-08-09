@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.4.0</title>
+<title>MomentumScore v20.5.0</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.4.0 – Vit 5-årstest mot OMXSPI</h1>
+<h1>MomentumScore v20.5.0 – Vit 5-årstest mot OMXSPI</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -660,6 +660,12 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
   <div id="fiveYearBacktestSummary" class="summary" style="margin-top:12px"></div>
   <div id="fiveYearBacktestVerdict"></div>
   <div id="fiveYearBacktestChart" class="backtest-chart hidden"></div>
+  <div class="card" style="margin-top:12px">
+    <h3>Diagnostik – 5 oberoende stresstester</h3>
+    <p class="note">Körs automatiskt på samma femårsdata efter huvudtestet. Syftet är att avslöja tidsläckage och resultat som är alltför känsliga för exekvering, kostnader, portföljbredd eller ombalanseringsfrekvens.</p>
+    <div id="fiveYearDiagnosticSummary" class="summary"></div>
+    <div class="tablewrap"><table id="fiveYearDiagnosticTable"></table></div>
+  </div>
   <div class="card tablewrap" style="margin-top:12px"><table id="fiveYearBacktestTable"></table></div>
   <p class="note backtest-warning"><b>Viktig begränsning:</b> testet använder bolagen som finns i din databas idag även bakåt i tiden. Bolag som lämnat databasen/börsen saknas, vilket ger survivorship bias. Resultatet är därför ett starkt diagnostiskt test av Vit-modellen men inte ett perfekt historiskt fondfacit.</p>
 </div>
@@ -6420,7 +6426,7 @@ function fiveYearWeeklySignals(indexSeries){
   return [...weeks.entries()].map(([weekKey,p])=>({weekKey,date:p.date,close:num(p.close)}))
     .sort((a,b)=>a.date.localeCompare(b.date))
 }
-function fiveYearTop10(date,previousTickers=[]){
+function fiveYearTopN(date,previousTickers=[],topN=10){
   const cfg=loadWhitePlateaus(),prev=new Set(previousTickers);
   const candidates=[];
   for(const item of fiveYearBacktestData.stocks){
@@ -6433,8 +6439,9 @@ function fiveYearTop10(date,previousTickers=[]){
     if(a.incumbent!==b.incumbent)return a.incumbent?-1:1;
     return String(a.ticker).localeCompare(String(b.ticker),'sv')
   });
-  return candidates.slice(0,10)
+  return candidates.slice(0,Math.max(1,topN))
 }
+function fiveYearTop10(date,previousTickers=[]){return fiveYearTopN(date,previousTickers,10)}
 function fiveYearPortfolioValue(state,date){
   let value=state.cash;
   for(const [ticker,pos] of Object.entries(state.positions)){
@@ -6551,9 +6558,136 @@ function runFiveYearWhiteBacktest(){
   };
   fiveYearBacktestResult=result;
   renderFiveYearBacktest(result);
+  runFiveYearDiagnostics(result);
   document.getElementById('exportFiveYearBacktest').disabled=false;
   return result
 }
+
+function fiveYearAdvanceDate(series,date,steps=1){
+  let current=date;
+  for(let i=0;i<steps;i++){
+    current=fiveYearNextDate(series,current);
+    if(!current)return null
+  }
+  return current
+}
+function fiveYearRunVariant(options={}){
+  if(!fiveYearBacktestData?.index?.length||!fiveYearBacktestData?.stocks?.length)return null;
+  const topN=Math.max(1,Number(options.topN)||10);
+  const feeRate=Number.isFinite(Number(options.feeRate))?Number(options.feeRate):FIVE_YEAR_FEE_RATE;
+  const extraDelay=Math.max(0,Math.floor(Number(options.extraDelay)||0));
+  const rebalanceEvery=Math.max(1,Math.floor(Number(options.rebalanceEvery)||1));
+  const signals=fiveYearWeeklySignals(fiveYearBacktestData.index);
+  const state={cash:100000,positions:{},fees:0,trades:0,turnover:0};
+  const points=[];
+  let benchmarkStart=NaN,started=false,previousTarget=[],activeTarget=[];
+  for(let s=0;s<signals.length-1;s++){
+    const signal=signals[s];
+    let executionDate=fiveYearNextDate(fiveYearBacktestData.index,signal.date);
+    if(executionDate&&extraDelay)executionDate=fiveYearAdvanceDate(fiveYearBacktestData.index,executionDate,extraDelay);
+    if(!executionDate)continue;
+    const shouldRebalance=!started||(s%rebalanceEvery===0);
+    let target=activeTarget;
+    if(shouldRebalance){
+      target=fiveYearTopN(signal.date,previousTarget,topN);
+      if(target.length<Math.min(5,topN))continue;
+    }
+    const targetTickers=target.map(x=>x.ticker);
+    if(!started){
+      const usable=target.filter(x=>Number.isFinite(fiveYearPriceOnOrAfter(x.series,executionDate)));
+      if(usable.length<Math.min(5,topN))continue;
+      const per=state.cash/usable.length;
+      for(const item of usable){
+        const price=fiveYearPriceOnOrAfter(item.series,executionDate);
+        const gross=per/(1+feeRate),fee=gross*feeRate;
+        state.positions[item.ticker]={shares:gross/price};
+        state.cash-=gross+fee;state.fees+=fee;state.turnover+=gross;state.trades++
+      }
+      benchmarkStart=fiveYearPriceOnOrAfter(fiveYearBacktestData.index,executionDate);
+      started=true;activeTarget=target;previousTarget=targetTickers
+    }else if(shouldRebalance){
+      const outgoing=Object.keys(state.positions).filter(t=>!targetTickers.includes(t));
+      let proceeds=0;
+      for(const ticker of outgoing){
+        const item=fiveYearBacktestData.stockMap[ticker],pos=state.positions[ticker];
+        const price=item?fiveYearPriceOnOrAfter(item.series,executionDate):NaN;
+        if(!Number.isFinite(price))continue;
+        const gross=pos.shares*price,fee=gross*feeRate;
+        proceeds+=gross-fee;state.fees+=fee;state.turnover+=gross;state.trades++;delete state.positions[ticker]
+      }
+      state.cash+=proceeds;
+      const incoming=target.filter(x=>!state.positions[x.ticker]&&Number.isFinite(fiveYearPriceOnOrAfter(x.series,executionDate)));
+      if(incoming.length&&state.cash>0){
+        const alloc=state.cash/incoming.length;
+        for(const item of incoming){
+          const price=fiveYearPriceOnOrAfter(item.series,executionDate);
+          const gross=alloc/(1+feeRate),fee=gross*feeRate;
+          state.positions[item.ticker]={shares:gross/price};
+          state.cash-=gross+fee;state.fees+=fee;state.turnover+=gross;state.trades++
+        }
+      }
+      activeTarget=target;previousTarget=targetTickers
+    }
+    const value=fiveYearPortfolioValue(state,executionDate),idx=fiveYearPriceOnOrBefore(fiveYearBacktestData.index,executionDate);
+    if(started)points.push({date:executionDate,value,indexValue:idx})
+  }
+  if(points.length<2)return null;
+  const first=points[0],last=points[points.length-1];
+  const years=Math.max((new Date(last.date)-new Date(first.date))/86400000/365.25,0.01);
+  const totalReturn=(last.value/100000-1)*100;
+  const benchmarkReturn=Number.isFinite(benchmarkStart)&&benchmarkStart>0?(last.indexValue/benchmarkStart-1)*100:NaN;
+  return{totalReturn,benchmarkReturn,excess:Number.isFinite(benchmarkReturn)?totalReturn-benchmarkReturn:NaN,
+    cagr:(Math.pow(last.value/100000,1/years)-1)*100,maxDrawdown:fiveYearMaxDrawdown(points),volatility:fiveYearVolatility(points),
+    trades:state.trades,fees:state.fees,turnover:state.turnover/100000*100,finalValue:last.value,startDate:first.date,endDate:last.date}
+}
+function fiveYearTimeLeakAudit(){
+  const signals=fiveYearWeeklySignals(fiveYearBacktestData.index);
+  const cfg=loadWhitePlateaus();
+  let checks=0,violations=[];
+  for(let s=0;s<signals.length-1;s++){
+    const signal=signals[s],executionDate=fiveYearNextDate(fiveYearBacktestData.index,signal.date);
+    if(!executionDate)continue;
+    if(String(executionDate)<=String(signal.date))violations.push(`Exekvering ${executionDate} är inte efter signal ${signal.date}`);
+    checks++;
+    for(const item of fiveYearBacktestData.stocks){
+      const r=whiteHistoricalScore(item.series,signal.date,cfg);
+      if(!r)continue;
+      checks++;
+      if(String(r.technical.date)>String(signal.date)){
+        violations.push(`${item.ticker}: teknisk datapunkt ${r.technical.date} ligger efter signal ${signal.date}`);
+        if(violations.length>=20)break
+      }
+    }
+    if(violations.length>=20)break
+  }
+  return{checks,violations,pass:violations.length===0}
+}
+function runFiveYearDiagnostics(base){
+  const audit=fiveYearTimeLeakAudit();
+  const delayed=fiveYearRunVariant({extraDelay:1});
+  const highFee=fiveYearRunVariant({feeRate:0.0025});
+  const top5=fiveYearRunVariant({topN:5}),top15=fiveYearRunVariant({topN:15});
+  const biweekly=fiveYearRunVariant({rebalanceEvery:2});
+  const rows=[
+    {name:'1. Tids-/look-ahead-audit',detail:`${audit.checks.toLocaleString('sv-SE')} tidskontroller`,status:audit.pass?'PASS':'FAIL',result:audit.pass?'Inga framtida datapunkter hittades':audit.violations[0]},
+    {name:'2. Exekvering +1 handelsdag',detail:'Alla köp/sälj skjuts en extra handelsdag',status:delayed?'KÖRD':'FEL',result:delayed?`Vit ${signed(delayed.totalReturn,' %')} · över OMX ${signed(delayed.excess,' p.e.')} · Δ bas ${signed(delayed.totalReturn-base.totalReturn,' p.e.')}`:'Kunde inte köras'},
+    {name:'3. Kostnadsstress 0,25 %',detail:'Courtage 0,25 % vid både köp och försäljning',status:highFee?'KÖRD':'FEL',result:highFee?`Vit ${signed(highFee.totalReturn,' %')} · över OMX ${signed(highFee.excess,' p.e.')} · courtage ${highFee.fees.toLocaleString('sv-SE',{maximumFractionDigits:0})} kr`:'Kunde inte köras'},
+    {name:'4. Breddtest Top 5 / Top 15',detail:'Samma ranking men smalare respektive bredare portfölj',status:top5&&top15?'KÖRD':'FEL',result:top5&&top15?`Top 5 ${signed(top5.totalReturn,' %')} · Top 15 ${signed(top15.totalReturn,' %')} · bas Top 10 ${signed(base.totalReturn,' %')}`:'Kunde inte köras'},
+    {name:'5. Ombalansering varannan vecka',detail:'Nya signaler får bara ändra portföljen varannan vecka',status:biweekly?'KÖRD':'FEL',result:biweekly?`Vit ${signed(biweekly.totalReturn,' %')} · över OMX ${signed(biweekly.excess,' p.e.')} · ${biweekly.trades} affärer`:'Kunde inte köras'}
+  ];
+  const table=document.getElementById('fiveYearDiagnosticTable'),summary=document.getElementById('fiveYearDiagnosticSummary');
+  if(table)table.innerHTML='<tr><th>Test</th><th>Vad ändras</th><th>Status</th><th>Resultat</th></tr>'+rows.map(x=>`<tr><td style="text-align:left"><b>${x.name}</b></td><td style="text-align:left">${x.detail}</td><td><b>${x.status}</b></td><td style="text-align:left">${x.result}</td></tr>`).join('');
+  const variants=[delayed,highFee,top5,top15,biweekly].filter(Boolean);
+  const stillBeat=variants.filter(x=>Number.isFinite(x.excess)&&x.excess>0).length;
+  const robust=audit.pass&&stillBeat>=4;
+  if(summary)summary.innerHTML=[
+    ['Tidsaudit',audit.pass?'PASS':'FAIL'],
+    ['Stressvarianter över OMX',`${stillBeat}/${variants.length}`],
+    ['Diagnostisk bedömning',robust?'Robust i dessa tester':'Känslighet finns']
+  ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
+  return{audit,delayed,highFee,top5,top15,biweekly,rows}
+}
+
 function fiveYearChart(result){
   const pts=result.points;
   if(pts.length<2)return '';
@@ -6621,6 +6755,8 @@ async function fetchAndRunFiveYearBacktest(){
   document.getElementById('fiveYearBacktestVerdict').innerHTML='';
   document.getElementById('fiveYearBacktestChart').classList.add('hidden');
   document.getElementById('fiveYearBacktestTable').innerHTML='';
+  if(document.getElementById('fiveYearDiagnosticTable'))document.getElementById('fiveYearDiagnosticTable').innerHTML='';
+  if(document.getElementById('fiveYearDiagnosticSummary'))document.getElementById('fiveYearDiagnosticSummary').innerHTML='';
   const stocks=[],items=rows.map((r,i)=>({type:'stock',i,symbol:(r.yahooSymbol||inferYahooSymbol(r.ticker,r.market)).trim(),label:r.company||r.ticker||`Bolag ${i+1}`}))
     .filter(x=>x.symbol);
   items.unshift({type:'index',symbol:'^OMXSPI',label:'OMXSPI'});
