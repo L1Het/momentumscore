@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.7.0 – Långrobusthet 2017–2026 · fryst modell</h1>
+<h1>MomentumScore v20.7.1 – Vit 2.1 · 10/30/30/30 + Top10/Top20</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -591,9 +591,10 @@ Utveckling kan växlas mellan Aktier och Veckoportföljer. Portföljläget visar
 <div class="rowcard"><b>Fas 1 – stabil grund</b><br>
 Gemensam bolagsvy används från Översikt, Poäng, Topplista, Utveckling och portföljtabeller. Äldre felkopplad bolagshistorik bevaras men filtreras i visningen, ofullständiga historikposter kan inte krascha bolagsvyn och Topplistan är fortsatt enda sanningskälla för nya Top 10-portföljer.</div>
 <div class="rowcard"><b>Vit – historiskt 10-årstest</b><br>
-Under Inställningar finns ett fristående walk-forward-test mot OMXSPI. Det hämtar fem års dagliga kurser i arbetsminnet, räknar Vit 2.0 endast med information som fanns på respektive historiskt datum och bygger nästa veckas Top 10 från sista handelsdagen i veckan. Kvarvarande innehav behålls, utgående säljs, nya köps och courtage 0,069 % räknas. Testdata skrivs inte över i den levande databasen.</div>
-<div class="rowcard"><b>Vit 2.0 – fyra pucklar á 25 poäng</b><br>
-Vit består av Kurs/MA200, MA50/MA200, MA200-trend 1 månad och Trendstabilitet 5 dagar. Trendstabilitet mäter förändringen i avståndet Kurs–MA200 under fem handelsdagar och får full poäng ungefär mellan −2 och +1 procentenheter. Befintliga Vit- och Snittveckor räknas om historiskt med den nya modellen; Blå lämnas oförändrad.</div>
+Under Inställningar finns ett fristående walk-forward-test mot OMXSPI. Det hämtar tio års dagliga kurser i arbetsminnet, räknar Vit 2.1 endast med information som fanns på respektive historiskt datum och bygger nästa veckas Top 10 från sista handelsdagen i veckan. Kvarvarande innehav behålls, utgående säljs, nya köps och courtage 0,069 % räknas. Testdata skrivs inte över i den levande databasen.</div>
+<div class="rowcard"><b>Vit 2.1 – fyra tekniska pucklar · 10/30/30/30</b><br>
+Vit består av Kurs/MA200 (10 p), MA50/MA200 (30 p), MA200-trend 1 månad (30 p) och Trendstabilitet 5 dagar (30 p). Trendstabilitet mäter förändringen i avståndet Kurs–MA200 under fem handelsdagar och får full poäng ungefär mellan −2 och +1 procentenheter. Befintliga Vit- och Snittveckor räknas om historiskt med Vit 2.1; Blå lämnas oförändrad. Vit använder dessutom Top10 in / Top20 ut: nya innehav måste ligga i Top10, medan befintliga Vit-innehav får ligga kvar så länge de är Top20.</div>
+<div class="rowcard"><b>Vit 2.1 – produktionsregel</b><br>Nya Vit-innehav måste vara rankade Top10. Ett befintligt Vit-innehav säljs först när det faller utanför Top20. Snitt påverkas av den nya Vit-poängen och byggs därför om, men Snitt behåller sin vanliga Top10-selektion. Blå ändras inte.</div>
 <div class="rowcard"><b>Fredag 18:00 – två separata regler</b><br>
 När nästa veckas Top 10 skapas efter fredagens kursuppdatering ombalanseras de rullande portföljerna omedelbart på samma fredagsstängning. Utgående innehav säljs till stängningskurs minus säljcourtage och nya innehav köps till stängningskurs plus köpcourtage. Den frysta nya veckoportföljen ligger samtidigt kvar på 0 % till måndag, eftersom fredagens rörelse redan är avslutad när portföljen skapas.</div>
 <div class="rowcard"><b>Sortering i alla tabeller</b><br>
@@ -649,6 +650,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
 
 <div class="card" id="whiteFiveYearBacktestCard">
   <h2>⚪ Vit – 10-årstest mot OMXSPI</h2>
+  <p class="note"><b>Aktiv Vit 2.1:</b> 10/30/30/30 i faktorvikter. Vit-portföljen använder Top10 in / Top20 ut. Snitt räknas om med den nya Vit-poängen men behåller sin egen Top10-logik.</p>
   <p class="note">Hämtar exakt Yahoo range=10y med dagliga stängningskurser. De första cirka 220 handelsdagarna fungerar som uppvärmning för MA200 och räknar modellen historiskt utan framtidsdata. Den frysta huvudmodellen är 10/30/30/30 i faktorvikter samt Top10 in / Top20 ut. Varje fredags stängning används som signal, affärer genomförs på nästa tillgängliga handelsdag och courtage är 0,069 % vid köp och försäljning. Referenslogik och årsdeltester exporteras också.</p>
   <div class="actions">
     <button id="fetchFiveYearBacktest">Hämta 10 år och kör test</button>
@@ -1129,7 +1131,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
     <div class="actions" style="margin-top:12px">
       <button id="runCurveOptimizer">Optimera poängkurvor</button>
       <button class="secondary" id="exportCurveJson">Exportera kurvor JSON</button>
-      <button class="secondary" id="buildCurveDraft">Skapa Vit 2.0-utkast</button>
+      <button class="secondary" id="buildCurveDraft">Skapa Vit 2.1-utkast</button>
     </div>
     <div class="curve-progress" style="margin-top:12px"><div id="curveProgressBar"></div></div>
     <div id="curveStatus" class="note" style="margin-top:8px">Kör AutoLab, Vit Optimizer och Intervalloptimeraren först för bästa resultat.</div>
@@ -1153,7 +1155,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
   </div>
 
   <div class="card">
-    <h3>Vit 2.0 – regelutkast</h3>
+    <h3>Vit 2.1 – regelutkast</h3>
     <div id="curveDraft" class="note">Ingen kurvoptimering körd.</div>
   </div>
 
@@ -1497,10 +1499,10 @@ function returnAtOffset(history,offset){
 
 const WHITE_PLATEAU_KEY='momentumscore_white_plateaus_v17';
 const DEFAULT_WHITE_PLATEAUS={
-  distanceMa200:{name:'Kurs mot MA200',min:2.20,max:4.48,leftZero:-8,rightZero:25,maxPoints:25},
-  ma50Spread:{name:'MA50 mot MA200',min:8.40,max:13.20,leftZero:-2,rightZero:30,maxPoints:25},
-  ma200Slope1m:{name:'MA200-trend 1 månad',min:0.69,max:1.23,leftZero:-2.5,rightZero:5.5,maxPoints:25},
-  trendStability5d:{name:'Trendstabilitet 5 dagar',min:-2.0,max:1.0,leftZero:-8,rightZero:8,maxPoints:25}
+  distanceMa200:{name:'Kurs mot MA200',min:2.20,max:4.48,leftZero:-8,rightZero:25,maxPoints:10},
+  ma50Spread:{name:'MA50 mot MA200',min:8.40,max:13.20,leftZero:-2,rightZero:30,maxPoints:30},
+  ma200Slope1m:{name:'MA200-trend 1 månad',min:0.69,max:1.23,leftZero:-2.5,rightZero:5.5,maxPoints:30},
+  trendStability5d:{name:'Trendstabilitet 5 dagar',min:-2.0,max:1.0,leftZero:-8,rightZero:8,maxPoints:30}
 };
 function loadWhitePlateaus(){
   try{
@@ -1511,6 +1513,44 @@ function loadWhitePlateaus(){
 }
 function saveWhitePlateaus(config){
   localStorage.setItem(WHITE_PLATEAU_KEY,JSON.stringify(config))
+}
+
+const WHITE21_WEIGHTS={distanceMa200:10,ma50Spread:30,ma200Slope1m:30,trendStability5d:30};
+const WHITE21_MIGRATION_KEY='momentumscore_white21_10_30_30_30_migration_v1';
+function enforceWhite21Weights(){
+  const cfg=loadWhitePlateaus();
+  let changed=false;
+  for(const [key,maxPoints] of Object.entries(WHITE21_WEIGHTS)){
+    if(cfg[key]&&num(cfg[key].maxPoints)!==maxPoints){cfg[key].maxPoints=maxPoints;changed=true}
+  }
+  if(changed)saveWhitePlateaus(cfg);
+  return changed
+}
+function rebuildStoredWhiteScoresForVit21(){
+  let rebuilt=0;
+  for(const row of rows){
+    const history=Array.isArray(row.marketHistory)?row.marketHistory:[];
+    for(const point of history){
+      const date=String(point?.savedAt||'').slice(0,10);
+      if(!date)continue;
+      const prices=(Array.isArray(row.priceHistory)?row.priceHistory:[])
+        .filter(p=>String(p?.date||'').slice(0,10)<=date)
+        .slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+      if(prices.length<263)continue;
+      try{
+        const technical=technicalFromPriceHistory(prices);
+        const historicalRow={...row,...technical,priceHistory:prices};
+        const w=whiteCalc(historicalRow);
+        if(!w.dataReady)continue;
+        point.whiteScore=w.total;
+        point.whiteModelVersion='white-2.1-10-30-30-30';
+        const blue=num(point.blueScore??point.score);
+        point.averageScore=Number.isFinite(blue)?(blue+w.total)/2:point.averageScore;
+        rebuilt++
+      }catch(e){console.warn('Vit 2.1 historikpoäng kunde inte räknas om',row.ticker,date,e)}
+    }
+  }
+  return rebuilt
 }
 function plateauFraction(value,cfg){
   if(!Number.isFinite(value))return 0;
@@ -1573,7 +1613,7 @@ function whiteCalc(r){
     `Kurs/MA200 ${whitePartText(parts.distanceMa200)} p · MA50/MA200 ${whitePartText(parts.ma50Spread)} p · MA200-trend ${whitePartText(parts.ma200Slope1m)} p · Trendstabilitet ${whitePartText(parts.trendStability5d)} p`;
   return{
     trend:total,relative:0,fundamental:0,quality:0,valuation:0,total,qualified,dataReady,rating,
-    warning,failReasons:missing,parts,technicalValues:t,plateaus:cfg,modelVersion:'white-2.0',
+    warning,failReasons:missing,parts,technicalValues:t,plateaus:cfg,modelVersion:'white-2.1-10-30-30-30',
     rs3:NaN,rs6:NaN,rs12:NaN,stock3:NaN,stock6:NaN,stock12:NaN,index3:NaN,index6:NaN,index12:NaN,
     ma50:t.ma50,ma200Level:t.ma200Level,golden:Number.isFinite(t.ma50Spread)&&t.ma50Spread>0?3:0
   }
@@ -5039,7 +5079,7 @@ function buildCurveDraft(){
   const wSum=best.weights.reduce((a,b)=>a+b,0),pts=best.weights.map(w=>Math.round(w/wSum*100));
   pts[0]+=100-pts.reduce((a,b)=>a+b,0);
   document.getElementById('curveDraft').innerHTML=`
-    <div class="status ok"><b>Vit 2.0 – ren teknisk 100-poängsmodell</b></div>
+    <div class="status ok"><b>Vit 2.1 – ren teknisk 100-poängsmodell</b></div>
     <div class="tablewrap"><table><tr><th>Faktor</th><th>Maxpoäng</th><th>Kurvform</th><th>Centrum</th><th>Vänsterbredd</th><th>Högerbredd</th></tr>
       ${factors.map((f,i)=>{
         const p=lastCurveReport.factorResults.find(r=>r.factor===f).best;
@@ -7387,7 +7427,7 @@ function historicalCandidate(row,cutoffDate){
     blueQualified=blue.qualified
   }
 
-  // Vit 1.0-värden i marketHistory återanvänds inte. Historisk Vit 2.0
+  // Vit 1.0-värden i marketHistory återanvänds inte. Historisk Vit 2.1
   // räknas om från den kurshistorik som faktiskt fanns på datumet.
   white=whiteCalc(historicalRow);
   whiteReady=white.dataReady;
@@ -7436,8 +7476,24 @@ function topListCandidatesForSnapshot(model,cutoffDate,previousSnapshot=null){
     .filter(candidate=>candidate.valid&&Number.isFinite(candidate.price)&&candidate.price>0)
     .sort(weeklyCandidateComparator(previousKeys))
 }
+function selectWeeklyCandidates(model,candidates,previousSnapshot=null){
+  if(model!=='white'||!previousSnapshot)return candidates.slice(0,10);
+  const previousKeys=new Set((previousSnapshot?.portfolios?.white?.members||[]).map(weeklyMemberKey).filter(Boolean));
+  const ranked=candidates.map((candidate,index)=>({...candidate,universeRank:index+1}));
+  const retained=ranked.filter(candidate=>candidate.universeRank<=20&&previousKeys.has(weeklyMemberKey(candidate.row)));
+  const selected=retained.slice();
+  const selectedKeys=new Set(selected.map(candidate=>weeklyMemberKey(candidate.row)));
+  for(const candidate of ranked.slice(0,10)){
+    const key=weeklyMemberKey(candidate.row);
+    if(selected.length>=10)break;
+    if(selectedKeys.has(key))continue;
+    selected.push(candidate);selectedKeys.add(key)
+  }
+  return selected.sort((a,b)=>a.universeRank-b.universeRank).slice(0,10)
+}
 function topListMembersForSnapshot(model,cutoffDate,previousSnapshot=null){
-  return topListCandidatesForSnapshot(model,cutoffDate,previousSnapshot).slice(0,10).map((candidate,index)=>({
+  const candidates=topListCandidatesForSnapshot(model,cutoffDate,previousSnapshot);
+  return selectWeeklyCandidates(model,candidates,previousSnapshot).map((candidate,index)=>({
     rank:index+1,
     ticker:candidate.row.ticker||'',
     company:candidate.row.company||'',
@@ -7448,14 +7504,16 @@ function topListMembersForSnapshot(model,cutoffDate,previousSnapshot=null){
     whiteScore:candidate.white.total,
     averageScore:candidate.average,
     selectionScore:candidate.score,
+    universeRank:candidate.universeRank||candidates.indexOf(candidate)+1,
     selectionModel:model,
-    selectionSource:'toplist-friday-1800-white2-v3'
+    selectionSource:'toplist-friday-1800-white21-top20-v1'
   }))
 }
 function snapshotUsesTopListClose(snapshot){
-  return snapshot?.selectionSource==='toplist-friday-1800-white2-v3'&&
+  const allowed=new Set(['toplist-friday-1800-white21-top20-v1']);
+  return allowed.has(snapshot?.selectionSource)&&
     ['blue','white','average'].every(model=>(snapshot?.portfolios?.[model]?.members||[]).length===10&&
-      snapshot.portfolios[model].members.every(member=>member.selectionSource==='toplist-friday-1800-white2-v3'))
+      snapshot.portfolios[model].members.every(member=>allowed.has(member.selectionSource)))
 }
 
 function weeklyMemberKey(ref){
@@ -7481,7 +7539,7 @@ function weeklyCandidateComparator(previousKeys){
 }
 function historicalWeeklyMembers(model,cutoffDate,previousSnapshot=null){
   const previousKeys=new Set((previousSnapshot?.portfolios?.[model]?.members||[]).map(weeklyMemberKey).filter(Boolean));
-  return rows.map(row=>{
+  const candidates=rows.map(row=>{
     const candidate=historicalCandidate(row,cutoffDate);
     const score=model==='blue'?candidate.blue.total:model==='white'?candidate.white.total:candidate.average;
     const valid=model==='blue'
@@ -7491,9 +7549,9 @@ function historicalWeeklyMembers(model,cutoffDate,previousSnapshot=null){
         :candidate.blueQualified&&candidate.whiteReady;
     return{...candidate,score,valid}
   }).filter(candidate=>candidate.valid&&Number.isFinite(candidate.score)&&Number.isFinite(candidate.price)&&candidate.price>0)
-    .sort(weeklyCandidateComparator(previousKeys))
-    .slice(0,10)
-    .map((candidate,index)=>({
+    .sort(weeklyCandidateComparator(previousKeys));
+  const selected=selectWeeklyCandidates(model,candidates,previousSnapshot);
+  return selected.map((candidate,index)=>({
       rank:index+1,
       ticker:candidate.row.ticker||'',
       company:candidate.row.company||'',
@@ -7501,7 +7559,11 @@ function historicalWeeklyMembers(model,cutoffDate,previousSnapshot=null){
       startPrice:candidate.price,
       blueScore:candidate.blue.total,
       whiteScore:candidate.white.total,
-      averageScore:candidate.average
+      averageScore:candidate.average,
+      selectionScore:candidate.score,
+      universeRank:candidate.universeRank||candidates.indexOf(candidate)+1,
+      selectionModel:model,
+      selectionSource:'toplist-friday-1800-white21-top20-v1'
     }))
 }
 function createHistoricalWeeklySnapshot(friday,automatic=true){
@@ -7529,7 +7591,7 @@ function createHistoricalWeeklySnapshot(friday,automatic=true){
     savedDate:cutoffDate,
     lockDate:cutoffDate,
     activationDate:isoDate(followingMonday(friday)),
-    selectionSource:'toplist-friday-1800-white2-v3',
+    selectionSource:'toplist-friday-1800-white21-top20-v1',
     benchmarkMarket,
     benchmarkSymbol:benchmarkSymbol(benchmarkMarket),
     benchmarkStart,
@@ -7601,7 +7663,7 @@ function createCurrentDataWeeklySnapshot(friday,automatic=true,forceRebuild=fals
     weekKey:targetInfo.key,year:targetInfo.year,week:targetInfo.week,
     savedAt:nowISO(),savedDate:cutoffDate,lockDate:cutoffDate,cutoffTime:'18:00',activationDate,
     preparedFrom:'friday-close-toplist',
-    selectionSource:'toplist-friday-1800-white2-v3',
+    selectionSource:'toplist-friday-1800-white21-top20-v1',
     benchmarkMarket,benchmarkSymbol:benchmarkSymbol(benchmarkMarket),benchmarkStart,
     portfolios:{blue:{name:'Blå',members:blue},white:{name:'Vit',members:white},average:{name:'Snitt',members:average}}
   };
@@ -7636,7 +7698,7 @@ function ensureNextWeekPortfolioAfterFriday(){
 }
 
 
-const WHITE2_WEEKLY_REBUILD_KEY='momentumscore_white2_weekly_rebuild_v1';
+const WHITE2_WEEKLY_REBUILD_KEY='momentumscore_white21_weekly_rebuild_10_30_30_30_top20_v1';
 
 function white2RebuildSnapshot(snapshot,previousSnapshot=null){
   const friday=snapshotLockFriday(snapshot);
@@ -7651,21 +7713,21 @@ function white2RebuildSnapshot(snapshot,previousSnapshot=null){
     ...member,
     rank:index+1,
     selectionModel:'blue',
-    selectionSource:'toplist-friday-1800-white2-v3'
+    selectionSource:'toplist-friday-1800-white21-top20-v1'
   }));
   const decorate=(members,model)=>members.map((member,index)=>({
     ...member,
     rank:index+1,
     closeDate:cutoffDate,
     selectionModel:model,
-    selectionSource:'toplist-friday-1800-white2-v3'
+    selectionSource:'toplist-friday-1800-white21-top20-v1'
   }));
 
   snapshot.lockDate=cutoffDate;
   snapshot.activationDate=isoDate(followingMonday(friday));
   snapshot.cutoffTime=snapshot.cutoffTime||'18:00';
-  snapshot.selectionSource='toplist-friday-1800-white2-v3';
-  snapshot.whiteModelVersion='2.0';
+  snapshot.selectionSource='toplist-friday-1800-white21-top20-v1';
+  snapshot.whiteModelVersion='2.1-10-30-30-30-top20';
   snapshot.whiteRebuiltAt=nowISO();
   snapshot.portfolios={
     ...snapshot.portfolios,
@@ -7689,8 +7751,10 @@ function rebuildWhite2WeeklyPortfolios(force=false){
   for(const snapshot of ordered){
     const hasWhite=(snapshot.portfolios?.white?.members||[]).length>0;
     const hasAverage=(snapshot.portfolios?.average?.members||[]).length>0;
-    if(hasWhite&&hasAverage&&white2RebuildSnapshot(snapshot,previous))rebuilt++;
-    previous=snapshot
+    if(hasWhite&&hasAverage&&white2RebuildSnapshot(snapshot,previous)){
+      rebuilt++;
+      previous=snapshot
+    }
   }
 
   if(rebuilt){
@@ -8320,7 +8384,7 @@ async function importSelectedFile(file){
   ]){
     try{fn()}catch(e){uiErrors.push(name+': '+e.message);console.error(name,e)}
   }
-  setImportStatus(`Import klar: ${rows.length} bolag. ${Object.keys(benchmarkHistories).length?'Jämförelseindex följde med.':'Jämförelseindex saknas – kör kursuppdatering för full uppföljning.'} ${weeklyPortfolios.length?weeklyPortfolios.length+' veckoportföljer återställdes. ':''}${rebuiltWhiteWeeks?rebuiltWhiteWeeks+' veckor räknades om med Vit 2.0. ':''}${result.skipped.length?result.skipped.length+' dubbletter hoppades över. ':''}${uiErrors.length?'Visningsvarning: '+uiErrors.join(' · '):''}`,uiErrors.length>0);
+  setImportStatus(`Import klar: ${rows.length} bolag. ${Object.keys(benchmarkHistories).length?'Jämförelseindex följde med.':'Jämförelseindex saknas – kör kursuppdatering för full uppföljning.'} ${weeklyPortfolios.length?weeklyPortfolios.length+' veckoportföljer återställdes. ':''}${rebuiltWhiteWeeks?rebuiltWhiteWeeks+' veckor räknades om med Vit 2.1. ':''}${result.skipped.length?result.skipped.length+' dubbletter hoppades över. ':''}${uiErrors.length?'Visningsvarning: '+uiErrors.join(' · '):''}`,uiErrors.length>0);
   toast(`Import klar: ${rows.length} bolag`);
 }
 document.getElementById('saveWeeklyNow').onclick=()=>createWeeklySnapshot(false,false);
@@ -8378,9 +8442,18 @@ document.getElementById('rerunFiveYearBacktest').onclick=runFiveYearWhiteBacktes
 document.getElementById('exportFiveYearBacktest').onclick=exportFiveYearBacktestCsv;
 document.getElementById('saveSettings').onclick=saveMarketSettings;document.getElementById('checkDatabase').onclick=renderDatabaseHealth;document.getElementById('restoreLocalBackup').onclick=restoreLocalBackup;document.getElementById('updatePrices').onclick=()=>updateAllPrices(false);
 try{
+  const weightChanged=enforceWhite21Weights();
+  if(!localStorage.getItem(WHITE21_MIGRATION_KEY)){
+    const scorePoints=rebuildStoredWhiteScoresForVit21();
+    persist();
+    localStorage.setItem(WHITE21_MIGRATION_KEY,'done');
+    console.info(`Vit 2.1 aktiverad: 10/30/30/30. ${scorePoints} sparade Vit-poäng räknades om.`)
+  }else if(weightChanged){persist()}
+}catch(error){console.error('Vit 2.1 viktmigrering misslyckades',error)}
+try{
   const rebuiltWhiteWeeks=rebuildWhite2WeeklyPortfolios(false);
-  if(rebuiltWhiteWeeks)console.info(`${rebuiltWhiteWeeks} historiska veckor räknades om med Vit 2.0.`);
-}catch(error){console.error('Vit 2.0-veckoåterbyggnad misslyckades',error)}
+  if(rebuiltWhiteWeeks)console.info(`${rebuiltWhiteWeeks} historiska veckor räknades om med Vit 2.1 (10/30/30/30 + Top10/Top20).`);
+}catch(error){console.error('Vit 2.1-veckoåterbyggnad misslyckades',error)}
 for(const [name,fn] of [
   ['Poäng/översikt',()=>render()],
   ['Förhandsvisning',()=>renderPreview()],
