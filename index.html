@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.5.7</title>
+<title>MomentumScore v20.5.8</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.5.7 – Viktfördelningstest</h1>
+<h1>MomentumScore v20.5.8 – Finviktning + årstest</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -6729,22 +6729,14 @@ function fiveYearTimeLeakAudit(){
 }
 function fiveYearWeightConfigs(){
   const k=['distanceMa200','ma50Spread','ma200Slope1m','trendStability5d'];
-  const out=[];
-  const add=(label,a)=>out.push({label,weights:Object.fromEntries(k.map((x,i)=>[x,a[i]]))});
-  add('25/25/25/25',[25,25,25,25]);
-  for(let i=0;i<4;i++){
-    const a=[20,20,20,20];a[i]=40;add(`40 på ${k[i]}`,a);
-  }
-  for(let i=0;i<4;i++){
-    const a=[30,30,30,30];a[i]=10;add(`10 på ${k[i]}`,a);
-  }
-  for(let i=0;i<4;i++)for(let j=i+1;j<4;j++){
-    const a=[15,15,15,15];a[i]=35;a[j]=35;add(`35/35 på ${k[i]} + ${k[j]}`,a);
-  }
-  for(let i=0;i<4;i++)for(let j=i+1;j<4;j++){
-    const a=[20,20,20,20];a[i]=30;a[j]=30;add(`30/30 på ${k[i]} + ${k[j]}`,a);
-  }
-  return out;
+  const raw=[
+    [25,25,25,25], [10,30,30,30],
+    [5,30,30,35],[10,25,30,35],[10,30,25,35],[10,30,35,25],
+    [15,25,30,30],[15,30,25,30],[15,30,30,25],[20,25,30,25],
+    [5,35,30,30],[5,30,35,30],[5,30,25,40],
+    [10,35,30,25],[10,25,35,30],[15,35,25,25]
+  ];
+  return raw.map((a,i)=>({label:(i===0?'Referens ':i===1?'Vinnare v20.5.7 ':'Fin ')+a.join('/'),weights:Object.fromEntries(k.map((x,j)=>[x,a[j]]))}));
 }
 function fiveYearWeightLabel(weights){
   const w=normalizedWhiteWeights(weights);
@@ -6756,9 +6748,12 @@ function runFiveYearWeightSensitivity(){
     const full=fiveYearRunVariant({topN:10,exitRank:20,whiteWeights:c.weights});
     const development=fiveYearRunVariant({topN:10,exitRank:20,whiteWeights:c.weights,startSignalDate:'2022-01-01',endSignalDate:'2024-12-31'});
     const oos=fiveYearRunVariant({topN:10,exitRank:20,whiteWeights:c.weights,startSignalDate:'2025-01-01',endSignalDate:'2026-12-31'});
-    const floor=Math.min(development?.excess??-Infinity,oos?.excess??-Infinity);
-    const avg=((development?.excess??0)+(oos?.excess??0))/2;
-    return{...c,weightLabel:fiveYearWeightLabel(c.weights),full,development,oos,robustFloor:floor,robustAvg:avg};
+    const yearly={};
+    for(const y of [2023,2024,2025,2026]) yearly[y]=fiveYearRunVariant({topN:10,exitRank:20,whiteWeights:c.weights,startSignalDate:`${y}-01-01`,endSignalDate:`${y}-12-31`});
+    const floor=Math.min(development?.excess??-Infinity,oos?.excess??-Infinity,...Object.values(yearly).map(r=>r?.excess??-Infinity));
+    const avgVals=[development?.excess,oos?.excess,...Object.values(yearly).map(r=>r?.excess)].filter(Number.isFinite);
+    const avg=avgVals.reduce((a,b)=>a+b,0)/Math.max(1,avgVals.length);
+    return{...c,weightLabel:fiveYearWeightLabel(c.weights),full,development,oos,yearly,robustFloor:floor,robustAvg:avg};
   });
   results.sort((a,b)=>(b.robustFloor-a.robustFloor)||(b.robustAvg-a.robustAvg));
   return results;
@@ -6961,13 +6956,13 @@ function exportFiveYearBacktestCsv(){
     }
     lines.push([]);
     lines.push(['VIKTFÖRDELNINGSTEST – Top10 in / Top20 ut fryst']);
-    lines.push(['Vikter (Kurs/MA200 · MA50/MA200 · MA200-trend · Trendstabilitet)','5 år avkastning %','5 år över OMX p.e.','Utveckling 2022-2024 avkastning %','Utveckling över OMX p.e.','OOS 2025-2026 avkastning %','OOS över OMX p.e.','Robusthetsgolv p.e.','Affärer 5 år','Max DD 5 år %','Volatilitet 5 år %']);
+    lines.push(['Vikter (Kurs/MA200 · MA50/MA200 · MA200-trend · Trendstabilitet)','5 år avkastning %','5 år över OMX p.e.','Utveckling 2022-2024 avkastning %','Utveckling över OMX p.e.','OOS 2025-2026 avkastning %','OOS över OMX p.e.','2023 avkastning %','2023 över OMX p.e.','2024 avkastning %','2024 över OMX p.e.','2025 avkastning %','2025 över OMX p.e.','2026 YTD avkastning %','2026 YTD över OMX p.e.','Robusthetsgolv p.e.','Robusthetssnitt p.e.','Affärer 5 år','Max DD 5 år %','Volatilitet 5 år %']);
     for(const x of (d.weightSensitivity||[])){
-      lines.push([x.weightLabel,x.full?.totalReturn??'',x.full?.excess??'',x.development?.totalReturn??'',x.development?.excess??'',x.oos?.totalReturn??'',x.oos?.excess??'',x.robustFloor??'',x.full?.trades??'',x.full?.maxDrawdown??'',x.full?.volatility??'']);
+      lines.push([x.weightLabel,x.full?.totalReturn??'',x.full?.excess??'',x.development?.totalReturn??'',x.development?.excess??'',x.oos?.totalReturn??'',x.oos?.excess??'',x.yearly?.[2023]?.totalReturn??'',x.yearly?.[2023]?.excess??'',x.yearly?.[2024]?.totalReturn??'',x.yearly?.[2024]?.excess??'',x.yearly?.[2025]?.totalReturn??'',x.yearly?.[2025]?.excess??'',x.yearly?.[2026]?.totalReturn??'',x.yearly?.[2026]?.excess??'',x.robustFloor??'',x.robustAvg??'',x.full?.trades??'',x.full?.maxDrawdown??'',x.full?.volatility??'']);
     }
   }
   const csv='\ufeff'+lines.map(row=>row.map(csvEscape).join(';')).join('\n');
-  downloadTextFile(csv,`MomentumScore_v20_5_7_Vit_5ar_${todayISO()}.csv`,'text/csv;charset=utf-8')
+  downloadTextFile(csv,`MomentumScore_v20_5_8_Vit_5ar_${todayISO()}.csv`,'text/csv;charset=utf-8')
 }
 
 function movingAverageAtOffset(closes,period=200,offset=0){
