@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.7.2 – portföljfix + innehavsanalys</h1>
+<h1>MomentumScore v20.7.3 – portfölj-synk + innehavsanalys</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -672,7 +672,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
     <div class="tablewrap"><table id="fiveYearDiagnosticTable"></table></div>
     <div class="rowcard" style="margin-top:18px">
       <h3>Vit 2.1 – vilka aktier fungerar?</h3>
-      <p class="note">Varje sammanhängande period som en aktie ligger i Vits historiska Top 10 mäts från inträde till utträde och jämförs med OMXSPI under exakt samma datum. Tabellen visar även om längre innehav och olika marknadsperioder har fungerat bättre eller sämre.</p>
+      <p class="note">Varje sammanhängande Top10-period jämförs med OMXSPI under exakt samma veckor. Analysen påverkar inte modellen.</p>
       <div id="whiteHoldingAnalysisSummary" class="summary"></div>
       <div class="tablewrap"><table id="whiteHoldingAnalysisCompany"></table></div>
       <div class="tablewrap" style="margin-top:14px"><table id="whiteHoldingAnalysisDuration"></table></div>
@@ -2810,8 +2810,7 @@ function buildRollingPortfolio(model,asOfDate=''){
     );
     const tradeDate=rollingSnapshotExecutionDate(snapshot);
 
-    // v20.7.2: en oförändrad Top 10 är fortfarande en genomförd veckouppdatering.
-    // Köpdatum/priser/antal lämnas orörda, men portföljens senaste uppdateringsdatum flyttas fram.
+    // v20.7.3: varje veckosnapshot räknas som bearbetad även om inga affärer behövs.
     if(snapshotIndex>0 && tradeDate) lastUpdateDate=tradeDate;
 
     if(snapshotIndex===0){
@@ -6637,15 +6636,12 @@ function runFiveYearWhiteBacktest(){
     const prevPoint=points.length>=2?points[points.length-2]:null;
     const weekRet=prevPoint&&prevPoint.value>0?(value/prevPoint.value-1)*100:NaN;
     const weekIdx=prevPoint&&prevPoint.indexValue>0?(idx/prevPoint.indexValue-1)*100:NaN;
-
-    // v20.7.2: spara varje Top10-akties egen kursutveckling under samma vecka.
-    // Detta används enbart av analysen "vilka aktier fungerar?" och påverkar inte portföljmotorn.
     const memberReturns={};
     if(prevPoint){
       for(const item of target){
         const p0=fiveYearPriceOnOrBefore(item.series,prevPoint.date);
         const p1=fiveYearPriceOnOrBefore(item.series,executionDate);
-        if(Number.isFinite(p0)&&p0>0&&Number.isFinite(p1)) memberReturns[item.ticker]=(p1/p0-1)*100;
+        if(Number.isFinite(p0)&&p0>0&&Number.isFinite(p1))memberReturns[item.ticker]=(p1/p0-1)*100;
       }
     }
     weeks.push({weekKey:signal.weekKey,signalDate:signal.date,executionDate,value,portfolioReturn,indexReturn,weekRet,weekIdx,excess:Number.isFinite(weekRet)&&Number.isFinite(weekIdx)?weekRet-weekIdx:NaN,top10:target.map(x=>x.ticker),memberReturns})
@@ -7072,63 +7068,52 @@ function whitePeriodBucket(d){
 function whiteAvg(a){const v=a.filter(Number.isFinite);return v.length?v.reduce((s,x)=>s+x,0)/v.length:NaN}
 function whiteMedian(a){const v=a.filter(Number.isFinite).sort((a,b)=>a-b);if(!v.length)return NaN;const m=Math.floor(v.length/2);return v.length%2?v[m]:(v[m-1]+v[m])/2}
 function whiteHoldingEpisodes(r){
-  const weeks=r?.weeks||[], active=new Map(), out=[];
+  const weeks=r?.weeks||[],active=new Map(),out=[];
   const close=(ticker,endIndex)=>{
-    const e=active.get(ticker); if(!e)return;
+    const e=active.get(ticker);if(!e)return;
     const slice=weeks.slice(e.startIndex,endIndex+1);
-    let stockFactor=1,indexFactor=1,usable=0;
+    let sf=1,ix=1,usable=0;
     for(const w of slice){
-      const memberRet=w.memberReturns?.[ticker];
-      if(Number.isFinite(memberRet)){stockFactor*=1+memberRet/100;usable++}
-      if(Number.isFinite(w.weekIdx))indexFactor*=1+w.weekIdx/100;
+      const mr=w.memberReturns?.[ticker];
+      if(Number.isFinite(mr)){sf*=1+mr/100;usable++}
+      if(Number.isFinite(w.weekIdx))ix*=1+w.weekIdx/100;
     }
     if(usable){
-      const stockRet=(stockFactor-1)*100, indexRet=(indexFactor-1)*100;
-      out.push({ticker,entryDate:e.entryDate,weeks:slice.length,stockRet,indexRet,excess:stockRet-indexRet});
+      const sr=(sf-1)*100,ir=(ix-1)*100;
+      out.push({ticker,entryDate:e.entryDate,weeks:slice.length,stockRet:sr,indexRet:ir,excess:sr-ir});
     }
-    active.delete(ticker);
+    active.delete(ticker)
   };
   weeks.forEach((w,i)=>{
     const set=new Set(w.top10||[]);
-    for(const ticker of [...active.keys()])if(!set.has(ticker))close(ticker,i-1);
-    for(const ticker of set)if(!active.has(ticker))active.set(ticker,{startIndex:i,entryDate:w.executionDate||w.signalDate||w.weekKey});
+    for(const t of [...active.keys()])if(!set.has(t))close(t,i-1);
+    for(const t of set)if(!active.has(t))active.set(t,{startIndex:i,entryDate:w.executionDate||w.signalDate||w.weekKey});
   });
-  for(const ticker of [...active.keys()])close(ticker,weeks.length-1);
-  return out;
+  for(const t of [...active.keys()])close(t,weeks.length-1);
+  return out
 }
 function whiteGroupEpisodes(arr,keyFn){
   const m=new Map();
   for(const e of arr){const k=keyFn(e);if(!m.has(k))m.set(k,[]);m.get(k).push(e)}
-  return [...m].map(([key,v])=>({
-    key,n:v.length,beat:100*v.filter(x=>x.excess>0).length/v.length,
+  return [...m].map(([key,v])=>({key,n:v.length,beat:100*v.filter(x=>x.excess>0).length/v.length,
     avgExcess:whiteAvg(v.map(x=>x.excess)),medianExcess:whiteMedian(v.map(x=>x.excess)),
-    avgStock:whiteAvg(v.map(x=>x.stockRet)),avgWeeks:whiteAvg(v.map(x=>x.weeks))
-  }));
+    avgStock:whiteAvg(v.map(x=>x.stockRet)),avgWeeks:whiteAvg(v.map(x=>x.weeks))}))
 }
 function renderWhiteHoldingAnalysis(r){
-  const s=document.getElementById('whiteHoldingAnalysisSummary'),
-        c=document.getElementById('whiteHoldingAnalysisCompany'),
-        d=document.getElementById('whiteHoldingAnalysisDuration'),
-        g=document.getElementById('whiteHoldingAnalysisRegime');
+  const s=document.getElementById('whiteHoldingAnalysisSummary'),c=document.getElementById('whiteHoldingAnalysisCompany'),
+        d=document.getElementById('whiteHoldingAnalysisDuration'),g=document.getElementById('whiteHoldingAnalysisRegime');
   if(!s||!c||!d||!g)return;
   const ep=whiteHoldingEpisodes(r);
-  if(!ep.length){
-    s.innerHTML='<div class="metric"><small>Innehavsanalys</small><b>Ingen individdata</b></div>';
-    c.innerHTML='<tr><td style="text-align:left">Backtestresultatet saknar ännu memberReturns per aktie/vecka. Portföljtestet fungerar ändå som tidigare.</td></tr>';
-    d.innerHTML=g.innerHTML=''; return;
-  }
-  const beat=100*ep.filter(x=>x.excess>0).length/ep.length, avg=whiteAvg(ep.map(x=>x.excess)), med=whiteMedian(ep.map(x=>x.excess));
-  s.innerHTML=[
-    ['Innehavsperioder',ep.length],
-    ['Slår OMXSPI',beat.toFixed(1).replace('.',',')+' %'],
-    ['Snitt mot OMX',signed(avg,' p.e.')],
-    ['Median mot OMX',signed(med,' p.e.')]
-  ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
+  if(!ep.length){s.innerHTML='<div class="metric"><small>Innehavsanalys</small><b>Ingen individdata</b></div>';return}
+  const beat=100*ep.filter(x=>x.excess>0).length/ep.length,avg=whiteAvg(ep.map(x=>x.excess)),med=whiteMedian(ep.map(x=>x.excess));
+  s.innerHTML=[['Innehavsperioder',ep.length],['Slår OMXSPI',beat.toFixed(1).replace('.',',')+' %'],
+    ['Snitt mot OMX',signed(avg,' p.e.')],['Median mot OMX',signed(med,' p.e.')]]
+    .map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
   const rows=(arr,label)=>'<tr><th>'+label+'</th><th>Perioder</th><th>Slår OMX</th><th>Snitt mot OMX</th><th>Median mot OMX</th><th>Aktie snitt</th><th>Veckor snitt</th></tr>'+
     arr.map(x=>`<tr><td style="text-align:left">${x.key}</td><td>${x.n}</td><td>${x.beat.toFixed(1).replace('.',',')} %</td><td class="${classByValue(x.avgExcess)}">${signed(x.avgExcess,' p.e.')}</td><td class="${classByValue(x.medianExcess)}">${signed(x.medianExcess,' p.e.')}</td><td>${signed(x.avgStock,' %')}</td><td>${x.avgWeeks.toFixed(1).replace('.',',')}</td></tr>`).join('');
   c.innerHTML=rows(whiteGroupEpisodes(ep,x=>x.ticker).sort((a,b)=>b.avgExcess-a.avgExcess),'Bolag');
-  const order=['1–2 veckor','3–4 veckor','5–8 veckor','9–12 veckor','>12 veckor'];
-  d.innerHTML=rows(whiteGroupEpisodes(ep,x=>whiteHoldingBucket(x.weeks)).sort((a,b)=>order.indexOf(a.key)-order.indexOf(b.key)),'Innehavstid');
+  const ord=['1–2 veckor','3–4 veckor','5–8 veckor','9–12 veckor','>12 veckor'];
+  d.innerHTML=rows(whiteGroupEpisodes(ep,x=>whiteHoldingBucket(x.weeks)).sort((a,b)=>ord.indexOf(a.key)-ord.indexOf(b.key)),'Innehavstid');
   g.innerHTML=rows(whiteGroupEpisodes(ep,x=>whitePeriodBucket(x.entryDate)).sort((a,b)=>a.key.localeCompare(b.key)),'Period');
 }
 
@@ -7772,6 +7757,27 @@ function createCurrentDataWeeklySnapshot(friday,automatic=true,forceRebuild=fals
   if(!automatic)toast(`Nästa veckas Top 10 (${targetInfo.key}) skapades från fredagens Topplista`);
   return true
 }
+
+function sameWeeklyMemberList(a,b){
+  const aa=(a||[]).map(weeklyMemberKey).filter(Boolean);
+  const bb=(b||[]).map(weeklyMemberKey).filter(Boolean);
+  if(aa.length!==bb.length)return false;
+  for(let i=0;i<aa.length;i++)if(aa[i]!==bb[i])return false;
+  return true
+}
+function latestSnapshotNeedsCurrentToplistRebuild(snapshot,friday){
+  if(!snapshot)return true;
+  const cutoffDate=isoDate(friday);
+  const previousSnapshot=previousWeeklySnapshotBefore(cutoffDate,snapshot.weekKey);
+  const freshBlue=topListMembersForSnapshot('blue',cutoffDate,previousSnapshot);
+  const freshWhite=topListMembersForSnapshot('white',cutoffDate,previousSnapshot);
+  const freshAverage=topListMembersForSnapshot('average',cutoffDate,previousSnapshot);
+  if(freshBlue.length<10||freshWhite.length<10||freshAverage.length<10)return false;
+  return !sameWeeklyMemberList(snapshot.portfolios?.blue?.members,freshBlue)
+      || !sameWeeklyMemberList(snapshot.portfolios?.white?.members,freshWhite)
+      || !sameWeeklyMemberList(snapshot.portfolios?.average?.members,freshAverage);
+}
+
 function ensureNextWeekPortfolioAfterFriday(){
   const settings=loadWeeklySettings();
   if(settings.autoSave!=='on')return false;
@@ -7786,11 +7792,17 @@ function ensureNextWeekPortfolioAfterFriday(){
   const targetInfo=isoWeekInfo(followingMonday(friday));
   const existing=weeklyPortfolios.find(snapshot=>snapshot.weekKey===targetInfo.key);
 
-  // v2 tvingar en gammal W33/Wxx att byggas om en gång med korrekt 18:00-data.
-  if(existing&&!snapshotUsesTopListClose(existing)){
-    return createCurrentDataWeeklySnapshot(new Date(friday),true,true)
+  // v20.7.3: den SENASTE fredags-snapshoten måste spegla den färdiga Topplistan.
+  // Om en ny kursuppdatering efter fredag 18:00 ändrar Top10 byggs just den här
+  // snapshoten om. Historiska snapshots ändras inte.
+  if(existing){
+    const oldFormat=!snapshotUsesTopListClose(existing);
+    const toplistChanged=latestSnapshotNeedsCurrentToplistRebuild(existing,friday);
+    if(oldFormat||toplistChanged){
+      return createCurrentDataWeeklySnapshot(new Date(friday),true,true)
+    }
+    return false
   }
-  if(existing)return false;
   return createCurrentDataWeeklySnapshot(new Date(friday),true,false)
 }
 
