@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.6.9 – Verifierat 10-årstest · fryst modell</h1>
+<h1>MomentumScore v20.7.0 – Långrobusthet 2017–2026 · fryst modell</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -664,8 +664,8 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
   <div class="card" style="margin-top:12px">
     <h3>Diagnostik – stresstester + tröghet + årstest + viktfördelning</h3>
     <p class="note"><b>Vikttest:</b> 21 tydligt skilda fördelningar av de fyra Vit-delarna testas med Top10-in/Top20-ut fryst. 25/25/25/25 är referens. Rankningen görs på robusthet mellan utvecklingsperioden 2022–2024 och OOS 2025–2026, inte bara på högsta femårsavkastning.</p>
-    <p class="note"><b>10-årstest v20.6.9:</b> Den frysta huvudkandidaten 10/30/30/30 + Top10-in/Top20-ut körs först med bidrag per aktie. Därefter körs hela 10-årsperioden om efter att den största bidragsgivaren, Top 3 respektive Top 5 bidragsgivare tagits bort ur universum. Det visar om överavkastningen är bred eller beroende av några få jackpot-aktier.</p>
-    <p class="note">Körs automatiskt på samma 10-årsdata efter huvudtestet. Syftet är att avslöja tidsläckage och resultat som är alltför känsliga för exekvering, kostnader, portföljbredd eller ombalanseringsfrekvens. Dessutom testas hur långt ett befintligt Top 10-innehav får falla i rankingen innan det säljs, samt minsta innehavstid på 2 och 4 veckor.</p>
+    <p class="note"><b>Långrobusthet v20.7.0:</b> Den frysta huvudkandidaten 10/30/30/30 + Top10-in/Top20-ut körs först med bidrag per aktie. Därefter körs hela 10-årsperioden om efter att den största bidragsgivaren, Top 3 respektive Top 5 bidragsgivare tagits bort ur universum. Det visar om överavkastningen är bred eller beroende av några få jackpot-aktier.</p>
+    <p class="note">Körs automatiskt på samma 10-årsdata efter huvudtestet. v20.7.0 lägger särskilt till frysta kalenderår samt rullande 12- och 24-månadersfönster över hela långperioden. Syftet är att avslöja tidsläckage och resultat som är alltför känsliga för exekvering, kostnader, portföljbredd eller ombalanseringsfrekvens. Dessutom testas hur långt ett befintligt Top 10-innehav får falla i rankingen innan det säljs, samt minsta innehavstid på 2 och 4 veckor.</p>
     <div id="fiveYearDiagnosticSummary" class="summary"></div>
     <div class="tablewrap"><table id="fiveYearDiagnosticTable"></table></div>
   </div>
@@ -6727,7 +6727,7 @@ function fiveYearRunVariant(options={}){
         for(const item of incoming){
           const price=fiveYearPriceOnOrAfter(item.series,executionDate);
           const gross=alloc/(1+feeRate),fee=gross*feeRate;
-          state.positions[item.ticker]={shares:gross/price,buySignalIndex:s};
+          state.positions[item.ticker]={shares:gross/price,buySignalIndex:s,costBasis:gross+fee};
           state.cash-=gross+fee;state.fees+=fee;state.turnover+=gross;state.trades++
         }
       }
@@ -6860,6 +6860,49 @@ function runFiveYearConcentrationTest(){
   return{fixedBase,contributors,reruns,top1Share:share(1),top3Share:share(3),top5Share:share(5),positiveTotal};
 }
 
+
+function frozenTenYearWeights(){
+  return normalizedWhiteWeights({distanceMa200:10,ma50Spread:30,ma200Slope1m:30,trendStability5d:30});
+}
+function runTenYearFrozenRobustness(){
+  const weights=frozenTenYearWeights();
+  const opts={topN:10,exitRank:20,whiteWeights:weights};
+  const index=fiveYearBacktestData?.index||[];
+  const start=historicalBacktestStartDate(index)||'2017-06-01';
+  const last=index.length?String(index[index.length-1].date):'2026-08-07';
+
+  const yearly={};
+  for(let y=2018;y<=2026;y++){
+    yearly[y]=fiveYearRunVariant({...opts,startSignalDate:`${y}-01-01`,endSignalDate:`${y}-12-31`});
+  }
+
+  const buildWindows=(months,stepMonths)=>{
+    const windows=[];
+    let d=start;
+    // Align first rolling start to the first day of the next calendar month for clean windows.
+    const dd=new Date(d+'T12:00:00Z');
+    dd.setUTCDate(1); dd.setUTCMonth(dd.getUTCMonth()+1);
+    d=dd.toISOString().slice(0,10);
+    while(true){
+      const end=dayBeforeISO(addMonthsISO(d,months));
+      if(end>last)break;
+      const result=fiveYearRunVariant({...opts,startSignalDate:d,endSignalDate:end});
+      if(result)windows.push({start:d,end,result});
+      d=addMonthsISO(d,stepMonths);
+    }
+    const excess=windows.map(w=>w.result.excess).filter(Number.isFinite);
+    const returns=windows.map(w=>w.result.totalReturn).filter(Number.isFinite);
+    const beat=excess.filter(x=>x>0).length;
+    const sorted=[...excess].sort((a,b)=>a-b);
+    const median=sorted.length?sorted[Math.floor(sorted.length/2)]:NaN;
+    return {months,stepMonths,windows,summary:{count:windows.length,beat,beatPct:windows.length?beat/windows.length*100:NaN,avgExcess:excess.length?excess.reduce((a,b)=>a+b,0)/excess.length:NaN,medianExcess:median,minExcess:excess.length?Math.min(...excess):NaN,maxExcess:excess.length?Math.max(...excess):NaN,avgReturn:returns.length?returns.reduce((a,b)=>a+b,0)/returns.length:NaN}};
+  };
+
+  const rolling12=buildWindows(12,3);
+  const rolling24=buildWindows(24,6);
+  return {weights,yearly,rolling12,rolling24,start,last};
+}
+
 function runFiveYearDiagnostics(base){
   const audit=fiveYearTimeLeakAudit();
   const delayed=fiveYearRunVariant({extraDelay:1});
@@ -6890,6 +6933,7 @@ function runFiveYearDiagnostics(base){
   const weightTop=weightSensitivity.slice(0,8);
   const rollingWeights=runFiveYearRollingWeights();
   const concentration=runFiveYearConcentrationTest();
+  const longRobustness=runTenYearFrozenRobustness();
   const rows=[
     {name:'1. Tids-/look-ahead-audit',detail:`${audit.checks.toLocaleString('sv-SE')} tidskontroller`,status:audit.pass?'PASS':'FAIL',result:audit.pass?'Inga framtida datapunkter hittades':audit.violations[0]},
     {name:'2. Exekvering +1 handelsdag',detail:'Alla köp/sälj skjuts en extra handelsdag',status:delayed?'KÖRD':'FEL',result:delayed?`Vit ${signed(delayed.totalReturn,' %')} · över OMX ${signed(delayed.excess,' p.e.')} · Δ bas ${signed(delayed.totalReturn-base.totalReturn,' p.e.')}`:'Kunde inte köras'},
@@ -6912,6 +6956,9 @@ function runFiveYearDiagnostics(base){
     ]),
     ...weightTop.map((x,i)=>({name:`10. Viktkänslighet #${i+1} · ${x.weightLabel}`,detail:'Kurs/MA200 · MA50/MA200 · MA200-trend · Trendstabilitet. Top10 in/Top20 ut är fryst.',status:x.full&&x.development&&x.oos?'KÖRD':'FEL',result:x.full&&x.development&&x.oos?`5 år ${signed(x.full.totalReturn,' %')} · utveckling över OMX ${signed(x.development.excess,' p.e.')} · OOS över OMX ${signed(x.oos.excess,' p.e.')} · robusthetsgolv ${signed(x.robustFloor,' p.e.')}`:'Kunde inte köras'})),
     ...rollingWeights.summary.map(x=>({name:`11. Rullande 12 mån · ${x.label}`,detail:'12-månadersfönster med start förskjuten kvartalsvis; Top10/20 fryst.',status:x.total?'KÖRD':'FEL',result:x.total?`${x.wins}/${x.total} fönstervinster · över OMX i ${x.positive}/${x.total} · snitt över OMX ${signed(x.avgExcess,' p.e.')} · sämsta ${signed(x.minExcess,' p.e.')}`:'Kunde inte köras'})),
+    ...Object.entries(longRobustness.yearly).map(([y,x])=>({name:`13. Fryst årsresultat ${y}`,detail:'10/30/30/30 + Top10/20, separat startkapital varje kalenderår',status:x?'KÖRD':'FEL',result:x?`Vit ${signed(x.totalReturn,' %')} · OMX ${signed(x.benchmarkReturn,' %')} · över OMX ${signed(x.excess,' p.e.')} · DD ${signed(x.maxDrawdown,' %')}`:'Kunde inte köras'})),
+    {name:'14A. Rullande 12 månader – långperiod',detail:`Kvartalsvis start · ${longRobustness.rolling12.summary.count} fönster`,status:longRobustness.rolling12.summary.count?'KÖRD':'FEL',result:`Slår OMX ${longRobustness.rolling12.summary.beat}/${longRobustness.rolling12.summary.count} · snitt över OMX ${signed(longRobustness.rolling12.summary.avgExcess,' p.e.')} · sämsta ${signed(longRobustness.rolling12.summary.minExcess,' p.e.')}`},
+    {name:'14B. Rullande 24 månader – långperiod',detail:`Halvårsvis start · ${longRobustness.rolling24.summary.count} fönster`,status:longRobustness.rolling24.summary.count?'KÖRD':'FEL',result:`Slår OMX ${longRobustness.rolling24.summary.beat}/${longRobustness.rolling24.summary.count} · snitt över OMX ${signed(longRobustness.rolling24.summary.avgExcess,' p.e.')} · sämsta ${signed(longRobustness.rolling24.summary.minExcess,' p.e.')}`},
     {name:'12A. FRYST 10-ÅRSMODELL 10/30/30/30 + Top10/20',detail:'Huvudresultatet för den frysta modellen över hela 10-årsperioden.',status:concentration.fixedBase?'KÖRD':'FEL',result:concentration.fixedBase?`Vit ${signed(concentration.fixedBase.totalReturn,' %')} · OMX ${signed(concentration.fixedBase.benchmarkReturn,' %')} · över OMX ${signed(concentration.fixedBase.excess,' p.e.')} · CAGR ${signed(concentration.fixedBase.cagr,' %')}`:'Kunde inte köras'},
     ...concentration.reruns.map(x=>({name:`12B. Utan Top ${x.n} bidragsgivare`,detail:`Hela testet körs om från början efter att ${x.excluded.join(', ')} tagits bort ur universum.`,status:x.result?'KÖRD':'FEL',result:x.result?`Vit ${signed(x.result.totalReturn,' %')} · över OMX ${signed(x.result.excess,' p.e.')} · Δ mot fryst bas ${signed(x.result.totalReturn-concentration.fixedBase.totalReturn,' p.e.')}`:'Kunde inte köras'}))
   ];
@@ -6925,7 +6972,7 @@ function runFiveYearDiagnostics(base){
     ['Stressvarianter över OMX',`${stillBeat}/${variants.length}`],
     ['Diagnostisk bedömning',robust?'Robust i dessa tester':'Känslighet finns']
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
-  return{audit,delayed,highFee,top5,top15,biweekly,hold15,hold20,hold25,hold30,hold40,hold50,minHold2,minHold4,development,outOfSample,yearly,weightSensitivity,rollingWeights,concentration,rows}
+  return{audit,delayed,highFee,top5,top15,biweekly,hold15,hold20,hold25,hold30,hold40,hold50,minHold2,minHold4,development,outOfSample,yearly,weightSensitivity,rollingWeights,concentration,longRobustness,rows}
 }
 
 function fiveYearChart(result){
@@ -7078,6 +7125,22 @@ function exportFiveYearBacktestCsv(){
     lines.push(['RULLANDE SAMMANFATTNING','Fönstervinster','Över OMX antal','Antal fönster','Snitt över OMX p.e.','Sämsta över OMX p.e.','Snittavkastning %']);
     for(const x of (d.rollingWeights?.summary||[]))lines.push([x.label,x.wins,x.positive,x.total,x.avgExcess,x.minExcess,x.avgReturn]);
     lines.push([]);
+    lines.push(['LÅNGROBUSTHET – FRYST 10/30/30/30 + Top10 in / Top20 ut']);
+    lines.push(['Kalenderår','Vit avkastning %','OMXSPI %','Över OMX p.e.','CAGR %','Max DD %','Volatilitet %','Affärer']);
+    for(const [y,x] of Object.entries(d.longRobustness?.yearly||{}))lines.push([y,x?.totalReturn??'',x?.benchmarkReturn??'',x?.excess??'',x?.cagr??'',x?.maxDrawdown??'',x?.volatility??'',x?.trades??'']);
+    lines.push([]);
+    lines.push(['RULLANDE 12 MÅNADER – fryst modell']);
+    lines.push(['Start','Slut','Vit avkastning %','OMXSPI %','Över OMX p.e.','Max DD %','Volatilitet %','Affärer']);
+    for(const w of (d.longRobustness?.rolling12?.windows||[]))lines.push([w.start,w.end,w.result?.totalReturn??'',w.result?.benchmarkReturn??'',w.result?.excess??'',w.result?.maxDrawdown??'',w.result?.volatility??'',w.result?.trades??'']);
+    const s12=d.longRobustness?.rolling12?.summary||{};
+    lines.push(['Sammanfattning 12 mån','','','',`Slår OMX ${s12.beat??''}/${s12.count??''}; snitt ${s12.avgExcess??''}; median ${s12.medianExcess??''}; sämsta ${s12.minExcess??''}; bästa ${s12.maxExcess??''}`]);
+    lines.push([]);
+    lines.push(['RULLANDE 24 MÅNADER – fryst modell']);
+    lines.push(['Start','Slut','Vit avkastning %','OMXSPI %','Över OMX p.e.','Max DD %','Volatilitet %','Affärer']);
+    for(const w of (d.longRobustness?.rolling24?.windows||[]))lines.push([w.start,w.end,w.result?.totalReturn??'',w.result?.benchmarkReturn??'',w.result?.excess??'',w.result?.maxDrawdown??'',w.result?.volatility??'',w.result?.trades??'']);
+    const s24=d.longRobustness?.rolling24?.summary||{};
+    lines.push(['Sammanfattning 24 mån','','','',`Slår OMX ${s24.beat??''}/${s24.count??''}; snitt ${s24.avgExcess??''}; median ${s24.medianExcess??''}; sämsta ${s24.minExcess??''}; bästa ${s24.maxExcess??''}`]);
+    lines.push([]);
     lines.push(['KONCENTRATIONSTEST – fryst 10/30/30/30 + Top10 in / Top20 ut']);
     lines.push(['Mått','Värde']);
     lines.push(['Fryst 10-årsmodell avkastning %',d.concentration?.fixedBase?.totalReturn??'']);
@@ -7093,7 +7156,7 @@ function exportFiveYearBacktestCsv(){
     for(const x of (d.concentration?.reruns||[]))lines.push([`Utan Top ${x.n}`,x.excluded.join('|'),x.result?.totalReturn??'',x.result?.benchmarkReturn??'',x.result?.excess??'',x.result&&d.concentration?.fixedBase?x.result.totalReturn-d.concentration.fixedBase.totalReturn:'',x.result?.cagr??'',x.result?.maxDrawdown??'',x.result?.volatility??'',x.result?.trades??'']);
   }
   const csv='\ufeff'+lines.map(row=>row.map(csvEscape).join(';')).join('\n');
-  downloadTextFile(csv,`MomentumScore_v20_6_9_Vit_10ar_${todayISO()}.csv`,'text/csv;charset=utf-8')
+  downloadTextFile(csv,`MomentumScore_v20_7_0_Vit_langrobusthet_${todayISO()}.csv`,'text/csv;charset=utf-8')
 }
 
 function movingAverageAtOffset(closes,period=200,offset=0){
