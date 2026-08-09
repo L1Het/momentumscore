@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.6.8</title>
+<title>MomentumScore v20.6.1</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.6.8 – Yahoo range-test fix</h1>
+<h1>MomentumScore v20.6.9 – Verifierat 10-årstest · fryst modell</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -590,7 +590,7 @@ När Nytt kvartal aktiveras låses ticker, bolag, börs, Yahoo-symbol, kurs och 
 Utveckling kan växlas mellan Aktier och Veckoportföljer. Portföljläget visar varje sparad veckas Blå-, Vit- och Snittportfölj, avkastning mot index, antal vinnare samt bästa och sämsta innehav. En klickbar detaljvy visar samtliga tio aktier.</div>
 <div class="rowcard"><b>Fas 1 – stabil grund</b><br>
 Gemensam bolagsvy används från Översikt, Poäng, Topplista, Utveckling och portföljtabeller. Äldre felkopplad bolagshistorik bevaras men filtreras i visningen, ofullständiga historikposter kan inte krascha bolagsvyn och Topplistan är fortsatt enda sanningskälla för nya Top 10-portföljer.</div>
-<div class="rowcard"><b>Vit – historiskt 5-årstest</b><br>
+<div class="rowcard"><b>Vit – historiskt 10-årstest</b><br>
 Under Inställningar finns ett fristående walk-forward-test mot OMXSPI. Det hämtar fem års dagliga kurser i arbetsminnet, räknar Vit 2.0 endast med information som fanns på respektive historiskt datum och bygger nästa veckas Top 10 från sista handelsdagen i veckan. Kvarvarande innehav behålls, utgående säljs, nya köps och courtage 0,069 % räknas. Testdata skrivs inte över i den levande databasen.</div>
 <div class="rowcard"><b>Vit 2.0 – fyra pucklar á 25 poäng</b><br>
 Vit består av Kurs/MA200, MA50/MA200, MA200-trend 1 månad och Trendstabilitet 5 dagar. Trendstabilitet mäter förändringen i avståndet Kurs–MA200 under fem handelsdagar och får full poäng ungefär mellan −2 och +1 procentenheter. Befintliga Vit- och Snittveckor räknas om historiskt med den nya modellen; Blå lämnas oförändrad.</div>
@@ -647,25 +647,16 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
 <p class="note">Sverige är standard. Välj Danmark, Norge, Finland eller Island när du matar in ett nordiskt bolag. Yahoo-symbolen får då rätt suffix automatiskt, exempelvis NOVO B → NOVO-B.CO, EQNR → EQNR.OL och NOKIA → NOKIA.HE. När ett bolag saknar minst 263 handelsdagar hämtar Yahoo två års grundhistorik. Därefter begär appen ett mycket litet femdagarsfönster men sparar bara den senaste tillgängliga kursen och slår ihop den med den lokala historiken. Appen lagrar de senaste 400 handelsdagarna och räknar själv MA200 och MA200-trenderna. Om Yahoos sista dagscandle är null används meta.regularMarketPrice som den senaste avslutade handelsdagens kurs och läggs till i samma serie. Om ett bolag inte kan hämtas visas det i statusrutan och övriga bolag fortsätter uppdateras.</p>
 </div>
 
-
-<div class="card" id="yahooRangeDiagnosticCard" style="margin-top:14px">
-  <h2>🧪 Yahoo range-diagnostik</h2>
-  <p class="note">Testar exakt samma Yahoo-worker som det fungerande femårstestet utan att ändra eller spara någon data. Kör 2y, 5y, 6y, 7y, 8y, 9y, 10y och max för OMXSPI samt ett bolag ur databasen.</p>
-  <div class="actions"><button id="runYahooRangeDiagnostic">Kör Yahoo range-test</button></div>
-  <div id="yahooRangeDiagnosticStatus" class="note">Inte körd ännu.</div>
-  <div class="tablewrap" style="margin-top:10px"><table id="yahooRangeDiagnosticTable"></table></div>
-</div>
-
 <div class="card" id="whiteFiveYearBacktestCard">
-  <h2>⚪ Vit – 5-årstest mot OMXSPI</h2>
-  <p class="note">Hämtar fem års dagliga stängningskurser för bolagen och OMXSPI och räknar om Vit 2.0 historiskt dag för dag utan framtidsdata. Varje fredags stängning används som signal för nästa veckas Top 10. Affärer genomförs på nästa tillgängliga handelsdag och den rullande strategin följer samma princip som nu: kvarvarande innehav behålls utan omviktning, utgående säljs och nettolikviden delas lika mellan nya innehav. Courtage: 0,069 % vid köp och försäljning.</p>
+  <h2>⚪ Vit – 10-årstest mot OMXSPI</h2>
+  <p class="note">Hämtar exakt Yahoo range=10y med dagliga stängningskurser. De första cirka 220 handelsdagarna fungerar som uppvärmning för MA200 och räknar modellen historiskt utan framtidsdata. Den frysta huvudmodellen är 10/30/30/30 i faktorvikter samt Top10 in / Top20 ut. Varje fredags stängning används som signal, affärer genomförs på nästa tillgängliga handelsdag och courtage är 0,069 % vid köp och försäljning. Referenslogik och årsdeltester exporteras också.</p>
   <div class="actions">
-    <button id="fetchFiveYearBacktest">Hämta 5 år och kör test</button>
+    <button id="fetchFiveYearBacktest">Hämta 10 år och kör test</button>
     <button id="rerunFiveYearBacktest" class="secondary" disabled>Kör om med nuvarande Vit-platåer</button>
     <button id="exportFiveYearBacktest" class="secondary" disabled>Exportera resultat CSV</button>
   </div>
   <div class="backtest-progress"><div id="fiveYearBacktestProgress"></div></div>
-  <div id="fiveYearBacktestStatus" class="note">Ingen femårshistorik hämtad i denna session.</div>
+  <div id="fiveYearBacktestStatus" class="note">Ingen 10-årshistorik hämtad i denna session.</div>
   <div id="fiveYearBacktestSummary" class="summary" style="margin-top:12px"></div>
   <div id="fiveYearBacktestVerdict"></div>
   <div id="fiveYearBacktestChart" class="backtest-chart hidden"></div>
@@ -673,8 +664,8 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
   <div class="card" style="margin-top:12px">
     <h3>Diagnostik – stresstester + tröghet + årstest + viktfördelning</h3>
     <p class="note"><b>Vikttest:</b> 21 tydligt skilda fördelningar av de fyra Vit-delarna testas med Top10-in/Top20-ut fryst. 25/25/25/25 är referens. Rankningen görs på robusthet mellan utvecklingsperioden 2022–2024 och OOS 2025–2026, inte bara på högsta femårsavkastning.</p>
-    <p class="note"><b>Koncentrationstest v20.6.0:</b> Den frysta huvudkandidaten 10/30/30/30 + Top10-in/Top20-ut körs först med bidrag per aktie. Därefter körs hela femårsperioden om efter att den största bidragsgivaren, Top 3 respektive Top 5 bidragsgivare tagits bort ur universum. Det visar om överavkastningen är bred eller beroende av några få jackpot-aktier.</p>
-    <p class="note">Körs automatiskt på samma femårsdata efter huvudtestet. Syftet är att avslöja tidsläckage och resultat som är alltför känsliga för exekvering, kostnader, portföljbredd eller ombalanseringsfrekvens. Dessutom testas hur långt ett befintligt Top 10-innehav får falla i rankingen innan det säljs, samt minsta innehavstid på 2 och 4 veckor.</p>
+    <p class="note"><b>10-årstest v20.6.9:</b> Den frysta huvudkandidaten 10/30/30/30 + Top10-in/Top20-ut körs först med bidrag per aktie. Därefter körs hela 10-årsperioden om efter att den största bidragsgivaren, Top 3 respektive Top 5 bidragsgivare tagits bort ur universum. Det visar om överavkastningen är bred eller beroende av några få jackpot-aktier.</p>
+    <p class="note">Körs automatiskt på samma 10-årsdata efter huvudtestet. Syftet är att avslöja tidsläckage och resultat som är alltför känsliga för exekvering, kostnader, portföljbredd eller ombalanseringsfrekvens. Dessutom testas hur långt ett befintligt Top 10-innehav får falla i rankingen innan det säljs, samt minsta innehavstid på 2 och 4 veckor.</p>
     <div id="fiveYearDiagnosticSummary" class="summary"></div>
     <div class="tablewrap"><table id="fiveYearDiagnosticTable"></table></div>
   </div>
@@ -6310,6 +6301,14 @@ let fiveYearBacktestData=null;
 let fiveYearBacktestResult=null;
 let fiveYearDiagnosticsResult=null;
 const FIVE_YEAR_FEE_RATE=0.00069;
+const HISTORICAL_BACKTEST_YEARS=10;
+const FROZEN_WHITE_WEIGHTS={distanceMa200:10,ma50Spread:30,ma200Slope1m:30,trendStability5d:30};
+function historicalBacktestStartDate(indexSeries){
+  if(!Array.isArray(indexSeries)||!indexSeries.length)return null;
+  const latest=new Date(indexSeries[indexSeries.length-1].date+'T12:00:00Z');
+  latest.setUTCFullYear(latest.getUTCFullYear()-HISTORICAL_BACKTEST_YEARS);
+  return latest.toISOString().slice(0,10);
+}
 
 function fiveYearSetProgress(done,total,text=''){
   const bar=document.getElementById('fiveYearBacktestProgress');
@@ -6335,62 +6334,8 @@ function normalizeYahooSeries(result){
   }
   return [...map.values()].sort((a,b)=>a.date.localeCompare(b.date))
 }
-
-async function fetchYahooRangeDiagnostic(symbol,range){
-  const url='https://momentumscore-yahoo.e-latth.workers.dev/?symbol='+encodeURIComponent(symbol)+'&range='+encodeURIComponent(range);
-  const controller=new AbortController();
-  const timeout=setTimeout(()=>controller.abort(),25000);
-  let response;
-  try{response=await fetch(url,{cache:'no-store',signal:controller.signal})}
-  finally{clearTimeout(timeout)}
-  if(!response.ok)throw new Error('HTTP '+response.status);
-  const data=await response.json();
-  const result=data?.chart?.result?.[0];
-  if(!result)throw new Error(data?.chart?.error?.description||'Ingen kursdata');
-  const series=normalizeYahooSeries(result);
-  const first=series[0]?.date||'–', last=series.at(-1)?.date||'–';
-  let years=null;
-  if(series.length>1){years=(new Date(last)-new Date(first))/(365.2425*86400000)}
-  return {range,points:series.length,first,last,years,metaRange:result?.meta?.range||'',dataGranularity:result?.meta?.dataGranularity||''};
-}
-function escapeHtml(value){
-  return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]));
-}
-
-async function runYahooRangeDiagnostic(){
-  const btn=document.getElementById('runYahooRangeDiagnostic');
-  const status=document.getElementById('yahooRangeDiagnosticStatus');
-  const table=document.getElementById('yahooRangeDiagnosticTable');
-  if(btn)btn.disabled=true;
-  if(status)status.textContent='Kör range-test…';
-  if(table)table.innerHTML='';
-  try{
-    const candidate=rows.find(r=>String(r.yahooSymbol||inferYahooSymbol(r.ticker,r.market)||'').trim());
-    const stockSymbol=candidate?(candidate.yahooSymbol||inferYahooSymbol(candidate.ticker,candidate.market)).trim():'';
-    const targets=[{label:'OMXSPI',symbol:'^OMXSPI'}];
-    if(stockSymbol)targets.push({label:(candidate.ticker||candidate.company||stockSymbol),symbol:stockSymbol});
-    const ranges=['2y','5y','6y','7y','8y','9y','10y','max'];
-    const out=[];
-    for(const target of targets){
-      for(const range of ranges){
-        if(status)status.textContent=`Testar ${target.label} · range=${range}…`;
-        try{out.push({...target,...await fetchYahooRangeDiagnostic(target.symbol,range),ok:true})}
-        catch(e){out.push({...target,range,ok:false,error:String(e?.message||e)})}
-      }
-    }
-    if(table){
-      table.innerHTML='<tr><th>Instrument</th><th>Symbol</th><th>range</th><th>Punkter</th><th>Första datum</th><th>Sista datum</th><th>Årspann</th><th>Meta range</th><th>Granularitet</th><th>Status</th></tr>'+out.map(x=>`<tr><td>${escapeHtml(x.label)}</td><td>${escapeHtml(x.symbol)}</td><td>${escapeHtml(x.range)}</td><td>${x.ok?x.points:'–'}</td><td>${x.ok?x.first:'–'}</td><td>${x.ok?x.last:'–'}</td><td>${x.ok&&Number.isFinite(x.years)?x.years.toFixed(2):'–'}</td><td>${x.ok?escapeHtml(x.metaRange||''):'–'}</td><td>${x.ok?escapeHtml(x.dataGranularity||''):'–'}</td><td>${x.ok?'OK':escapeHtml(x.error||'Fel')}</td></tr>`).join('');
-    }
-    const omx=out.filter(x=>x.label==='OMXSPI'&&x.ok);
-    const best=omx.slice().sort((a,b)=>(b.years||0)-(a.years||0))[0];
-    if(status)status.textContent=best?`Klart. Längsta verifierade OMXSPI-serie: range=${best.range}, ${best.points} punkter, ${best.first}–${best.last} (${best.years.toFixed(2)} år).`:'Klart, men ingen OMXSPI-range lyckades.';
-    window.yahooRangeDiagnosticResult=out;
-  }catch(e){if(status)status.textContent='Fel: '+String(e?.message||e)}
-  finally{if(btn)btn.disabled=false}
-}
-
 async function fetchYahooFiveYears(symbol){
-  const url='https://momentumscore-yahoo.e-latth.workers.dev/?symbol='+encodeURIComponent(symbol)+'&range=5y';
+  const url='https://momentumscore-yahoo.e-latth.workers.dev/?symbol='+encodeURIComponent(symbol)+'&range=10y';
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),25000);
   let response;
@@ -6406,6 +6351,7 @@ async function fetchYahooFiveYears(symbol){
   if(!result)throw new Error(data?.chart?.error?.description||'Ingen kursdata');
   const series=normalizeYahooSeries(result);
   if(series.length<230)throw new Error('För få historiska kurspunkter');
+  // Workern är verifierad för range=10y och Yahoo returnerar daglig data (1d).
   return series
 }
 async function fiveYearPool(items,limit,worker){
@@ -6419,7 +6365,7 @@ async function fiveYearPool(items,limit,worker){
       try{await worker(item,index)}
       catch(error){failures.push({item,error:String(error?.message||error)})}
       done++;
-      fiveYearSetProgress(done,items.length,`Hämtar 5-årshistorik: ${done}/${items.length} · ${item.label||item.symbol}`)
+      fiveYearSetProgress(done,items.length,`Hämtar 10-årshistorik: ${done}/${items.length} · ${item.label||item.symbol}`)
     }
   }
   await Promise.all(Array.from({length:Math.min(limit,items.length)},()=>runner()));
@@ -6562,16 +6508,35 @@ function runFiveYearWhiteBacktest(){
     alert('Hämta femårshistoriken först.');
     return null
   }
-  const signals=fiveYearWeeklySignals(fiveYearBacktestData.index);
+  const testStart=historicalBacktestStartDate(fiveYearBacktestData.index);
+  const signals=fiveYearWeeklySignals(fiveYearBacktestData.index).filter(x=>!testStart||String(x.date)>=testStart);
   if(signals.length<20)return alert('För få veckor för testet.');
   const state={cash:100000,positions:{},fees:0,trades:0,turnover:0};
   const points=[],weeks=[];
   let benchmarkStart=NaN,started=false,previousTarget=[];
+  const frozenWeights=normalizedWhiteWeights({distanceMa200:10,ma50Spread:30,ma200Slope1m:30,trendStability5d:30});
   for(let s=0;s<signals.length-1;s++){
     const signal=signals[s];
     const executionDate=fiveYearNextDate(fiveYearBacktestData.index,signal.date);
     if(!executionDate)continue;
-    const target=fiveYearTop10(signal.date,previousTarget);
+    const ranked=fiveYearTopN(signal.date,Object.keys(state.positions),20,frozenWeights);
+    if(ranked.length<5)continue;
+    let target=[];
+    if(started){
+      const rankMap=new Map(ranked.map((x,i)=>[x.ticker,i+1]));
+      // Fryst regel: befintligt innehav behålls så länge det ligger inom Top 20.
+      for(const ticker of Object.keys(state.positions)){
+        if(rankMap.has(ticker)&&rankMap.get(ticker)<=20){
+          const item=ranked.find(x=>x.ticker===ticker);
+          if(item&&target.length<10)target.push(item);
+        }
+      }
+    }
+    // Fyll lediga platser med högst rankade kandidater. Nytt innehav kommer från rankingen uppifrån.
+    for(const item of ranked){
+      if(target.length>=10)break;
+      if(!target.some(x=>x.ticker===item.ticker))target.push(item);
+    }
     if(target.length<5)continue;
     const targetTickers=target.map(x=>x.ticker);
     if(!started){
@@ -6675,6 +6640,8 @@ function fiveYearRunVariant(options={}){
     return fiveYearTopN(date,previous,fetchDepth,whiteWeights).filter(x=>!excludeTickers.has(String(x.ticker))).slice(0,want);
   };
   let signals=fiveYearWeeklySignals(fiveYearBacktestData.index);
+  const globalStart=historicalBacktestStartDate(fiveYearBacktestData.index);
+  if(globalStart)signals=signals.filter(x=>String(x.date)>=globalStart);
   const startSignalDate=options.startSignalDate?String(options.startSignalDate):null;
   const endSignalDate=options.endSignalDate?String(options.endSignalDate):null;
   if(startSignalDate)signals=signals.filter(x=>String(x.date)>=startSignalDate);
@@ -6913,7 +6880,7 @@ function runFiveYearDiagnostics(base){
   const outOfSample=Object.fromEntries(oosRanks.map(r=>[r,fiveYearRunVariant({topN:10,exitRank:r,startSignalDate:'2025-01-01',endSignalDate:'2026-12-31'})]));
   // Årsrobusthet: jämför original Top10/10 mot vald Top10/20 och OMXSPI med separat startkapital varje kalenderår.
   const yearly={};
-  for(const y of [2023,2024,2025,2026]){
+  for(const y of [2018,2019,2020,2021,2022,2023,2024,2025,2026]){
     yearly[y]={
       top10:fiveYearRunVariant({topN:10,exitRank:10,startSignalDate:`${y}-01-01`,endSignalDate:`${y}-12-31`}),
       top20:fiveYearRunVariant({topN:10,exitRank:20,startSignalDate:`${y}-01-01`,endSignalDate:`${y}-12-31`})
@@ -6939,13 +6906,13 @@ function runFiveYearDiagnostics(base){
     {name:'7B. Minsta innehavstid 4 veckor',detail:'Ett nyköpt innehav får inte säljas förrän fyra hela veckor har gått',status:minHold4?'KÖRD':'FEL',result:minHold4?`Vit ${signed(minHold4.totalReturn,' %')} · över OMX ${signed(minHold4.excess,' p.e.')} · ${minHold4.trades} affärer · oms ${minHold4.turnover.toFixed(0)} %`:'Kunde inte köras'},
     ...oosRanks.map(r=>({name:`8A. Utveckling 2022–2024 · Top10/${r}`,detail:'Separat startkapital och endast signaler i utvecklingsperioden',status:development[r]?'KÖRD':'FEL',result:development[r]?`Vit ${signed(development[r].totalReturn,' %')} · över OMX ${signed(development[r].excess,' p.e.')} · CAGR ${signed(development[r].cagr,' %')}`:'Kunde inte köras'})),
     ...oosRanks.map(r=>({name:`8B. OOS 2025–2026 · Top10/${r}`,detail:'Out-of-sample: separat startkapital och endast signaler från 2025',status:outOfSample[r]?'KÖRD':'FEL',result:outOfSample[r]?`Vit ${signed(outOfSample[r].totalReturn,' %')} · över OMX ${signed(outOfSample[r].excess,' p.e.')} · CAGR ${signed(outOfSample[r].cagr,' %')}`:'Kunde inte köras'})),
-    ...[2023,2024,2025,2026].flatMap(y=>[
+    ...[2017,2018,2019,2020,2021,2022,2023,2024,2025,2026].flatMap(y=>[
       {name:`9A. Årstest ${y} · Top10/10`,detail:'Separat startkapital för kalenderåret',status:yearly[y].top10?'KÖRD':'FEL',result:yearly[y].top10?`Vit ${signed(yearly[y].top10.totalReturn,' %')} · OMX ${signed(yearly[y].top10.benchmarkReturn,' %')} · över OMX ${signed(yearly[y].top10.excess,' p.e.')}`:'Kunde inte köras'},
       {name:`9B. Årstest ${y} · Top10/20`,detail:'Top20-tröghet med separat startkapital för kalenderåret',status:yearly[y].top20?'KÖRD':'FEL',result:yearly[y].top20?`Vit ${signed(yearly[y].top20.totalReturn,' %')} · OMX ${signed(yearly[y].top20.benchmarkReturn,' %')} · över OMX ${signed(yearly[y].top20.excess,' p.e.')}`:'Kunde inte köras'}
     ]),
     ...weightTop.map((x,i)=>({name:`10. Viktkänslighet #${i+1} · ${x.weightLabel}`,detail:'Kurs/MA200 · MA50/MA200 · MA200-trend · Trendstabilitet. Top10 in/Top20 ut är fryst.',status:x.full&&x.development&&x.oos?'KÖRD':'FEL',result:x.full&&x.development&&x.oos?`5 år ${signed(x.full.totalReturn,' %')} · utveckling över OMX ${signed(x.development.excess,' p.e.')} · OOS över OMX ${signed(x.oos.excess,' p.e.')} · robusthetsgolv ${signed(x.robustFloor,' p.e.')}`:'Kunde inte köras'})),
     ...rollingWeights.summary.map(x=>({name:`11. Rullande 12 mån · ${x.label}`,detail:'12-månadersfönster med start förskjuten kvartalsvis; Top10/20 fryst.',status:x.total?'KÖRD':'FEL',result:x.total?`${x.wins}/${x.total} fönstervinster · över OMX i ${x.positive}/${x.total} · snitt över OMX ${signed(x.avgExcess,' p.e.')} · sämsta ${signed(x.minExcess,' p.e.')}`:'Kunde inte köras'})),
-    {name:'12A. Koncentration · bidragsandel',detail:'Fryst 10/30/30/30 + Top10/20. Andel av alla positiva aktiebidrag som kommer från de största vinnarna.',status:concentration.fixedBase?'KÖRD':'FEL',result:concentration.fixedBase?`Top 1 ${concentration.top1Share.toFixed(1)} % · Top 3 ${concentration.top3Share.toFixed(1)} % · Top 5 ${concentration.top5Share.toFixed(1)} %`:'Kunde inte köras'},
+    {name:'12A. FRYST 10-ÅRSMODELL 10/30/30/30 + Top10/20',detail:'Huvudresultatet för den frysta modellen över hela 10-årsperioden.',status:concentration.fixedBase?'KÖRD':'FEL',result:concentration.fixedBase?`Vit ${signed(concentration.fixedBase.totalReturn,' %')} · OMX ${signed(concentration.fixedBase.benchmarkReturn,' %')} · över OMX ${signed(concentration.fixedBase.excess,' p.e.')} · CAGR ${signed(concentration.fixedBase.cagr,' %')}`:'Kunde inte köras'},
     ...concentration.reruns.map(x=>({name:`12B. Utan Top ${x.n} bidragsgivare`,detail:`Hela testet körs om från början efter att ${x.excluded.join(', ')} tagits bort ur universum.`,status:x.result?'KÖRD':'FEL',result:x.result?`Vit ${signed(x.result.totalReturn,' %')} · över OMX ${signed(x.result.excess,' p.e.')} · Δ mot fryst bas ${signed(x.result.totalReturn-concentration.fixedBase.totalReturn,' p.e.')}`:'Kunde inte köras'}))
   ];
   const table=document.getElementById('fiveYearDiagnosticTable'),summary=document.getElementById('fiveYearDiagnosticSummary');
@@ -7016,7 +6983,7 @@ function renderFiveYearBacktest(r){
       <td style="text-align:left">${w.top10.join(', ')}</td>
     </tr>`).join('');
   document.getElementById('fiveYearBacktestStatus').textContent=
-    `Test klart: ${r.weekCount ?? r.weeks.length} veckor · ${r.universe} bolag · ${r.failures.length} bolag kunde inte hämtas. Femårsdata ligger endast i minnet och påverkar inte din ordinarie databas.`
+    `Test klart: ${r.weekCount ?? r.weeks.length} veckor · ${r.universe} bolag · ${r.failures.length} bolag kunde inte hämtas. 10-årsdata ligger endast i minnet och påverkar inte din ordinarie databas.`
 }
 async function fetchAndRunFiveYearBacktest(){
   const button=document.getElementById('fetchFiveYearBacktest');
@@ -7047,7 +7014,7 @@ async function fetchAndRunFiveYearBacktest(){
   }
   fiveYearBacktestData={index,stocks,stockMap:Object.fromEntries(stocks.map(x=>[x.ticker,x])),failures};
   if(index.length<230||stocks.length<5){
-    document.getElementById('fiveYearBacktestStatus').textContent='Femårstestet kunde inte starta: för lite data hämtades.';
+    document.getElementById('fiveYearBacktestStatus').textContent='10-årstestet kunde inte starta: för lite data hämtades.';
     button.disabled=false;return
   }
   fiveYearSetProgress(items.length,items.length,`Hämtning klar: ${stocks.length} bolag + OMXSPI. Kör historiskt test…`);
@@ -7057,7 +7024,7 @@ async function fetchAndRunFiveYearBacktest(){
 }
 function exportFiveYearBacktestCsv(){
   const r=fiveYearBacktestResult;
-  if(!r)return alert('Kör femårstestet först.');
+  if(!r)return alert('Kör 10-årstestet först.');
   const lines=[['Vecka','Signaldatum','Startdatum','Vit vecka %','OMXSPI vecka %','Över/under p.e.','Vit sedan start %','OMXSPI sedan start %','Top 10']];
   r.weeks.forEach(w=>lines.push([w.weekKey,w.signalDate,w.executionDate,w.weekRet,w.weekIdx,w.excess,w.portfolioReturn,w.indexReturn,w.top10.join('|')]));
   lines.push([]);
@@ -7090,7 +7057,7 @@ function exportFiveYearBacktestCsv(){
       addStress(`8A. Utveckling 2022-2024 Top10/${rank}`,d.development?.[rank]?'KÖRD':'FEL',d.development?.[rank],'Separat utvecklingsperiod');
       addStress(`8B. OOS 2025-2026 Top10/${rank}`,d.outOfSample?.[rank]?'KÖRD':'FEL',d.outOfSample?.[rank],'Separat out-of-sample-period');
     }
-    for(const y of [2023,2024,2025,2026]){
+    for(const y of [2018,2019,2020,2021,2022,2023,2024,2025,2026]){
       addStress(`9A. Årstest ${y} Top10/10`,d.yearly?.[y]?.top10?'KÖRD':'FEL',d.yearly?.[y]?.top10,'Separat kalenderår; originalregeln');
       addStress(`9B. Årstest ${y} Top10/20`,d.yearly?.[y]?.top20?'KÖRD':'FEL',d.yearly?.[y]?.top20,'Separat kalenderår; Top20-tröghet');
     }
@@ -7113,7 +7080,7 @@ function exportFiveYearBacktestCsv(){
     lines.push([]);
     lines.push(['KONCENTRATIONSTEST – fryst 10/30/30/30 + Top10 in / Top20 ut']);
     lines.push(['Mått','Värde']);
-    lines.push(['Fryst bas avkastning %',d.concentration?.fixedBase?.totalReturn??'']);
+    lines.push(['Fryst 10-årsmodell avkastning %',d.concentration?.fixedBase?.totalReturn??'']);
     lines.push(['Fryst bas över OMX p.e.',d.concentration?.fixedBase?.excess??'']);
     lines.push(['Top 1 andel av positiva bidrag %',d.concentration?.top1Share??'']);
     lines.push(['Top 3 andel av positiva bidrag %',d.concentration?.top3Share??'']);
@@ -7126,7 +7093,7 @@ function exportFiveYearBacktestCsv(){
     for(const x of (d.concentration?.reruns||[]))lines.push([`Utan Top ${x.n}`,x.excluded.join('|'),x.result?.totalReturn??'',x.result?.benchmarkReturn??'',x.result?.excess??'',x.result&&d.concentration?.fixedBase?x.result.totalReturn-d.concentration.fixedBase.totalReturn:'',x.result?.cagr??'',x.result?.maxDrawdown??'',x.result?.volatility??'',x.result?.trades??'']);
   }
   const csv='\ufeff'+lines.map(row=>row.map(csvEscape).join(';')).join('\n');
-  downloadTextFile(csv,`MomentumScore_v20_6_0_Vit_5ar_${todayISO()}.csv`,'text/csv;charset=utf-8')
+  downloadTextFile(csv,`MomentumScore_v20_6_9_Vit_10ar_${todayISO()}.csv`,'text/csv;charset=utf-8')
 }
 
 function movingAverageAtOffset(closes,period=200,offset=0){
@@ -8395,7 +8362,5 @@ setTimeout(()=>{
   try{backfillMissingWeeklyPortfolios()}catch(error){console.error('Veckoportföljernas återställning misslyckades',error)}
   maybeAutoUpdate()
 },600);
-
-document.getElementById('runYahooRangeDiagnostic')?.addEventListener('click',runYahooRangeDiagnostic);
 </script>
 </body></html>
