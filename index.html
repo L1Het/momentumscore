@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.7.4 – fungerande innehavsanalys</h1>
+<h1>MomentumScore v20.7.5 – transaktionsbaserad innehavsanalys</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -672,8 +672,8 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
     <div class="tablewrap"><table id="fiveYearDiagnosticTable"></table></div>
     <div class="rowcard" style="margin-top:18px">
       <h3>Vit 2.1 – vilka aktier fungerar?</h3>
-      <p class="note">Varje sammanhängande Top10-period jämförs med OMXSPI under exakt samma veckor. Analysen påverkar inte modellen.</p>
-      <div id="whiteHoldingAnalysisSummary" class="summary"></div>
+      <p class="note">Analysen bygger på backtestets faktiska köp och försäljningar: verklig executionDate och kurs, courtage på både köp och sälj samt OMXSPI på exakt samma köp- och säljdatum. Öppna positioner redovisas separat och räknas inte i träffprocenten.</p>
+      <div id="whiteHoldingAnalysisSummary" class="summary"></div><div class="actions" style="margin:8px 0 12px"><button type="button" class="secondary" id="exportWhiteTradeLedger">Exportera affärer CSV</button></div>
       <div class="tablewrap"><table id="whiteHoldingAnalysisCompany"></table></div>
       <div class="tablewrap" style="margin-top:14px"><table id="whiteHoldingAnalysisDuration"></table></div>
       <div class="tablewrap" style="margin-top:14px"><table id="whiteHoldingAnalysisRegime"></table></div>
@@ -6563,7 +6563,7 @@ function runFiveYearWhiteBacktest(){
   const signals=fiveYearWeeklySignals(fiveYearBacktestData.index).filter(x=>!testStart||String(x.date)>=testStart);
   if(signals.length<20)return alert('För få veckor för testet.');
   const state={cash:100000,positions:{},fees:0,trades:0,turnover:0};
-  const points=[],weeks=[];
+  const points=[],weeks=[],tradeLedger=[];
   let benchmarkStart=NaN,started=false,previousTarget=[];
   const frozenWeights=normalizedWhiteWeights({distanceMa200:10,ma50Spread:30,ma200Slope1m:30,trendStability5d:30});
   for(let s=0;s<signals.length-1;s++){
@@ -6572,6 +6572,7 @@ function runFiveYearWhiteBacktest(){
     if(!executionDate)continue;
     const ranked=fiveYearTopN(signal.date,Object.keys(state.positions),20,frozenWeights);
     if(ranked.length<5)continue;
+    const rankMapAll=new Map(ranked.map((x,i)=>[x.ticker,i+1]));
     let target=[];
     if(started){
       const rankMap=new Map(ranked.map((x,i)=>[x.ticker,i+1]));
@@ -6598,7 +6599,15 @@ function runFiveYearWhiteBacktest(){
         const price=fiveYearPriceOnOrAfter(item.series,executionDate);
         const gross=per/(1+FIVE_YEAR_FEE_RATE);
         const fee=gross*FIVE_YEAR_FEE_RATE;
-        state.positions[item.ticker]={shares:gross/price,lastPrice:price};
+        const entryIndex=fiveYearPriceOnOrAfter(fiveYearBacktestData.index,executionDate);
+        state.positions[item.ticker]={
+          shares:gross/price,lastPrice:price,
+          buyDate:executionDate,buyPrice:price,buyFee:fee,costBasis:gross+fee,
+          buySignalDate:signal.date,buySignalIndex:s,
+          buyRank:rankMapAll.get(item.ticker)||null,buyScore:item.score,
+          buyTechnical:item.technical?{...item.technical}:null,
+          entryIndex
+        };
         state.cash-=gross+fee;state.fees+=fee;state.turnover+=gross;state.trades++
       }
       benchmarkStart=fiveYearPriceOnOrAfter(fiveYearBacktestData.index,executionDate);
@@ -6611,8 +6620,28 @@ function runFiveYearWhiteBacktest(){
         const pos=state.positions[ticker];
         const price=item?fiveYearPriceOnOrAfter(item.series,executionDate):NaN;
         if(!Number.isFinite(price))continue;
-        const gross=pos.shares*price,fee=gross*FIVE_YEAR_FEE_RATE;
-        proceeds+=gross-fee;state.fees+=fee;state.turnover+=gross;state.trades++;
+        const gross=pos.shares*price,fee=gross*FIVE_YEAR_FEE_RATE,net=gross-fee;
+        const exitIndex=fiveYearPriceOnOrAfter(fiveYearBacktestData.index,executionDate);
+        const grossReturn=Number.isFinite(pos.buyPrice)&&pos.buyPrice>0?(price/pos.buyPrice-1)*100:NaN;
+        const netReturn=Number.isFinite(pos.costBasis)&&pos.costBasis>0?(net/pos.costBasis-1)*100:NaN;
+        const indexReturnTrade=Number.isFinite(pos.entryIndex)&&pos.entryIndex>0&&Number.isFinite(exitIndex)
+          ?(exitIndex/pos.entryIndex-1)*100:NaN;
+        const exitScoreObj=fiveYearWeightedHistoricalScore(item?.series||[],signal.date,loadWhitePlateaus(),frozenWeights);
+        tradeLedger.push({
+          status:'closed',ticker,company:item?.company||'',
+          buyDate:pos.buyDate,buyPrice:pos.buyPrice,buyFee:pos.buyFee,
+          sellDate:executionDate,sellPrice:price,sellFee:fee,
+          buySignalDate:pos.buySignalDate,sellSignalDate:signal.date,
+          buyRank:pos.buyRank,exitRank:rankMapAll.get(ticker)||21,
+          buyScore:pos.buyScore,exitScore:exitScoreObj?.score??NaN,
+          buyTechnical:pos.buyTechnical||null,exitTechnical:exitScoreObj?.technical||null,
+          weeksHeld:Number.isFinite(pos.buySignalIndex)?Math.max(0,s-pos.buySignalIndex):NaN,
+          grossReturn,netReturn,indexReturn:indexReturnTrade,
+          excessGross:Number.isFinite(grossReturn)&&Number.isFinite(indexReturnTrade)?grossReturn-indexReturnTrade:NaN,
+          excessNet:Number.isFinite(netReturn)&&Number.isFinite(indexReturnTrade)?netReturn-indexReturnTrade:NaN,
+          costBasis:pos.costBasis,netProceeds:net
+        });
+        proceeds+=net;state.fees+=fee;state.turnover+=gross;state.trades++;
         delete state.positions[ticker]
       }
       state.cash+=proceeds;
@@ -6622,7 +6651,15 @@ function runFiveYearWhiteBacktest(){
         for(const item of incoming){
           const price=fiveYearPriceOnOrAfter(item.series,executionDate);
           const gross=alloc/(1+FIVE_YEAR_FEE_RATE),fee=gross*FIVE_YEAR_FEE_RATE;
-          state.positions[item.ticker]={shares:gross/price,lastPrice:price};
+          const entryIndex=fiveYearPriceOnOrAfter(fiveYearBacktestData.index,executionDate);
+          state.positions[item.ticker]={
+            shares:gross/price,lastPrice:price,
+            buyDate:executionDate,buyPrice:price,buyFee:fee,costBasis:gross+fee,
+            buySignalDate:signal.date,buySignalIndex:s,
+            buyRank:rankMapAll.get(item.ticker)||null,buyScore:item.score,
+            buyTechnical:item.technical?{...item.technical}:null,
+            entryIndex
+          };
           state.cash-=gross+fee;state.fees+=fee;state.turnover+=gross;state.trades++
         }
       }
@@ -6636,15 +6673,7 @@ function runFiveYearWhiteBacktest(){
     const prevPoint=points.length>=2?points[points.length-2]:null;
     const weekRet=prevPoint&&prevPoint.value>0?(value/prevPoint.value-1)*100:NaN;
     const weekIdx=prevPoint&&prevPoint.indexValue>0?(idx/prevPoint.indexValue-1)*100:NaN;
-    const memberReturns={};
-    if(prevPoint){
-      for(const item of target){
-        const p0=fiveYearPriceOnOrBefore(item.series,prevPoint.date);
-        const p1=fiveYearPriceOnOrBefore(item.series,executionDate);
-        if(Number.isFinite(p0)&&p0>0&&Number.isFinite(p1))memberReturns[item.ticker]=(p1/p0-1)*100;
-      }
-    }
-    weeks.push({weekKey:signal.weekKey,signalDate:signal.date,executionDate,value,portfolioReturn,indexReturn,weekRet,weekIdx,excess:Number.isFinite(weekRet)&&Number.isFinite(weekIdx)?weekRet-weekIdx:NaN,top10:target.map(x=>x.ticker),memberReturns})
+    weeks.push({weekKey:signal.weekKey,signalDate:signal.date,executionDate,value,portfolioReturn,indexReturn,weekRet,weekIdx,excess:Number.isFinite(weekRet)&&Number.isFinite(weekIdx)?weekRet-weekIdx:NaN,top10:target.map(x=>x.ticker)})
   }
   if(points.length<2)return alert('Testet kunde inte skapa tillräckligt många portföljveckor.');
   const first=points[0],last=points[points.length-1];
@@ -6655,6 +6684,31 @@ function runFiveYearWhiteBacktest(){
   const cagr=(Math.pow(last.value/100000,1/years)-1)*100;
   const benchmarkCagr=Number.isFinite(benchmarkReturn)?(Math.pow(1+benchmarkReturn/100,1/years)-1)*100:NaN;
   const validWeeks=weeks.filter(w=>Number.isFinite(w.excess));
+
+  // Öppna positioner vid testslut markeras separat och räknas INTE in i träffprocenten.
+  for(const [ticker,pos] of Object.entries(state.positions)){
+    const item=fiveYearBacktestData.stockMap[ticker];
+    const markPrice=item?fiveYearPriceOnOrBefore(item.series,last.date):NaN;
+    const markIndex=fiveYearPriceOnOrBefore(fiveYearBacktestData.index,last.date);
+    const grossReturn=Number.isFinite(pos.buyPrice)&&pos.buyPrice>0&&Number.isFinite(markPrice)?(markPrice/pos.buyPrice-1)*100:NaN;
+    const markValue=Number.isFinite(markPrice)?pos.shares*markPrice:NaN;
+    const hypotheticalSellFee=Number.isFinite(markValue)?markValue*FIVE_YEAR_FEE_RATE:NaN;
+    const netMark=Number.isFinite(markValue)&&Number.isFinite(hypotheticalSellFee)?markValue-hypotheticalSellFee:NaN;
+    const netReturn=Number.isFinite(pos.costBasis)&&pos.costBasis>0&&Number.isFinite(netMark)?(netMark/pos.costBasis-1)*100:NaN;
+    const indexReturnTrade=Number.isFinite(pos.entryIndex)&&pos.entryIndex>0&&Number.isFinite(markIndex)?(markIndex/pos.entryIndex-1)*100:NaN;
+    tradeLedger.push({
+      status:'open',ticker,company:item?.company||'',
+      buyDate:pos.buyDate,buyPrice:pos.buyPrice,buyFee:pos.buyFee,
+      sellDate:null,sellPrice:null,sellFee:null,
+      buySignalDate:pos.buySignalDate,buyRank:pos.buyRank,buyScore:pos.buyScore,
+      buyTechnical:pos.buyTechnical||null,
+      weeksHeld:Number.isFinite(pos.buySignalIndex)?Math.max(0,(signals.length-2)-pos.buySignalIndex):NaN,
+      grossReturn,netReturn,indexReturn:indexReturnTrade,
+      excessGross:Number.isFinite(grossReturn)&&Number.isFinite(indexReturnTrade)?grossReturn-indexReturnTrade:NaN,
+      excessNet:Number.isFinite(netReturn)&&Number.isFinite(indexReturnTrade)?netReturn-indexReturnTrade:NaN
+    })
+  }
+
   const result={
     generatedAt:nowISO(),startDate:first.date,endDate:last.date,years,weekCount:weeks.length,
     totalReturn,benchmarkReturn,excess:Number.isFinite(benchmarkReturn)?totalReturn-benchmarkReturn:NaN,
@@ -6662,7 +6716,7 @@ function runFiveYearWhiteBacktest(){
     maxDrawdown:fiveYearMaxDrawdown(points),volatility:fiveYearVolatility(points),
     beatWeeks:validWeeks.length?validWeeks.filter(w=>w.excess>0).length/validWeeks.length*100:NaN,
     trades:state.trades,fees:state.fees,turnover:state.turnover/100000*100,
-    finalValue:last.value,points,weeks,
+    finalValue:last.value,points,weeks,tradeLedger,
     universe:fiveYearBacktestData.stocks.length,
     failures:fiveYearBacktestData.failures||[]
   };
@@ -7057,77 +7111,130 @@ function fiveYearChart(result){
   </svg>`
 }
 
-function whiteHoldingBucket(n){
-  if(n<=2)return '1–2 veckor'; if(n<=4)return '3–4 veckor';
-  if(n<=8)return '5–8 veckor'; if(n<=12)return '9–12 veckor'; return '>12 veckor';
+
+function whiteTradeBucket(n){
+  if(n<=2)return '1–2 veckor';
+  if(n<=4)return '3–4 veckor';
+  if(n<=8)return '5–8 veckor';
+  if(n<=12)return '9–12 veckor';
+  return '>12 veckor';
 }
-function whitePeriodBucket(d){
+function whiteTradeRegime(d){
   const y=Number(String(d||'').slice(0,4));
-  if(y<=2019)return '2017–2019'; if(y<=2022)return '2020–2022'; return '2023–2026';
+  if(y<=2019)return '2017–2019';
+  if(y<=2022)return '2020–2022';
+  return '2023–2026';
 }
 function whiteAvg(a){const v=a.filter(Number.isFinite);return v.length?v.reduce((s,x)=>s+x,0)/v.length:NaN}
-function whiteMedian(a){const v=a.filter(Number.isFinite).sort((a,b)=>a-b);if(!v.length)return NaN;const m=Math.floor(v.length/2);return v.length%2?v[m]:(v[m-1]+v[m])/2}
-function whiteHoldingEpisodes(r){
-  const weeks=r?.weeks||[],active=new Map(),out=[];
-  const close=(ticker,endIndex)=>{
-    const e=active.get(ticker);if(!e)return;
-    const slice=weeks.slice(e.startIndex,endIndex+1);
-    let sf=1,ix=1,usable=0;
-    for(const w of slice){
-      const mr=w.memberReturns?.[ticker];
-      if(Number.isFinite(mr)){sf*=1+mr/100;usable++}
-      if(Number.isFinite(w.weekIdx))ix*=1+w.weekIdx/100;
-    }
-    if(usable){
-      const sr=(sf-1)*100,ir=(ix-1)*100;
-      out.push({ticker,entryDate:e.entryDate,weeks:slice.length,stockRet:sr,indexRet:ir,excess:sr-ir});
-    }
-    active.delete(ticker)
-  };
-  weeks.forEach((w,i)=>{
-    const set=new Set(w.top10||[]);
-    for(const t of [...active.keys()])if(!set.has(t))close(t,i-1);
-    for(const t of set)if(!active.has(t))active.set(t,{startIndex:i,entryDate:w.executionDate||w.signalDate||w.weekKey});
-  });
-  for(const t of [...active.keys()])close(t,weeks.length-1);
-  return out
+function whiteMedian(a){
+  const v=a.filter(Number.isFinite).sort((a,b)=>a-b);
+  if(!v.length)return NaN;
+  const m=Math.floor(v.length/2);
+  return v.length%2?v[m]:(v[m-1]+v[m])/2
 }
-function whiteGroupEpisodes(arr,keyFn){
+function whiteTradeGroup(arr,keyFn){
   const m=new Map();
-  for(const e of arr){const k=keyFn(e);if(!m.has(k))m.set(k,[]);m.get(k).push(e)}
-  return [...m].map(([key,v])=>({key,n:v.length,beat:100*v.filter(x=>x.excess>0).length/v.length,
-    avgExcess:whiteAvg(v.map(x=>x.excess)),medianExcess:whiteMedian(v.map(x=>x.excess)),
-    avgStock:whiteAvg(v.map(x=>x.stockRet)),avgWeeks:whiteAvg(v.map(x=>x.weeks))}))
+  for(const e of arr){
+    const k=keyFn(e);
+    if(!m.has(k))m.set(k,[]);
+    m.get(k).push(e)
+  }
+  return [...m].map(([key,v])=>({
+    key,
+    n:v.length,
+    beatNet:100*v.filter(x=>x.excessNet>0).length/v.length,
+    beatGross:100*v.filter(x=>x.excessGross>0).length/v.length,
+    avgExcessNet:whiteAvg(v.map(x=>x.excessNet)),
+    medExcessNet:whiteMedian(v.map(x=>x.excessNet)),
+    avgExcessGross:whiteAvg(v.map(x=>x.excessGross)),
+    avgNet:whiteAvg(v.map(x=>x.netReturn)),
+    avgWeeks:whiteAvg(v.map(x=>x.weeksHeld))
+  }))
 }
+
+function exportWhiteTradeLedgerCsv(){
+  const r=fiveYearBacktestResult;
+  const ledger=r?.tradeLedger||[];
+  if(!ledger.length)return alert('Kör 10-årstestet först.');
+  const h=['status','ticker','company','buyDate','buyPrice','buyFee','sellDate','sellPrice','sellFee','weeksHeld','buyRank','exitRank','buyScore','exitScore','grossReturn','netReturn','indexReturn','excessGross','excessNet','distanceMa200','ma50Spread','ma200Slope1m','trendStability5d'];
+  const q=v=>`"${String(v??'').replaceAll('"','""')}"`;
+  const lines=[h.join(';')];
+  for(const x of ledger){
+    const t=x.buyTechnical||{};
+    lines.push([
+      x.status,x.ticker,x.company,x.buyDate,x.buyPrice,x.buyFee,x.sellDate,x.sellPrice,x.sellFee,x.weeksHeld,
+      x.buyRank,x.exitRank,x.buyScore,x.exitScore,x.grossReturn,x.netReturn,x.indexReturn,x.excessGross,x.excessNet,
+      t.distanceMa200,t.ma50Spread,t.ma200Slope1m,t.trendStability5d
+    ].map(q).join(';'))
+  }
+  downloadText('MomentumScore_v20_7_5_trade_ledger.csv','\ufeff'+lines.join('\n'),'text/csv;charset=utf-8')
+}
+
 function renderWhiteHoldingAnalysis(r){
-  const s=document.getElementById('whiteHoldingAnalysisSummary'),c=document.getElementById('whiteHoldingAnalysisCompany'),
-        d=document.getElementById('whiteHoldingAnalysisDuration'),g=document.getElementById('whiteHoldingAnalysisRegime');
+  const s=document.getElementById('whiteHoldingAnalysisSummary'),
+        c=document.getElementById('whiteHoldingAnalysisCompany'),
+        d=document.getElementById('whiteHoldingAnalysisDuration'),
+        g=document.getElementById('whiteHoldingAnalysisRegime');
   if(!s||!c||!d||!g)return;
-  if(!r?.weeks?.length){
-    s.innerHTML='<div class="metric"><small>Innehavsanalys</small><b>Backtestdata saknas</b></div>';
+  const exportBtn=document.getElementById('exportWhiteTradeLedger');
+  if(exportBtn)exportBtn.onclick=exportWhiteTradeLedgerCsv;
+
+  const closed=(r?.tradeLedger||[]).filter(x=>x.status==='closed'&&Number.isFinite(x.excessNet));
+  const open=(r?.tradeLedger||[]).filter(x=>x.status==='open');
+
+  if(!closed.length){
+    s.innerHTML='<div class="metric"><small>Transaktionsanalys</small><b>Inga avslutade affärer</b></div>';
     c.innerHTML=d.innerHTML=g.innerHTML='';
-    return;
+    return
   }
-  const weeksWithMemberData=r.weeks.filter(w=>w.memberReturns&&Object.keys(w.memberReturns).length).length;
-  const ep=whiteHoldingEpisodes(r);
-  if(!ep.length){
-    s.innerHTML=`<div class="metric"><small>Innehavsanalys</small><b>0 perioder</b></div>
-      <div class="metric"><small>Veckor med aktiedata</small><b>${weeksWithMemberData}/${r.weeks.length}</b></div>`;
-    c.innerHTML='<tr><td style="text-align:left">Ingen individuell innehavsperiod kunde räknas. Kör testet med ”Hämta 10 år och kör test” igen så att memberReturns skapas.</td></tr>';
-    d.innerHTML=g.innerHTML='';
-    return;
-  }
-  const beat=100*ep.filter(x=>x.excess>0).length/ep.length,avg=whiteAvg(ep.map(x=>x.excess)),med=whiteMedian(ep.map(x=>x.excess));
-  s.innerHTML=[['Innehavsperioder',ep.length],['Slår OMXSPI',beat.toFixed(1).replace('.',',')+' %'],
-    ['Snitt mot OMX',signed(avg,' p.e.')],['Median mot OMX',signed(med,' p.e.')],
-    ['Veckor med aktiedata',weeksWithMemberData+'/'+r.weeks.length]]
-    .map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
-  const rows=(arr,label)=>'<tr><th>'+label+'</th><th>Perioder</th><th>Slår OMX</th><th>Snitt mot OMX</th><th>Median mot OMX</th><th>Aktie snitt</th><th>Veckor snitt</th></tr>'+
-    arr.map(x=>`<tr><td style="text-align:left">${x.key}</td><td>${x.n}</td><td>${x.beat.toFixed(1).replace('.',',')} %</td><td class="${classByValue(x.avgExcess)}">${signed(x.avgExcess,' p.e.')}</td><td class="${classByValue(x.medianExcess)}">${signed(x.medianExcess,' p.e.')}</td><td>${signed(x.avgStock,' %')}</td><td>${x.avgWeeks.toFixed(1).replace('.',',')}</td></tr>`).join('');
-  c.innerHTML=rows(whiteGroupEpisodes(ep,x=>x.ticker).sort((a,b)=>b.avgExcess-a.avgExcess),'Bolag');
-  const ord=['1–2 veckor','3–4 veckor','5–8 veckor','9–12 veckor','>12 veckor'];
-  d.innerHTML=rows(whiteGroupEpisodes(ep,x=>whiteHoldingBucket(x.weeks)).sort((a,b)=>ord.indexOf(a.key)-ord.indexOf(b.key)),'Innehavstid');
-  g.innerHTML=rows(whiteGroupEpisodes(ep,x=>whitePeriodBucket(x.entryDate)).sort((a,b)=>a.key.localeCompare(b.key)),'Period');
+
+  const beatNet=100*closed.filter(x=>x.excessNet>0).length/closed.length;
+  const beatGross=100*closed.filter(x=>x.excessGross>0).length/closed.length;
+  const avgNet=whiteAvg(closed.map(x=>x.excessNet));
+  const medNet=whiteMedian(closed.map(x=>x.excessNet));
+  const avgTrade=whiteAvg(closed.map(x=>x.netReturn));
+  const avgWeeks=whiteAvg(closed.map(x=>x.weeksHeld));
+
+  s.innerHTML=[
+    ['Avslutade affärer',closed.length],
+    ['Öppna vid testslut',open.length],
+    ['Slår OMX netto',beatNet.toFixed(1).replace('.',',')+' %'],
+    ['Slår OMX före courtage',beatGross.toFixed(1).replace('.',',')+' %'],
+    ['Snitt mot OMX netto',signed(avgNet,' p.e.')],
+    ['Median mot OMX netto',signed(medNet,' p.e.')],
+    ['Snitt affär netto',signed(avgTrade,' %')],
+    ['Snitt innehavstid',avgWeeks.toFixed(1).replace('.',',')+' v']
+  ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
+
+  const rows=(arr,label)=>'<tr>'+
+    `<th>${label}</th><th>Affärer</th><th>Slår OMX netto</th><th>Snitt mot OMX netto</th><th>Median mot OMX netto</th><th>Snitt mot OMX brutto</th><th>Affär netto</th><th>Veckor</th></tr>`+
+    arr.map(x=>`<tr>
+      <td style="text-align:left">${x.key}</td>
+      <td>${x.n}</td>
+      <td>${x.beatNet.toFixed(1).replace('.',',')} %</td>
+      <td class="${classByValue(x.avgExcessNet)}">${signed(x.avgExcessNet,' p.e.')}</td>
+      <td class="${classByValue(x.medExcessNet)}">${signed(x.medExcessNet,' p.e.')}</td>
+      <td class="${classByValue(x.avgExcessGross)}">${signed(x.avgExcessGross,' p.e.')}</td>
+      <td class="${classByValue(x.avgNet)}">${signed(x.avgNet,' %')}</td>
+      <td>${x.avgWeeks.toFixed(1).replace('.',',')}</td>
+    </tr>`).join('');
+
+  const companies=whiteTradeGroup(closed,x=>x.ticker)
+    .sort((a,b)=>b.n-a.n || b.avgExcessNet-a.avgExcessNet);
+  c.innerHTML=rows(companies,'Bolag');
+
+  const order=['1–2 veckor','3–4 veckor','5–8 veckor','9–12 veckor','>12 veckor'];
+  d.innerHTML=rows(
+    whiteTradeGroup(closed,x=>whiteTradeBucket(x.weeksHeld))
+      .sort((a,b)=>order.indexOf(a.key)-order.indexOf(b.key)),
+    'Innehavstid'
+  );
+
+  g.innerHTML=rows(
+    whiteTradeGroup(closed,x=>whiteTradeRegime(x.buyDate))
+      .sort((a,b)=>a.key.localeCompare(b.key)),
+    'Köpperiod'
+  );
 }
 
 function renderFiveYearBacktest(r){
