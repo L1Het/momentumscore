@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.6.7</title>
+<title>MomentumScore v20.6.8</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.6.7 – Yahoo range-test</h1>
+<h1>MomentumScore v20.6.8 – Yahoo range-test fix</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -6353,6 +6353,10 @@ async function fetchYahooRangeDiagnostic(symbol,range){
   if(series.length>1){years=(new Date(last)-new Date(first))/(365.2425*86400000)}
   return {range,points:series.length,first,last,years,metaRange:result?.meta?.range||'',dataGranularity:result?.meta?.dataGranularity||''};
 }
+function escapeHtml(value){
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]));
+}
+
 async function runYahooRangeDiagnostic(){
   const btn=document.getElementById('runYahooRangeDiagnostic');
   const status=document.getElementById('yahooRangeDiagnosticStatus');
