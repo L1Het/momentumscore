@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.7.8 – fredagsclose-entry + korrekt veckostart</h1>
+<h1>MomentumScore v20.7.9 – fredagsclose aktiv direkt + korrekt datum</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -2808,7 +2808,7 @@ function buildRollingPortfolio(model,asOfDate=''){
     if(snapshotIndex>0 && tradeDate) lastUpdateDate=tradeDate;
 
     if(snapshotIndex===0){
-      startDate=String(tradeDate||snapshot.savedDate||snapshot.savedAt).slice(0,10);
+      startDate=weeklySnapshotActivationDate(snapshot)||String(tradeDate||snapshot.savedDate||snapshot.savedAt).slice(0,10);
       lastUpdateDate=startDate;
       benchmarkStart=num(snapshot.benchmarkStart);
 
@@ -2827,7 +2827,7 @@ function buildRollingPortfolio(model,asOfDate=''){
           ...member,
           key,
           shares,
-          buyDate:startDate,
+          buyDate:tradeDate,
           buyWeek:snapshot.weekKey,
           buyPrice,
           cost:allocation,
@@ -3091,7 +3091,7 @@ function renderDevelopmentPortfolios(){
     ['day',' %'],['excessDay',' p.e.'],['weekReturn',' %'],['excessWeek',' p.e.'],['month',' %'],['excessMonth',' p.e.']
   ].map(([key,suffix])=>{const value=devPortfolioSortValue(x,key);return `<td class="${portfolioReturnClass(value)}"><b>${signed(value,suffix)}</b></td>`}).join('');
   const rollingHtml=sortedRolling.length?'<tr class="portfolio-section-row"><td colspan="12">Rullande Top 10</td></tr>'+sortedRolling.map(x=>`<tr class="portfolio-row rolling-portfolio-row" data-rolling-model="${x.model}"><td><b>Rullande Top 10</b><br><small>${dateFmt(x.lastUpdateDate||x.startDate)}</small></td><td>${portfolioModelName(x.model)}</td>${periodCells(x)}<td class="${portfolioReturnClass(x.returnPct)}"><b>${signed(x.returnPct,' %')}</b></td><td class="${portfolioReturnClass(x.profit)}"><b>${signed(x.profit,' kr')}</b></td><td class="${portfolioReturnClass(x.excess)}"><b>${signed(x.excess,' p.e.')}</b></td><td>${x.winners}/${x.result.available}</td></tr>`).join(''):'';
-  const frozenHtml=sortedFrozen.length?'<tr class="portfolio-section-row"><td colspan="12">Frysta veckoportföljer</td></tr>'+sortedFrozen.map(x=>{const frozenProfit=Number.isFinite(x.returns.start)?ROLLING_START_CAPITAL*x.returns.start/100:NaN;return `<tr class="portfolio-row" data-frozen-id="${x.snapshot.id}" data-frozen-model="${x.model}"><td><b>${x.snapshot.weekKey}</b><br><small>Veckostart ${dateFmt(weeklySnapshotActivationDate(x.snapshot))}${x.snapshot.executionDate?' · entry '+dateFmt(x.snapshot.executionDate):' · entry väntar'}</small></td><td>${portfolioModelName(x.model)}</td>${periodCells(x)}<td class="${portfolioReturnClass(x.returns.start)}"><b>${signed(x.returns.start,' %')}</b></td><td class="${portfolioReturnClass(frozenProfit)}"><b>${signed(frozenProfit,' kr')}</b></td><td class="${portfolioReturnClass(x.excessReturns.start)}"><b>${signed(x.excessReturns.start,' p.e.')}</b></td><td>${x.winners}/${x.result.available}</td></tr>`}).join(''):'';
+  const frozenHtml=sortedFrozen.length?'<tr class="portfolio-section-row"><td colspan="12">Frysta veckoportföljer</td></tr>'+sortedFrozen.map(x=>{const frozenProfit=Number.isFinite(x.returns.start)?ROLLING_START_CAPITAL*x.returns.start/100:NaN;return `<tr class="portfolio-row" data-frozen-id="${x.snapshot.id}" data-frozen-model="${x.model}"><td><b>${x.snapshot.weekKey}</b><br><small>${dateFmt(weeklySnapshotActivationDate(x.snapshot))}</small></td><td>${portfolioModelName(x.model)}</td>${periodCells(x)}<td class="${portfolioReturnClass(x.returns.start)}"><b>${signed(x.returns.start,' %')}</b></td><td class="${portfolioReturnClass(frozenProfit)}"><b>${signed(frozenProfit,' kr')}</b></td><td class="${portfolioReturnClass(x.excessReturns.start)}"><b>${signed(x.excessReturns.start,' p.e.')}</b></td><td>${x.winners}/${x.result.available}</td></tr>`}).join(''):'';
   table.innerHTML=head+rollingHtml+frozenHtml;
   table.querySelectorAll('[data-dev-portfolio-sort]').forEach(header=>header.onclick=()=>{const key=header.dataset.devPortfolioSort;if(devPortfolioActiveSort===key)devPortfolioDirection=devPortfolioDirection==='desc'?'asc':'desc';else{devPortfolioActiveSort=key;devPortfolioDirection=['model','fees'].includes(key)?'asc':'desc'}const select=document.getElementById('devPortfolioSort');if(select&&[...select.options].some(o=>o.value===key))select.value=key;renderDevelopmentPortfolios()});
   table.querySelectorAll('[data-rolling-model]').forEach(row=>row.onclick=()=>openRollingDevelopmentPortfolio(row.dataset.rollingModel));
@@ -7617,45 +7617,79 @@ function weeklyExecutionCanFinalize(snapshot,now=new Date()){
   const monday=weeklySnapshotActivationDate(snapshot);
   if(!monday)return false;
 
-  // Entry är föregående handelsdags close. Så snart den kursen finns
-  // får nästa veckas portfölj finaliseras; den behöver INTE vänta på måndagsclose.
+  const stored=['blue','white','average'].every(model=>
+    (snapshot.portfolios?.[model]?.members||[]).length===10 &&
+    snapshot.portfolios[model].members.every(member=>Number.isFinite(num(member.signalPrice))&&num(member.signalPrice)>0)
+  );
+  if(stored&&Number.isFinite(num(snapshot.benchmarkSignalStart))&&num(snapshot.benchmarkSignalStart)>0)return true;
+
   return Boolean(commonWeeklyEntryDate(snapshot))
 }
 
 function finalizeWeeklyExecution(snapshot){
   if(!snapshot||snapshot.executionStatus==='finalized')return false;
-  if(!weeklyExecutionCanFinalize(snapshot))return false;
 
-  const executionDate=commonWeeklyEntryDate(snapshot);
-  if(!executionDate)return false;
+  const monday=weeklySnapshotActivationDate(snapshot);
+  if(!monday)return false;
 
+  // Normalfallet: signalen skapades efter fredagsclose och varje medlem har redan
+  // en verifierad fredagskurs i signalPrice. Använd den direkt. Då är W33 aktiv
+  // redan på måndag och hela måndagens gap/rörelse räknas från fredagsclose.
+  const expectedFriday=addCalendarDaysISO(monday,-3);
   const market=snapshot.benchmarkMarket||'SE';
-  const benchmark=benchmarkValueExact(market,executionDate);
-  if(!Number.isFinite(benchmark)||benchmark<=0)return false;
 
+  let executionDate='';
+  let benchmark=NaN;
   const prices=new Map();
-  for(const model of ['blue','white','average']){
-    for(const member of (snapshot.portfolios?.[model]?.members||[])){
-      const price=rowExecutionPriceExact(member,executionDate);
-      if(!Number.isFinite(price)||price<=0)return false;
-      prices.set(member.ticker,price)
+
+  const hasStoredSignalPrices=['blue','white','average'].every(model=>
+    (snapshot.portfolios?.[model]?.members||[]).length===10 &&
+    snapshot.portfolios[model].members.every(member=>Number.isFinite(num(member.signalPrice))&&num(member.signalPrice)>0)
+  );
+
+  if(hasStoredSignalPrices){
+    executionDate=expectedFriday;
+    benchmark=Number.isFinite(num(snapshot.benchmarkSignalStart))
+      ?num(snapshot.benchmarkSignalStart)
+      :benchmarkValueExact(market,executionDate);
+
+    for(const model of ['blue','white','average']){
+      for(const member of (snapshot.portfolios?.[model]?.members||[])){
+        prices.set(model+'|'+weeklyMemberKey(member),num(member.signalPrice))
+      }
+    }
+  }else{
+    // Äldre veckor: rekonstruera från exakt föregående gemensamma handelsdag.
+    executionDate=commonWeeklyEntryDate(snapshot);
+    if(!executionDate)return false;
+    benchmark=benchmarkValueExact(market,executionDate);
+    for(const model of ['blue','white','average']){
+      for(const member of (snapshot.portfolios?.[model]?.members||[])){
+        const price=rowExecutionPriceExact(member,executionDate);
+        if(!Number.isFinite(price)||price<=0)return false;
+        prices.set(model+'|'+weeklyMemberKey(member),price)
+      }
     }
   }
 
-  snapshot.activationDate=weeklySnapshotActivationDate(snapshot); // måndag/veckostart
-  snapshot.executionDate=executionDate;                           // fredag/prev trading close
+  if(!Number.isFinite(benchmark)||benchmark<=0)return false;
+
+  snapshot.activationDate=monday;
+  snapshot.executionDate=executionDate;
   snapshot.executionBenchmark=benchmark;
+  snapshot.benchmarkStart=benchmark;
   snapshot.executionStatus='finalized';
+  snapshot.executionMode='previous-trading-day-close';
   snapshot.executionFinalizedAt=new Date().toISOString();
 
   for(const model of ['blue','white','average']){
     const portfolio=snapshot.portfolios?.[model];
     if(!portfolio)continue;
     portfolio.executionDate=executionDate;
-    portfolio.activationDate=snapshot.activationDate;
+    portfolio.activationDate=monday;
     portfolio.startBenchmark=benchmark;
     for(const member of (portfolio.members||[])){
-      const price=prices.get(member.ticker);
+      const price=prices.get(model+'|'+weeklyMemberKey(member));
       member.startPrice=price;
       member.executionPrice=price;
       member.executionDate=executionDate
@@ -7688,6 +7722,8 @@ function finalizeReadyWeeklyExecutions(){
           p.activationDate=canonicalMonday;
           p.startBenchmark=NaN;
           for(const member of (p.members||[])){
+            // Behåll signalPrice. Den är den verifierade fredagsclose som användes
+            // när Top10 skapades och behövs för korrekt återfinalisering.
             member.startPrice=NaN;
             member.executionPrice=NaN;
             member.executionDate=''
