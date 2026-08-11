@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.8.0 – enhetlig fredagsclose-motor</h1>
+<h1>MomentumScore v20.8.1 – lätt databas + städade inställningar</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -629,6 +629,11 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
 <div id="importStatus" class="note" style="margin-top:8px">Ingen fil vald.</div>
 </div>
 <div class="card">
+  <h2>Inställningsvy</h2>
+  <p class="note">Gamla optimerings- och laboratorieverktyg är dolda som standard. De finns kvar i filen och kan visas vid behov, men sparad cache för dem används inte längre.</p>
+  <div class="actions"><button class="secondary" id="toggleLegacyTools" type="button">Visa gamla analysverktyg</button></div>
+</div>
+<div class="card">
 <h2>Automatisk kursuppdatering</h2>
 <div class="grid">
 <div><label>Datakälla</label><select id="marketSource"><option value="yahoo">Yahoo Finance</option></select></div>
@@ -641,10 +646,14 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
 <p class="note">Veckoportföljer skapas automatiskt från den senaste avslutade fredagens data. Om appen inte öppnas under helgen eller före måndagens börsöppning återskapas saknade veckor automatiskt från sparad kurs- och poänghistorik nästa gång appen öppnas.</p>
 <div class="card" style="margin-top:14px">
   <h3>Databaskontroll</h3>
-  <div class="actions"><button class="secondary" id="checkDatabase">Kontrollera databas</button><button class="secondary" id="restoreLocalBackup">Återställ lokal backup</button></div>
+  <div class="actions">
+    <button class="secondary" id="checkDatabase">Kontrollera databas</button>
+    <button class="secondary" id="cleanupDatabase">Städa databas</button>
+  </div>
   <div id="databaseHealth" class="note" style="margin-top:10px">Ingen kontroll har körts.</div>
+  <div id="cleanupDatabaseStatus" class="note" style="margin-top:8px">Städningen behåller kärndata och tar bort sådant som kan återskapas.</div>
 </div>
-<p class="note"><b>Uppdateras:</b> aktiekurs, MA200-nivå, avstånd till MA200, MA200-trend 1 vecka, 1 månad och 3 månader samt RSI 14. Trenderna räknas från verkliga dagliga stängningskurser. Aktuellt P/E beräknas automatiskt i bakgrunden från P/E-basen och kursförändringen; basvärdet och övrig rapportdata skrivs inte över. Kurs, Kurs/MA200, RSI 14 samt Blå och Vit poäng sparas i historiken vid varje lyckad uppdatering. Jämförelseindex uppdateras före aktierna. Inför varje massuppdatering används alltid en säkerhetskopia i arbetsminnet. En extra lokal backup skapas bara om webbläsarens lagringsutrymme räcker. Versionsmigrering lägger bara till saknade fält och bevarar befintliga listor, och uppdateringen avbryts automatiskt om någon äldre historik skulle saknas. Automatisk uppdatering sker endast när sidan är öppen eller öppnas – en lokal HTML-fil kan inte arbeta i bakgrunden när den är stängd.</p>
+<p class="note"><b>Uppdateras:</b> aktiekurs, MA200-nivå, avstånd till MA200, MA200-trend 1 vecka, 1 månad och 3 månader samt RSI 14. Trenderna räknas från verkliga dagliga stängningskurser. Aktuellt P/E beräknas automatiskt i bakgrunden från P/E-basen och kursförändringen; basvärdet och övrig rapportdata skrivs inte över. Kurs, Kurs/MA200, RSI 14 samt Blå och Vit poäng sparas i historiken vid varje lyckad uppdatering. Jämförelseindex uppdateras före aktierna. Inför varje massuppdatering används alltid en säkerhetskopia i arbetsminnet. En fullständig lokal dubbelkopia skapas inte längre eftersom den förbrukar nästan dubbelt lagringsutrymme; arbetsminnet används för rollback under uppdateringen och JSON-export är permanent backup. Versionsmigrering lägger bara till saknade fält och bevarar befintliga listor, och uppdateringen avbryts automatiskt om någon äldre historik skulle saknas. Automatisk uppdatering sker endast när sidan är öppen eller öppnas – en lokal HTML-fil kan inte arbeta i bakgrunden när den är stängd.</p>
 <p class="note">Sverige är standard. Välj Danmark, Norge, Finland eller Island när du matar in ett nordiskt bolag. Yahoo-symbolen får då rätt suffix automatiskt, exempelvis NOVO B → NOVO-B.CO, EQNR → EQNR.OL och NOKIA → NOKIA.HE. När ett bolag saknar minst 263 handelsdagar hämtar Yahoo två års grundhistorik. Därefter begär appen ett mycket litet femdagarsfönster men sparar bara den senaste tillgängliga kursen och slår ihop den med den lokala historiken. Appen lagrar de senaste 400 handelsdagarna och räknar själv MA200 och MA200-trenderna. Om Yahoos sista dagscandle är null används meta.regularMarketPrice som den senaste avslutade handelsdagens kurs och läggs till i samma serie. Om ett bolag inte kan hämtas visas det i statusrutan och övriga bolag fortsätter uppdateras.</p>
 </div>
 
@@ -1808,17 +1817,143 @@ function phaseOneIntegrity(){
   }
 }
 
+
+const LEAN_STORAGE_MARKER='momentumScore_lean_storage_v1';
+const LEAN_PRICE_DAYS=300;
+const LEAN_MARKET_DAYS=260;
+
+function byteSize(value){
+  try{return new Blob([typeof value==='string'?value:JSON.stringify(value)]).size}catch{return 0}
+}
+function dedupeByDateKeepLast(items,dateGetter){
+  const map=new Map();
+  for(const item of Array.isArray(items)?items:[]){
+    const date=String(dateGetter(item)||'').slice(0,10);
+    if(date)map.set(date,item)
+  }
+  return [...map.values()].sort((a,b)=>String(dateGetter(a)).localeCompare(String(dateGetter(b))))
+}
+function isRecreatableHistoryEntry(entry){
+  const kind=String(entry?.kind||'').toLocaleLowerCase('sv-SE');
+  return kind.includes('automatisk kursuppdatering')
+    ||kind.includes('automatisk marknadsuppdatering')
+    ||kind.includes('yahoo');
+}
+function compactFundamentalHistory(row){
+  const source=Array.isArray(row?.history)?row.history:[];
+  return source
+    .filter(entry=>!isRecreatableHistoryEntry(entry))
+    .map(entry=>{
+      const compact={...entry};
+
+      // score-objektet kan alltid räknas om från raw + aktuell modell.
+      delete compact.score;
+      delete compact.blueScore;
+      delete compact.whiteScore;
+      delete compact.averageScore;
+
+      if(compact.foreignOwnerMismatch===false)delete compact.foreignOwnerMismatch;
+      return compact
+    })
+}
+function compactMarketHistory(row){
+  const unique=dedupeByDateKeepLast(row?.marketHistory,point=>point?.savedAt);
+  return unique.slice(-LEAN_MARKET_DAYS).map(point=>{
+    const p={...point};
+    // score och blueScore är samma Blå-värde i marknadspunkterna.
+    if(Number.isFinite(num(p.blueScore)))delete p.score;
+    return p
+  })
+}
+function compactPriceHistory(row){
+  return dedupeByDateKeepLast(row?.priceHistory,point=>point?.date).slice(-LEAN_PRICE_DAYS)
+}
+function buildLeanRows(sourceRows=rows){
+  return (Array.isArray(sourceRows)?sourceRows:[]).map(row=>({
+    ...row,
+    priceHistory:compactPriceHistory(row),
+    marketHistory:compactMarketHistory(row),
+    history:compactFundamentalHistory(row),
+    transactions:Array.isArray(row.transactions)?row.transactions:[]
+  }))
+}
+function removeRecreatableLocalCaches(){
+  const removable=[
+    backupKey,
+    typeof ONE_ENGINE_CACHE_KEY!=='undefined'?ONE_ENGINE_CACHE_KEY:'',
+    typeof PIPELINE_CACHE_KEY!=='undefined'?PIPELINE_CACHE_KEY:''
+  ].filter(Boolean);
+  let freed=0;
+  for(const key of removable){
+    try{
+      const old=localStorage.getItem(key);
+      if(old!==null){
+        freed+=byteSize(old);
+        localStorage.removeItem(key)
+      }
+    }catch{}
+  }
+  return freed
+}
+function leanStoragePreview(){
+  const compact=buildLeanRows(rows);
+  return{
+    before:byteSize(rows),
+    after:byteSize(compact),
+    compact
+  }
+}
+function applyLeanStorageCleanup({silent=false}={}){
+  const preview=leanStoragePreview();
+  const freedCache=removeRecreatableLocalCaches();
+
+  try{
+    localStorage.setItem(storageKey,JSON.stringify(preview.compact));
+    rows=preview.compact;
+    localStorage.setItem(LEAN_STORAGE_MARKER,nowISO());
+
+    const saved=Math.max(0,preview.before-preview.after)+freedCache;
+    const msg=`Databasen städades från ${(preview.before/1024/1024).toFixed(2)} till ${(preview.after/1024/1024).toFixed(2)} MB. Cirka ${(saved/1024/1024).toFixed(2)} MB återskapningsbar data/cache togs bort.`;
+    const status=document.getElementById('cleanupDatabaseStatus');
+    if(status)status.textContent=msg;
+    if(!silent)toast('Databasen är städad');
+    return{...preview,freedCache,saved,msg}
+  }catch(error){
+    const status=document.getElementById('cleanupDatabaseStatus');
+    if(status)status.textContent='Städningen kunde inte sparas: '+(error?.message||'okänt fel');
+    throw error
+  }
+}
+function autoLeanStorageIfNeeded(){
+  // User-approved cleanup: run only when the actual row database is near the old safety ceiling.
+  const before=byteSize(rows);
+  if(before<3900000)return null;
+  try{return applyLeanStorageCleanup({silent:true})}
+  catch(error){console.error('Automatisk databasstädning misslyckades',error);return null}
+}
+function totalKnownLocalStorageBytes(){
+  let total=0;
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const key=localStorage.key(i);
+      total+=byteSize(key)+byteSize(localStorage.getItem(key)||'')
+    }
+  }catch{}
+  return total
+}
+
 function databaseHealth(){
   const companies=rows.length;
   const histories=rows.reduce((s,r)=>s+(r.history?.length||0),0);
   const marketPoints=rows.reduce((s,r)=>s+(r.marketHistory?.length||0),0);
   const transactions=rows.reduce((s,r)=>s+(r.transactions?.length||0),0);
   const priceDays=rows.reduce((s,r)=>s+(r.priceHistory?.length||0),0);
-  const storageBytes=new Blob([JSON.stringify(rows)]).size;
+  const storageBytes=byteSize(rows);
+  const totalStorageBytes=totalKnownLocalStorageBytes();
   const missingSymbols=rows.filter(r=>!String(r.yahooSymbol||'').trim()).map(r=>r.ticker||r.company);
   const shortHistory=rows.filter(r=>(r.priceHistory?.length||0)<263).map(r=>r.ticker||r.company);
   const missingRsi=rows.filter(r=>!Number.isFinite(num(r.rsi14))).map(r=>r.ticker||r.company);
-  return{companies,histories,marketPoints,transactions,priceDays,storageBytes,missingSymbols,shortHistory,missingRsi};
+  return{companies,histories,marketPoints,transactions,priceDays,storageBytes,totalStorageBytes,missingSymbols,shortHistory,missingRsi};
 }
 function renderDatabaseHealth(){
   const h=databaseHealth(),p1=phaseOneIntegrity();
@@ -1828,7 +1963,9 @@ function renderDatabaseHealth(){
     line(true,`${h.histories} fundamentala historikposter`),
     line(true,`${h.marketPoints} marknadshistorikpunkter`),
     line(true,`${h.priceDays} sparade handelsdagar`),
-    line(true,`${h.transactions} transaktioner`),line(h.storageBytes<4200000,`Databasstorlek ${(h.storageBytes/1024/1024).toFixed(2)} MB`),
+    line(true,`${h.transactions} transaktioner`),
+    line(h.storageBytes<4200000,`Bolagsdatabas ${(h.storageBytes/1024/1024).toFixed(2)} MB`),
+    line(h.totalStorageBytes<4800000,`Total känd webbläsarlagring ${(h.totalStorageBytes/1024/1024).toFixed(2)} MB`),
     line(!h.missingSymbols.length,h.missingSymbols.length?`${h.missingSymbols.length} bolag saknar Yahoo-symbol: ${h.missingSymbols.join(', ')}`:'Alla bolag har Yahoo-symbol'),
     line(!h.shortHistory.length,h.shortHistory.length?`${h.shortHistory.length} bolag har ännu inte 263 handelsdagar`:'Alla bolag har tillräcklig historik för MA200-trend'),
     line(!h.missingRsi.length,h.missingRsi.length?`${h.missingRsi.length} bolag saknar RSI`:'Alla bolag har RSI'),
@@ -7485,18 +7622,11 @@ function appendWithoutDeleting(original,updated,marketPoint,historyPoint){
   return safe;
 }
 function savePreUpdateBackup(){
-  try{
-    localStorage.setItem(backupKey,JSON.stringify(rows));
-    return true;
-  }catch(e){
-    if(e?.name==='QuotaExceededError'||String(e?.message||'').includes('quota')){
-      console.warn('Lokal backup hoppades över eftersom localStorage är fullt.');
-      try{localStorage.removeItem(backupKey)}catch{}
-      return false;
-    }
-    console.warn('Lokal backup kunde inte skapas:',e);
-    return false;
-  }
+  // Fullständig localStorage-backup dubblerar hela databasen och är den vanligaste
+  // orsaken till quota-fel. updateAllPrices har redan "beforeAll" i arbetsminnet.
+  // Manuell JSON-export är den permanenta säkerhetskopian.
+  try{localStorage.removeItem(backupKey)}catch{}
+  return false
 }
 function validateNoDataLoss(before,after){
   if(after.length!==before.length)throw new Error('Säkerhetskontroll: antal bolag ändrades. Uppdateringen avbröts.');
@@ -8640,7 +8770,7 @@ async function prepareImportedRows(importedRows){
     const raw=importedRows[i];
     if(!raw||typeof raw!=='object')continue;
     const n=normalizeRow(raw);
-    n.priceHistory=Array.isArray(n.priceHistory)?n.priceHistory.slice(-400):[];
+    n.priceHistory=Array.isArray(n.priceHistory)?n.priceHistory.slice(-LEAN_PRICE_DAYS):[];
     n.marketHistory=Array.isArray(n.marketHistory)?n.marketHistory:[];
     n.history=Array.isArray(n.history)?n.history:[];
     n.transactions=Array.isArray(n.transactions)?n.transactions:[];
@@ -8783,7 +8913,20 @@ document.getElementById('exportLaboratoryCsv').onclick=exportLaboratoryCsv;
 document.getElementById('fetchFiveYearBacktest').onclick=fetchAndRunFiveYearBacktest;
 document.getElementById('rerunFiveYearBacktest').onclick=runFiveYearWhiteBacktest;
 document.getElementById('exportFiveYearBacktest').onclick=exportFiveYearBacktestCsv;
-document.getElementById('saveSettings').onclick=saveMarketSettings;document.getElementById('checkDatabase').onclick=renderDatabaseHealth;document.getElementById('restoreLocalBackup').onclick=restoreLocalBackup;document.getElementById('updatePrices').onclick=()=>updateAllPrices(false);
+document.getElementById('saveSettings').onclick=saveMarketSettings;
+document.getElementById('checkDatabase').onclick=renderDatabaseHealth;
+document.getElementById('cleanupDatabase').onclick=()=>{
+  if(!confirm('Städa databasen? Kursdata begränsas till 300 handelsdagar, dubbletter tas bort och återskapningsbar analyscache rensas. Fundamentala uppdateringar och transaktioner behålls.'))return;
+  try{applyLeanStorageCleanup();render();renderDatabaseHealth()}catch(error){alert('Städningen misslyckades: '+(error?.message||'okänt fel'))}
+};
+document.getElementById('updatePrices').onclick=()=>updateAllPrices(false);
+try{
+  removeRecreatableLocalCaches();
+  const cleanupResult=autoLeanStorageIfNeeded();
+  if(cleanupResult)console.info(cleanupResult.msg);
+}catch(error){console.error('Lagringsstädning vid start misslyckades',error)}
+setupLeanSettingsView();
+
 try{
   const weightChanged=enforceWhite21Weights();
   if(!localStorage.getItem(WHITE21_MIGRATION_KEY)){
@@ -8822,6 +8965,31 @@ try{
     document.getElementById('labStatus').textContent='Laboratoriet är klart. Välj inställningar och kör testet.';
   }
 }catch(e){console.error('Laboratoriets startkontroll misslyckades',e)}
+
+
+function setupLeanSettingsView(){
+  const settings=document.getElementById('settings');
+  const button=document.getElementById('toggleLegacyTools');
+  if(!settings||!button)return;
+
+  const experimental=/Analyslaboratorium|Utvecklarverktyg|AutoLab|Vit Optimizer|Intervalloptimerare|Poängkurveoptimerare|Vit 3\.0|Faktorer i kombinationstestet|Tre bästa modeller och ensemble/i;
+  const cards=new Set();
+
+  settings.querySelectorAll('h2,h3').forEach(heading=>{
+    if(experimental.test(String(heading.textContent||''))){
+      const card=heading.closest('.card');
+      if(card&&card!==button.closest('.card'))cards.add(card)
+    }
+  });
+
+  let shown=false;
+  const apply=()=>{
+    cards.forEach(card=>card.style.display=shown?'':'none');
+    button.textContent=shown?'Dölj gamla analysverktyg':'Visa gamla analysverktyg'
+  };
+  button.onclick=()=>{shown=!shown;apply()};
+  apply()
+}
 
 window.addEventListener('error',event=>{
   console.error('MomentumScore-fel',event.error||event.message);
