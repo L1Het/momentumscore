@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.8.1 – lätt databas + städade inställningar</h1>
+<h1>MomentumScore v20.8.2 – veckolås + korrigerad historik</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -1953,7 +1953,9 @@ function databaseHealth(){
   const missingSymbols=rows.filter(r=>!String(r.yahooSymbol||'').trim()).map(r=>r.ticker||r.company);
   const shortHistory=rows.filter(r=>(r.priceHistory?.length||0)<263).map(r=>r.ticker||r.company);
   const missingRsi=rows.filter(r=>!Number.isFinite(num(r.rsi14))).map(r=>r.ticker||r.company);
-  return{companies,histories,marketPoints,transactions,priceDays,storageBytes,totalStorageBytes,missingSymbols,shortHistory,missingRsi};
+  const duplicateWeeks=weeklyPortfolios.length-new Set(weeklyPortfolios.map(s=>s.weekKey)).size;
+  const unlockedWeeks=weeklyPortfolios.filter(s=>s?.weeklyLockVersion!==2).length;
+  return{companies,histories,marketPoints,transactions,priceDays,storageBytes,totalStorageBytes,missingSymbols,shortHistory,missingRsi,duplicateWeeks,unlockedWeeks};
 }
 function renderDatabaseHealth(){
   const h=databaseHealth(),p1=phaseOneIntegrity();
@@ -1966,6 +1968,8 @@ function renderDatabaseHealth(){
     line(true,`${h.transactions} transaktioner`),
     line(h.storageBytes<4200000,`Bolagsdatabas ${(h.storageBytes/1024/1024).toFixed(2)} MB`),
     line(h.totalStorageBytes<4800000,`Total känd webbläsarlagring ${(h.totalStorageBytes/1024/1024).toFixed(2)} MB`),
+    line(!h.duplicateWeeks, h.duplicateWeeks?`${h.duplicateWeeks} dubbla veckoportföljer finns`:'Exakt en portföljpost per ISO-vecka'),
+    line(!h.unlockedWeeks, h.unlockedWeeks?`${h.unlockedWeeks} äldre veckor saknar veckolås`:'Alla sparade veckor är låsta'),
     line(!h.missingSymbols.length,h.missingSymbols.length?`${h.missingSymbols.length} bolag saknar Yahoo-symbol: ${h.missingSymbols.join(', ')}`:'Alla bolag har Yahoo-symbol'),
     line(!h.shortHistory.length,h.shortHistory.length?`${h.shortHistory.length} bolag har ännu inte 263 handelsdagar`:'Alla bolag har tillräcklig historik för MA200-trend'),
     line(!h.missingRsi.length,h.missingRsi.length?`${h.missingRsi.length} bolag saknar RSI`:'Alla bolag har RSI'),
@@ -8011,23 +8015,33 @@ function historicalWeeklyMembers(model,cutoffDate,previousSnapshot=null){
       selectionSource:'toplist-friday-1800-white21-top20-v1'
     }))
 }
-function createHistoricalWeeklySnapshot(friday,automatic=true){
-  const cutoffDate=isoDate(friday);
-  const targetInfo=isoWeekInfo(followingMonday(friday));
-  if(weeklyPortfolios.some(snapshot=>snapshot.weekKey===targetInfo.key))return false;
 
+function buildCanonicalHistoricalWeeklySnapshot(friday,previousSnapshot=null){
+  const cutoffDate=isoDate(friday);
+  const monday=followingMonday(friday);
+  const targetInfo=isoWeekInfo(monday);
   const settings=loadWeeklySettings();
   const benchmarkMarket=settings.benchmarkMarket||'SE';
-  const previousSnapshot=previousWeeklySnapshotBefore(cutoffDate,targetInfo.key);
+
   const blue=historicalWeeklyMembers('blue',cutoffDate,previousSnapshot);
   const white=historicalWeeklyMembers('white',cutoffDate,previousSnapshot);
   const average=historicalWeeklyMembers('average',cutoffDate,previousSnapshot);
-  if(blue.length<10||white.length<10||average.length<10)return false;
+  if(blue.length<10||white.length<10||average.length<10)return null;
 
   const benchmarkStart=benchmarkValueOnOrBefore(benchmarkMarket,cutoffDate);
-  if(!Number.isFinite(benchmarkStart))return false;
+  if(!Number.isFinite(benchmarkStart))return null;
 
-  const snapshot={
+  const decorate=(members,model)=>members.map((member,index)=>({
+    ...member,
+    rank:index+1,
+    closeDate:cutoffDate,
+    executionDate:cutoffDate,
+    signalPrice:Number.isFinite(num(member.startPrice))?num(member.startPrice):member.signalPrice,
+    selectionModel:model,
+    selectionSource:'locked-friday-close-weekly-v2'
+  }));
+
+  return{
     id:`${targetInfo.key}-${cutoffDate}`,
     weekKey:targetInfo.key,
     year:targetInfo.year,
@@ -8035,21 +8049,39 @@ function createHistoricalWeeklySnapshot(friday,automatic=true){
     savedAt:`${cutoffDate}T18:00:00`,
     savedDate:cutoffDate,
     lockDate:cutoffDate,
-    activationDate:isoDate(followingMonday(friday)),
-    selectionSource:'toplist-friday-1800-white21-top20-v1',
+    cutoffTime:'18:00',
+    activationDate:isoDate(monday),
+    executionDate:cutoffDate,
+    executionStatus:'finalized',
+    executionMode:'previous-trading-day-close',
+    preparedFrom:'locked-friday-close',
+    selectionSource:'locked-friday-close-weekly-v2',
+    weeklyLockVersion:2,
     benchmarkMarket,
     benchmarkSymbol:benchmarkSymbol(benchmarkMarket),
     benchmarkStart,
+    benchmarkSignalStart:benchmarkStart,
     portfolios:{
-      blue:{name:'Blå',members:blue},
-      white:{name:'Vit',members:white},
-      average:{name:'Snitt',members:average}
+      blue:{name:'Blå',members:decorate(blue,'blue')},
+      white:{name:'Vit',members:decorate(white,'white')},
+      average:{name:'Snitt',members:decorate(average,'average')}
     }
-  };
+  }
+}
+
+function createHistoricalWeeklySnapshot(friday,automatic=true){
+  const targetInfo=isoWeekInfo(followingMonday(friday));
+  if(weeklyPortfolios.some(snapshot=>snapshot.weekKey===targetInfo.key))return false;
+
+  const cutoffDate=isoDate(friday);
+  const previousSnapshot=previousWeeklySnapshotBefore(cutoffDate,targetInfo.key);
+  const snapshot=buildCanonicalHistoricalWeeklySnapshot(friday,previousSnapshot);
+  if(!snapshot)return false;
+
   weeklyPortfolios.push(snapshot);
-  weeklyPortfolios.sort((a,b)=>String(b.savedAt).localeCompare(String(a.savedAt)));
+  weeklyPortfolios.sort((a,b)=>String(b.lockDate||'').localeCompare(String(a.lockDate||'')));
   weeklyPersist();
-  if(!automatic)toast('Veckoportföljen skapades från fredagens historiska data');
+  if(!automatic)toast('Veckoportföljen skapades och låstes från fredagens slutdata');
   return true
 }
 
@@ -8081,8 +8113,10 @@ function createCurrentDataWeeklySnapshot(friday,automatic=true,forceRebuild=fals
   const monday=followingMonday(friday);
   const activationDate=isoDate(monday);
   const targetInfo=isoWeekInfo(monday);
-  const existingIndex=weeklyPortfolios.findIndex(snapshot=>snapshot.weekKey===targetInfo.key);
-  if(existingIndex>=0&&!forceRebuild&&snapshotUsesTopListClose(weeklyPortfolios[existingIndex]))return false;
+
+  // v20.8.2: en vecka är fryst när den väl skapats.
+  // Vanliga kursuppdateringar får aldrig skriva om samma ISO-vecka.
+  if(weeklyPortfolios.some(snapshot=>snapshot.weekKey===targetInfo.key))return false;
 
   const settings=loadWeeklySettings();
   const benchmarkMarket=settings.benchmarkMarket||'SE';
@@ -8091,54 +8125,47 @@ function createCurrentDataWeeklySnapshot(friday,automatic=true,forceRebuild=fals
   const white=topListMembersForSnapshot('white',cutoffDate,previousSnapshot);
   const average=topListMembersForSnapshot('average',cutoffDate,previousSnapshot);
   if(blue.length<10||white.length<10||average.length<10){
-    console.warn('Nästa veckas Top 10 kunde inte skapas: för få bolag har säker fredagskurs efter 18:00',
+    console.warn('Nästa veckas Top 10 kunde inte låsas: för få bolag har verifierad fredagsclose',
       {blue:blue.length,white:white.length,average:average.length,cutoffDate});
     return false
   }
 
   let benchmarkStart=benchmarkValueOnOrBefore(benchmarkMarket,cutoffDate);
   if(!Number.isFinite(benchmarkStart))benchmarkStart=currentBenchmarkValue(benchmarkMarket);
-  if(!Number.isFinite(benchmarkStart)){
-    console.warn('Nästa veckas Top 10 saknar indexstart',benchmarkMarket,cutoffDate);
-    return false
-  }
+  if(!Number.isFinite(benchmarkStart))return false;
+
+  const decorate=(members,model)=>members.map((member,index)=>({
+    ...member,
+    rank:index+1,
+    closeDate:cutoffDate,
+    executionDate:cutoffDate,
+    signalPrice:Number.isFinite(num(member.startPrice))?num(member.startPrice):member.signalPrice,
+    selectionModel:model,
+    selectionSource:'locked-friday-close-weekly-v2'
+  }));
 
   const snapshot={
     id:`${targetInfo.key}-${cutoffDate}`,
     weekKey:targetInfo.key,year:targetInfo.year,week:targetInfo.week,
     savedAt:nowISO(),savedDate:cutoffDate,lockDate:cutoffDate,cutoffTime:'18:00',activationDate,
-    preparedFrom:'friday-close-toplist',
-    selectionSource:'toplist-friday-1800-white21-top20-v1',
-    benchmarkMarket,benchmarkSymbol:benchmarkSymbol(benchmarkMarket),benchmarkStart,
-    portfolios:{blue:{name:'Blå',members:blue},white:{name:'Vit',members:white},average:{name:'Snitt',members:average}}
+    executionDate:cutoffDate,executionStatus:'finalized',executionMode:'previous-trading-day-close',
+    preparedFrom:'locked-friday-close',
+    selectionSource:'locked-friday-close-weekly-v2',
+    weeklyLockVersion:2,
+    benchmarkMarket,benchmarkSymbol:benchmarkSymbol(benchmarkMarket),
+    benchmarkStart,benchmarkSignalStart:benchmarkStart,
+    portfolios:{
+      blue:{name:'Blå',members:decorate(blue,'blue')},
+      white:{name:'Vit',members:decorate(white,'white')},
+      average:{name:'Snitt',members:decorate(average,'average')}
+    }
   };
 
-  if(existingIndex>=0)weeklyPortfolios[existingIndex]=snapshot;
-  else weeklyPortfolios.push(snapshot);
-  weeklyPortfolios.sort((a,b)=>String(b.savedAt).localeCompare(String(a.savedAt)));
+  weeklyPortfolios.push(snapshot);
+  weeklyPortfolios.sort((a,b)=>String(b.lockDate||'').localeCompare(String(a.lockDate||'')));
   weeklyPersist();
-  if(!automatic)toast(`Nästa veckas Top 10 (${targetInfo.key}) skapades från fredagens Topplista`);
+  if(!automatic)toast(`Nästa veckas Top 10 (${targetInfo.key}) låstes från fredagens close`);
   return true
-}
-
-function sameWeeklyMemberList(a,b){
-  const aa=(a||[]).map(weeklyMemberKey).filter(Boolean);
-  const bb=(b||[]).map(weeklyMemberKey).filter(Boolean);
-  if(aa.length!==bb.length)return false;
-  for(let i=0;i<aa.length;i++)if(aa[i]!==bb[i])return false;
-  return true
-}
-function latestSnapshotNeedsCurrentToplistRebuild(snapshot,friday){
-  if(!snapshot)return true;
-  const cutoffDate=isoDate(friday);
-  const previousSnapshot=previousWeeklySnapshotBefore(cutoffDate,snapshot.weekKey);
-  const freshBlue=topListMembersForSnapshot('blue',cutoffDate,previousSnapshot);
-  const freshWhite=topListMembersForSnapshot('white',cutoffDate,previousSnapshot);
-  const freshAverage=topListMembersForSnapshot('average',cutoffDate,previousSnapshot);
-  if(freshBlue.length<10||freshWhite.length<10||freshAverage.length<10)return false;
-  return !sameWeeklyMemberList(snapshot.portfolios?.blue?.members,freshBlue)
-      || !sameWeeklyMemberList(snapshot.portfolios?.white?.members,freshWhite)
-      || !sameWeeklyMemberList(snapshot.portfolios?.average?.members,freshAverage);
 }
 
 function ensureNextWeekPortfolioAfterFriday(){
@@ -8146,27 +8173,24 @@ function ensureNextWeekPortfolioAfterFriday(){
   if(settings.autoSave!=='on')return false;
 
   const friday=latestCompletedFriday(new Date());
-
-  // Ny vecka får inte skapas enbart för att klockan passerat 18:00.
-  // Det måste också finnas en genomförd marknadsuppdatering efter 18:00
-  // (eller en senare uppdatering under helgen).
   if(!marketUpdateIsAfterFridayCutoff(friday))return false;
 
   const targetInfo=isoWeekInfo(followingMonday(friday));
-  const existing=weeklyPortfolios.find(snapshot=>snapshot.weekKey===targetInfo.key);
 
-  // v20.7.3: den SENASTE fredags-snapshoten måste spegla den färdiga Topplistan.
-  // Om en ny kursuppdatering efter fredag 18:00 ändrar Top10 byggs just den här
-  // snapshoten om. Historiska snapshots ändras inte.
-  if(existing){
-    const oldFormat=!snapshotUsesTopListClose(existing);
-    const toplistChanged=latestSnapshotNeedsCurrentToplistRebuild(existing,friday);
-    if(oldFormat||toplistChanged){
-      return createCurrentDataWeeklySnapshot(new Date(friday),true,true)
-    }
-    return false
+  // HÅRT VECKOLÅS: om veckan redan finns är detta en ren kursuppdatering.
+  // Inga innehav, köp, sälj eller startkurser får ändras.
+  if(weeklyPortfolios.some(snapshot=>snapshot.weekKey===targetInfo.key))return false;
+
+  const today=todayISO();
+  const fridayDate=isoDate(friday);
+
+  // Om vi faktiskt sitter på fredag efter stängning får dagens färdiga Topplista
+  // användas direkt. Om appen öppnas senare (helg/måndag) rekonstrueras samma
+  // fredag från sparad historik så att måndagens/intradagens data aldrig läcker in.
+  if(today===fridayDate){
+    return createCurrentDataWeeklySnapshot(new Date(friday),true,false)
   }
-  return createCurrentDataWeeklySnapshot(new Date(friday),true,false)
+  return createHistoricalWeeklySnapshot(new Date(friday),true)
 }
 
 
@@ -8212,6 +8236,7 @@ function white2RebuildSnapshot(snapshot,previousSnapshot=null){
 
 function rebuildWhite2WeeklyPortfolios(force=false){
   if(!weeklyPortfolios.length)return 0;
+  if(weeklyPortfolios.every(snapshot=>snapshot?.weeklyLockVersion===2))return 0;
   if(!force&&localStorage.getItem(WHITE2_WEEKLY_REBUILD_KEY)==='done')return 0;
 
   const ordered=weeklyPortfolios.slice().sort((a,b)=>{
@@ -8235,6 +8260,82 @@ function rebuildWhite2WeeklyPortfolios(force=false){
   }
   localStorage.setItem(WHITE2_WEEKLY_REBUILD_KEY,'done');
   return rebuilt
+}
+
+
+const WEEKLY_LOCK_REPAIR_KEY='momentumscore_weekly_lock_repair_v2082';
+
+function rebuildExistingWeeklyHistoryFromFridayData(force=false){
+  if(!weeklyPortfolios.length)return{rebuilt:0,fallback:0,removed:0};
+  if(!force&&localStorage.getItem(WEEKLY_LOCK_REPAIR_KEY)==='done'
+      &&weeklyPortfolios.every(s=>s?.weeklyLockVersion===2)) {
+    return{rebuilt:0,fallback:0,removed:0}
+  }
+
+  const original=weeklyPortfolios.slice();
+  const byWeek=new Map();
+  for(const snapshot of original){
+    if(!snapshot?.weekKey)continue;
+    // Vid dubbletter väljer vi den äldsta sparade versionen som fallback.
+    const prior=byWeek.get(snapshot.weekKey);
+    if(!prior||String(snapshot.savedAt||'')<String(prior.savedAt||''))byWeek.set(snapshot.weekKey,snapshot)
+  }
+
+  const fridays=original.map(snapshot=>snapshotLockFriday(snapshot)).filter(Boolean).sort((a,b)=>a-b);
+  if(!fridays.length)return{rebuilt:0,fallback:0,removed:0};
+
+  const firstFriday=new Date(fridays[0]);
+  const latestFriday=latestCompletedFriday(new Date());
+  const rebuiltSnapshots=[];
+  let previous=null,rebuilt=0,fallback=0;
+
+  for(let friday=new Date(firstFriday);friday<=latestFriday;friday.setDate(friday.getDate()+7)){
+    const monday=followingMonday(friday);
+    const targetInfo=isoWeekInfo(monday);
+    const canonical=buildCanonicalHistoricalWeeklySnapshot(new Date(friday),previous);
+
+    if(canonical){
+      canonical.repairedAt=nowISO();
+      canonical.repairedFrom='historical-friday-close';
+      rebuiltSnapshots.push(canonical);
+      previous=canonical;
+      rebuilt++;
+      continue
+    }
+
+    // Om den historiska rådata som behövs saknas behåller vi EN gammal vecka
+    // i stället för att radera användarens historik. Datum/lock normaliseras.
+    const old=byWeek.get(targetInfo.key);
+    if(old){
+      const cutoffDate=isoDate(friday);
+      const safe={
+        ...old,
+        id:`${targetInfo.key}-${cutoffDate}`,
+        weekKey:targetInfo.key,year:targetInfo.year,week:targetInfo.week,
+        lockDate:cutoffDate,savedDate:cutoffDate,
+        activationDate:isoDate(monday),
+        executionDate:cutoffDate,
+        executionStatus:'finalized',
+        executionMode:'previous-trading-day-close',
+        weeklyLockVersion:2,
+        repairFallback:true,
+        repairedAt:nowISO()
+      };
+      rebuiltSnapshots.push(safe);
+      previous=safe;
+      fallback++
+    }
+  }
+
+  const removed=Math.max(0,original.length-rebuiltSnapshots.length);
+  weeklyPortfolios=rebuiltSnapshots.sort((a,b)=>
+    String(b.lockDate||'').localeCompare(String(a.lockDate||''))
+  );
+  weeklyPersist();
+  localStorage.setItem(WEEKLY_LOCK_REPAIR_KEY,'done');
+
+  console.info(`Veckohistoriken korrigerad: ${rebuilt} omräknade veckor, ${fallback} fallback, ${removed} dubbletter/felaktiga veckor borttagna.`);
+  return{rebuilt,fallback,removed}
 }
 
 function backfillMissingWeeklyPortfolios(){
@@ -8465,7 +8566,7 @@ function renderWeeklyPortfolios(){
   if(old&&weeklyPortfolios.some(s=>s.id===old))select.value=old;
 
   document.getElementById('weeklyStatus').textContent=weeklyPortfolios.length
-    ?`${weeklyPortfolios.length} veckor sparade. Nästa veckas Top 10 skapas efter fredag 18:00 eller vid den första senare kursuppdateringen. Den visas som fryst vecka direkt och blir samtidigt nästa steg i de rullande portföljerna, eftersom veckans handel redan är avslutad.`
+    ?`${weeklyPortfolios.length} veckor sparade. Varje ISO-vecka låses exakt en gång från föregående fredags slutdata. Kursuppdateringar under veckan ändrar bara marknadsvärden och ranking – aldrig portföljens innehav, köp eller sälj.`
     :'Ingen veckoportfölj sparad ännu.';
 
   const s=weeklyPortfolios.find(x=>x.id===select.value)||weeklyPortfolios[0];
@@ -8647,7 +8748,7 @@ async function updateAllPrices(silent=false){
     if(ok>0){
       settings.lastUpdate=nowISO();localStorage.setItem(settingsKey,JSON.stringify(settings));
       const weeklyCreated=ensureWeeklyPortfolioSnapshot();
-      if(weeklyCreated)toast('Nästa veckas Top 10-portföljer skapades');
+      if(weeklyCreated)toast('Nästa veckas portföljer låstes från fredagens slutdata');
     }
     renderMarketSettings();
     renderWeeklyPortfolios();
@@ -8936,6 +9037,13 @@ try{
     console.info(`Vit 2.1 aktiverad: 10/30/30/30. ${scorePoints} sparade Vit-poäng räknades om.`)
   }else if(weightChanged){persist()}
 }catch(error){console.error('Vit 2.1 viktmigrering misslyckades',error)}
+try{
+  const weeklyRepair=rebuildExistingWeeklyHistoryFromFridayData(false);
+  if(weeklyRepair.rebuilt||weeklyRepair.fallback||weeklyRepair.removed){
+    console.info('Veckolås v20.8.2:',weeklyRepair)
+  }
+}catch(error){console.error('Korrigering av tidigare veckor misslyckades',error)}
+
 try{
   const rebuiltWhiteWeeks=rebuildWhite2WeeklyPortfolios(false);
   if(rebuiltWhiteWeeks)console.info(`${rebuiltWhiteWeeks} historiska veckor räknades om med Vit 2.1 (10/30/30/30 + Top10/Top20).`);
