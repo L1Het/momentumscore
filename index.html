@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.8.5 – korrekt W34 + vänteläge + rullande datum</h1>
+<h1>MomentumScore v20.8.6 – lagringssäker kursuppdatering</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -7636,6 +7636,25 @@ async function fetchYahooHistory(symbol,existingHistory=[]){
   return{...technical,priceHistory,previousClose,dailyChangePct,fetchMode:hasEnough?'Endast senaste kurs':'Två års grundhistorik'};
 }
 function cloneJson(value){return JSON.parse(JSON.stringify(value))}
+function compactReconstructablePriceHistoryForStorage(list){
+  // priceHistory is Yahoo-derived and can be recreated. 263 closes are enough
+  // for MA200 plus the 3-month MA200 trend; 300 gives a safe margin.
+  return (Array.isArray(list)?list:[])
+    .filter(p=>p&&p.date&&Number.isFinite(num(p.close)))
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date)))
+    .slice(-300)
+    .map(p=>({date:String(p.date).slice(0,10),close:Number(num(p.close).toFixed(4))}))
+}
+function compactReconstructableStorage(rowsToCompact){
+  return rowsToCompact.map(r=>({
+    ...r,
+    priceHistory:compactReconstructablePriceHistoryForStorage(r.priceHistory)
+  }))
+}
+function isQuotaError(error){
+  return !!error&&(error.name==='QuotaExceededError'||error.code===22||error.code===1014||/quota|storage|lagringsutrymme/i.test(String(error.message||'')))
+}
+
 function preserveStoredArrays(original,updated){
   const safe={...updated};
   safe.history=Array.isArray(original.history)?cloneJson(original.history):[];
@@ -9038,11 +9057,22 @@ async function updateAllPrices(silent=false){
           ma1w:updatedBase.ma1w,ma1m:updatedBase.ma1m,ma3m:updatedBase.ma3m,rsi14:updatedBase.rsi14,
           score:scoreAfter.total,blueScore:scoreAfter.total,blueQualified:scoreAfter.qualified,whiteScore:whiteAfter.total,whiteQualified:whiteAfter.qualified};
         const safe=preserveStoredArrays(r,updatedBase);safe.marketHistory.push(marketPoint);rows[i]=safe;
-        ok++;persist();
+        ok++;
       }catch(e){failed.push((r.company||r.ticker||symbol)+': '+e.message)}
     }
+    // Komprimera endast Yahoo-hämtad dagskurshistorik innan slutlig lagring.
+    // Fundamenta, manuella fält, scorehistorik, veckoportföljer och transaktioner
+    // lämnas helt orörda.
+    rows=compactReconstructableStorage(rows);
     validateNoDataLoss(beforeAll,rows);
-    persist();
+    try{
+      persist();
+    }catch(saveError){
+      if(isQuotaError(saveError)){
+        throw new Error('Webbläsarens lagringsutrymme är fullt. Kursuppdateringen hämtades färdigt men kunde inte sparas. Ingen gammal kärndata har tagits bort.');
+      }
+      throw saveError
+    }
     render();
     const settings=loadMarketSettings();
     if(ok>0){
@@ -9056,10 +9086,10 @@ async function updateAllPrices(silent=false){
     if(!silent&&failed.length===rows.length)alert('Ingen kurs kunde hämtas. Kontrollera internetanslutning och Yahoo-symboler.');
   }catch(e){
     rows=beforeAll;
-    persist();
+    try{persist()}catch(rollbackSaveError){console.warn('Rollback fanns kvar i arbetsminnet men localStorage var redan fullt',rollbackSaveError)}
     render();
-    status.innerHTML='<b>Uppdateringen stoppades och all tidigare data återställdes.</b><br>'+e.message;
-    if(!silent)alert('Uppdateringen avbröts. Ingen gammal data togs bort.');
+    status.innerHTML='<b>Uppdateringen stoppades och tidigare data behölls.</b><br>'+e.message;
+    if(!silent)alert(isQuotaError(e)?'Uppdateringen kunde inte sparas eftersom webbläsarens lagringsutrymme är fullt. Ingen gammal kärndata togs bort.':'Uppdateringen avbröts. Ingen gammal data togs bort.');
   }finally{
     btn.disabled=false;
   if(dashBtn){dashBtn.textContent='✅ Uppdaterat!';setTimeout(()=>{dashBtn.disabled=false;dashBtn.textContent=originalDashText;},2000);}
