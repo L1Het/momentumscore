@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.8.2 – veckolås + korrigerad historik</h1>
+<h1>MomentumScore v20.8.4 – korrekt rullande datum + W34</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -1954,8 +1954,16 @@ function databaseHealth(){
   const shortHistory=rows.filter(r=>(r.priceHistory?.length||0)<263).map(r=>r.ticker||r.company);
   const missingRsi=rows.filter(r=>!Number.isFinite(num(r.rsi14))).map(r=>r.ticker||r.company);
   const duplicateWeeks=weeklyPortfolios.length-new Set(weeklyPortfolios.map(s=>s.weekKey)).size;
-  const unlockedWeeks=weeklyPortfolios.filter(s=>s?.weeklyLockVersion!==2).length;
-  return{companies,histories,marketPoints,transactions,priceDays,storageBytes,totalStorageBytes,missingSymbols,shortHistory,missingRsi,duplicateWeeks,unlockedWeeks};
+  const unlockedWeeks=weeklyPortfolios.filter(s=>!s?.weeklyLockVersion).length;
+  const bw31=blueSnapshotByWeek('2026-W31'),bw32=blueSnapshotByWeek('2026-W32'),bw33=blueSnapshotByWeek('2026-W33');
+  const blue31=new Set((bw31?.portfolios?.blue?.members||[]).map(memberTickerKey));
+  const blue32=new Set((bw32?.portfolios?.blue?.members||[]).map(memberTickerKey));
+  const blue33=new Set((bw33?.portfolios?.blue?.members||[]).map(memberTickerKey));
+  const blueW31W32Same=blue31.size===10&&blue32.size===10&&[...blue31].every(x=>blue32.has(x));
+  const blueOut3233=[...blue32].filter(x=>!blue33.has(x));
+  const blueIn3233=[...blue33].filter(x=>!blue32.has(x));
+  const blueW32W33OneSwap=blueOut3233.length===1&&blueIn3233.length===1;
+  return{companies,histories,marketPoints,transactions,priceDays,storageBytes,totalStorageBytes,missingSymbols,shortHistory,missingRsi,duplicateWeeks,unlockedWeeks,blueW31W32Same,blueW32W33OneSwap,blueOut3233,blueIn3233};
 }
 function renderDatabaseHealth(){
   const h=databaseHealth(),p1=phaseOneIntegrity();
@@ -1970,6 +1978,8 @@ function renderDatabaseHealth(){
     line(h.totalStorageBytes<4800000,`Total känd webbläsarlagring ${(h.totalStorageBytes/1024/1024).toFixed(2)} MB`),
     line(!h.duplicateWeeks, h.duplicateWeeks?`${h.duplicateWeeks} dubbla veckoportföljer finns`:'Exakt en portföljpost per ISO-vecka'),
     line(!h.unlockedWeeks, h.unlockedWeeks?`${h.unlockedWeeks} äldre veckor saknar veckolås`:'Alla sparade veckor är låsta'),
+    line(h.blueW31W32Same,'Blå W31→W32: '+(h.blueW31W32Same?'0 byten (korrekt)':'medlemskap skiljer sig')),
+    line(h.blueW32W33OneSwap,'Blå W32→W33: '+(h.blueW32W33OneSwap?`${h.blueOut3233.join(', ')} ut → ${h.blueIn3233.join(', ')} in`:'fel antal byten')),
     line(!h.missingSymbols.length,h.missingSymbols.length?`${h.missingSymbols.length} bolag saknar Yahoo-symbol: ${h.missingSymbols.join(', ')}`:'Alla bolag har Yahoo-symbol'),
     line(!h.shortHistory.length,h.shortHistory.length?`${h.shortHistory.length} bolag har ännu inte 263 handelsdagar`:'Alla bolag har tillräcklig historik för MA200-trend'),
     line(!h.missingRsi.length,h.missingRsi.length?`${h.missingRsi.length} bolag saknar RSI`:'Alla bolag har RSI'),
@@ -3170,11 +3180,23 @@ function rollingValueAtDate(portfolio,date){
   if(!portfolio?.model)return NaN;
   return num(buildRollingPortfolio(portfolio.model,date)?.value)
 }
-function rollingPeriodReturn(portfolio,days){
+function previousTradingDateForRolling(portfolio,sessions){
+  const market=portfolio?.snapshot?.benchmarkMarket||'SE';
+  const valuation=String(portfolio?.valuationDate||todayISO()).slice(0,10);
+  const dates=(benchmarkHistories[market]||[])
+    .map(p=>String(p?.date||'').slice(0,10))
+    .filter(Boolean)
+    .filter((d,i,a)=>a.indexOf(d)===i)
+    .filter(d=>d<=valuation)
+    .sort();
+  if(dates.length<=sessions)return '';
+  return dates[dates.length-1-sessions]
+}
+function rollingPeriodReturn(portfolio,sessions){
   const nowValue=num(portfolio?.value);
-  const date=dateAtLocalNoon(portfolio?.valuationDate||todayISO());
-  date.setDate(date.getDate()-days);
-  const historical=buildRollingPortfolio(portfolio.model,isoDate(date));
+  const priorDate=previousTradingDateForRolling(portfolio,sessions);
+  if(!priorDate)return NaN;
+  const historical=buildRollingPortfolio(portfolio.model,priorDate);
   const oldValue=num(historical?.value);
   return Number.isFinite(nowValue)&&Number.isFinite(oldValue)&&oldValue!==0
     ?(nowValue/oldValue-1)*100
@@ -3185,7 +3207,7 @@ function rollingPortfolioRows(){
   const filter=document.getElementById('devPortfolioModel')?.value||'all';
   return ['blue','white','average'].filter(m=>filter==='all'||filter===m).map(m=>rollingPortfolio(m)).filter(Boolean).map(r=>{
     const market=r.snapshot?.benchmarkMarket||'SE';
-    const returns={day:rollingPeriodReturn(r,1),week:rollingPeriodReturn(r,7),month:rollingPeriodReturn(r,30),start:r.returnPct};
+    const returns={day:rollingPeriodReturn(r,1),week:rollingPeriodReturn(r,5),month:rollingPeriodReturn(r,21),start:r.returnPct};
     const indexReturns={...benchmarkPeriodReturns(market),start:r.benchmarkReturn};
     const excessReturns=Object.fromEntries(['day','week','month','start'].map(k=>[k,Number.isFinite(returns[k])&&Number.isFinite(indexReturns[k])?returns[k]-indexReturns[k]:NaN]));
     return {...r,rolling:true,model:r.model,profit:r.profit,fees:r.fees,trades:r.trades,turnover:r.turnover,winners:r.memberReturns.filter(x=>Number.isFinite(x.returnPct)&&x.returnPct>0).length,
@@ -3211,13 +3233,14 @@ function renderDevelopmentPortfolios(){
   const allRows=[];
   for(const snapshot of weeklyPortfolios)for(const model of ['blue','white','average']){const result=weeklyPortfolioReturn(snapshot,model),idx=weeklyBenchmarkReturn(snapshot);allRows.push({model,ret:result.value,excess:Number.isFinite(result.value)&&Number.isFinite(idx)?result.value-idx:NaN})}
   const valid=allRows.filter(x=>Number.isFinite(x.ret)),beat=allRows.filter(x=>Number.isFinite(x.excess)&&x.excess>0),best=valid.slice().sort((a,b)=>b.ret-a.ret)[0];
-  document.getElementById('devPortfolioSummary').innerHTML=[['Rullande portföljer',rolling.length],['Frysta veckor',weeklyPortfolios.length],['Slår index',allRows.filter(x=>Number.isFinite(x.excess)).length?`${beat.length}/${allRows.filter(x=>Number.isFinite(x.excess)).length}`:'–'],['Bästa frysta',best?`${portfolioModelName(best.model)} ${signed(best.ret,' %')}`:'–']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
+  const newestWeek=weeklyPortfolios.slice().sort((a,b)=>String(b.weekKey||'').localeCompare(String(a.weekKey||'')))[0]?.weekKey||'–';
+  document.getElementById('devPortfolioSummary').innerHTML=[['Rullande portföljer',rolling.length],['Frysta veckor',weeklyPortfolios.length],['Senast låsta vecka',newestWeek],['Slår index',allRows.filter(x=>Number.isFinite(x.excess)).length?`${beat.length}/${allRows.filter(x=>Number.isFinite(x.excess)).length}`:'–'],['Bästa frysta',best?`${portfolioModelName(best.model)} ${signed(best.ret,' %')}`:'–']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
   const th=(key,label)=>`<th class="sortable-head${devPortfolioActiveSort===key?' active-sort'+(devPortfolioDirection==='asc'?' sort-asc':''):''}" data-dev-portfolio-sort="${key}">${label}</th>`;
   const head='<tr>'+th('week','Portfölj / start')+th('model','Modell')+th('day','Dag')+th('excessDay','Mot OMX dag')+th('weekReturn','Vecka')+th('excessWeek','Mot OMX vecka')+th('month','Månad')+th('excessMonth','Mot OMX månad')+th('return','Sedan start')+th('profit','Utveckling kr')+th('excess','Mot OMX start')+th('winners','Vinnare')+'</tr>';
   const periodCells=x=>[
     ['day',' %'],['excessDay',' p.e.'],['weekReturn',' %'],['excessWeek',' p.e.'],['month',' %'],['excessMonth',' p.e.']
   ].map(([key,suffix])=>{const value=devPortfolioSortValue(x,key);return `<td class="${portfolioReturnClass(value)}"><b>${signed(value,suffix)}</b></td>`}).join('');
-  const rollingHtml=sortedRolling.length?'<tr class="portfolio-section-row"><td colspan="12">Rullande Top 10</td></tr>'+sortedRolling.map(x=>`<tr class="portfolio-row rolling-portfolio-row" data-rolling-model="${x.model}"><td><b>Rullande Top 10</b><br><small>${dateFmt(x.lastUpdateDate||x.startDate)}</small></td><td>${portfolioModelName(x.model)}</td>${periodCells(x)}<td class="${portfolioReturnClass(x.returnPct)}"><b>${signed(x.returnPct,' %')}</b></td><td class="${portfolioReturnClass(x.profit)}"><b>${signed(x.profit,' kr')}</b></td><td class="${portfolioReturnClass(x.excess)}"><b>${signed(x.excess,' p.e.')}</b></td><td>${x.winners}/${x.result.available}</td></tr>`).join(''):'';
+  const rollingHtml=sortedRolling.length?'<tr class="portfolio-section-row"><td colspan="12">Rullande Top 10</td></tr>'+sortedRolling.map(x=>`<tr class="portfolio-row rolling-portfolio-row" data-rolling-model="${x.model}"><td><b>Rullande Top 10</b><br><small>${dateFmt(x.startDate)}</small></td><td>${portfolioModelName(x.model)}</td>${periodCells(x)}<td class="${portfolioReturnClass(x.returnPct)}"><b>${signed(x.returnPct,' %')}</b></td><td class="${portfolioReturnClass(x.profit)}"><b>${signed(x.profit,' kr')}</b></td><td class="${portfolioReturnClass(x.excess)}"><b>${signed(x.excess,' p.e.')}</b></td><td>${x.winners}/${x.result.available}</td></tr>`).join(''):'';
   const frozenHtml=sortedFrozen.length?'<tr class="portfolio-section-row"><td colspan="12">Frysta veckoportföljer</td></tr>'+sortedFrozen.map(x=>{const frozenProfit=Number.isFinite(x.returns.start)?ROLLING_START_CAPITAL*x.returns.start/100:NaN;return `<tr class="portfolio-row" data-frozen-id="${x.snapshot.id}" data-frozen-model="${x.model}"><td><b>${x.snapshot.weekKey}</b><br><small>${dateFmt(weeklySnapshotActivationDate(x.snapshot))}</small></td><td>${portfolioModelName(x.model)}</td>${periodCells(x)}<td class="${portfolioReturnClass(x.returns.start)}"><b>${signed(x.returns.start,' %')}</b></td><td class="${portfolioReturnClass(frozenProfit)}"><b>${signed(frozenProfit,' kr')}</b></td><td class="${portfolioReturnClass(x.excessReturns.start)}"><b>${signed(x.excessReturns.start,' p.e.')}</b></td><td>${x.winners}/${x.result.available}</td></tr>`}).join(''):'';
   table.innerHTML=head+rollingHtml+frozenHtml;
   table.querySelectorAll('[data-dev-portfolio-sort]').forEach(header=>header.onclick=()=>{const key=header.dataset.devPortfolioSort;if(devPortfolioActiveSort===key)devPortfolioDirection=devPortfolioDirection==='desc'?'asc':'desc';else{devPortfolioActiveSort=key;devPortfolioDirection=['model','fees'].includes(key)?'asc':'desc'}const select=document.getElementById('devPortfolioSort');if(select&&[...select.options].some(o=>o.value===key))select.value=key;renderDevelopmentPortfolios()});
@@ -8172,25 +8195,32 @@ function ensureNextWeekPortfolioAfterFriday(){
   const settings=loadWeeklySettings();
   if(settings.autoSave!=='on')return false;
 
-  const friday=latestCompletedFriday(new Date());
-  if(!marketUpdateIsAfterFridayCutoff(friday))return false;
-
+  const now=new Date();
+  const friday=latestCompletedFriday(now);
   const targetInfo=isoWeekInfo(followingMonday(friday));
 
-  // HÅRT VECKOLÅS: om veckan redan finns är detta en ren kursuppdatering.
-  // Inga innehav, köp, sälj eller startkurser får ändras.
+  // Hårt veckolås: en redan skapad vecka får aldrig skrivas om.
   if(weeklyPortfolios.some(snapshot=>snapshot.weekKey===targetInfo.key))return false;
 
-  const today=todayISO();
   const fridayDate=isoDate(friday);
+  const today=todayISO();
 
-  // Om vi faktiskt sitter på fredag efter stängning får dagens färdiga Topplista
-  // användas direkt. Om appen öppnas senare (helg/måndag) rekonstrueras samma
-  // fredag från sparad historik så att måndagens/intradagens data aldrig läcker in.
+  // På själva fredagen får nästa vecka skapas först efter cutoff och efter att
+  // marknadsuppdateringen verkligen skett efter cutoff.
   if(today===fridayDate){
+    if(!marketUpdateIsAfterFridayCutoff(friday))return false;
     return createCurrentDataWeeklySnapshot(new Date(friday),true,false)
   }
-  return createHistoricalWeeklySnapshot(new Date(friday),true)
+
+  // Från lördag och framåt behöver appen inte ha varit öppen fredag kväll.
+  // Finns fredagens faktiska historiska slutdata återskapas nästa vecka direkt.
+  // Detta gör t.ex. W34 från 2026-08-14-close när appen öppnas lördag 2026-08-15.
+  const created=createHistoricalWeeklySnapshot(new Date(friday),true);
+  if(created)return true;
+
+  // Om historiken ännu inte hunnit uppdateras gör vi inget; nästa lyckade
+  // kursuppdatering kör denna funktion igen och skapar veckan då.
+  return false
 }
 
 
@@ -8295,6 +8325,13 @@ function rebuildExistingWeeklyHistoryFromFridayData(force=false){
     const canonical=buildCanonicalHistoricalWeeklySnapshot(new Date(friday),previous);
 
     if(canonical){
+      // Blå är delvis manuellt historisk och får INTE rekonstrueras från gamla
+      // poängvärden. Om en faktiskt sparad Blå-snapshot finns är medlemskapet facit.
+      const old=byWeek.get(targetInfo.key);
+      if(old?.portfolios?.blue?.members?.length){
+        canonical.portfolios.blue=cloneJson(old.portfolios.blue);
+        canonical.blueHistorySource='preserved-actual-snapshot'
+      }
       canonical.repairedAt=nowISO();
       canonical.repairedFrom='historical-friday-close';
       rebuiltSnapshots.push(canonical);
@@ -8336,6 +8373,170 @@ function rebuildExistingWeeklyHistoryFromFridayData(force=false){
 
   console.info(`Veckohistoriken korrigerad: ${rebuilt} omräknade veckor, ${fallback} fallback, ${removed} dubbletter/felaktiga veckor borttagna.`);
   return{rebuilt,fallback,removed}
+}
+
+
+const BLUE_HISTORY_REPAIR_V2083_KEY='momentumscore_blue_history_repair_v2083';
+
+function memberTickerKey(member){
+  return canonicalTicker(member?.ticker||member?.company||'')
+}
+function cloneMemberForBlueWeek(member,entryDate){
+  const copy=cloneJson(member);
+  const rowIndex=findStockIndex(copy);
+  const row=rowIndex>=0?rows[rowIndex]:null;
+  let price=NaN;
+
+  if(row){
+    const exact=(Array.isArray(row.priceHistory)?row.priceHistory:[])
+      .filter(p=>String(p?.date||'').slice(0,10)===entryDate&&Number.isFinite(num(p?.close)))
+      .sort((a,b)=>String(a.date).localeCompare(String(b.date))).pop();
+    if(exact)price=num(exact.close)
+  }
+
+  // Fallback till redan sparad prisinformation om exakt historik saknas.
+  if(!Number.isFinite(price)&&Number.isFinite(num(copy.signalPrice)))price=num(copy.signalPrice);
+  if(!Number.isFinite(price)&&Number.isFinite(num(copy.startPrice)))price=num(copy.startPrice);
+
+  copy.startPrice=price;
+  copy.signalPrice=price;
+  copy.executionPrice=price;
+  copy.executionDate=entryDate;
+  copy.closeDate=entryDate;
+  copy.selectionModel='blue';
+  copy.selectionSource='blue-actual-history-repair-v2083';
+  return copy
+}
+function blueSnapshotByWeek(weekKey){
+  return weeklyPortfolios.find(snapshot=>snapshot?.weekKey===weekKey)||null
+}
+function setBlueSnapshotMembers(snapshot,members,entryDate){
+  if(!snapshot)return false;
+  snapshot.executionDate=entryDate;
+  snapshot.lockDate=entryDate;
+  snapshot.savedDate=entryDate;
+  snapshot.executionStatus='finalized';
+  snapshot.executionMode='previous-trading-day-close';
+  snapshot.weeklyLockVersion=3;
+  snapshot.blueHistoryRepair='actual-live-history-v2083';
+
+  if(!snapshot.portfolios)snapshot.portfolios={};
+  snapshot.portfolios.blue={
+    ...(snapshot.portfolios.blue||{}),
+    name:'Blå',
+    members:members.map((member,index)=>({
+      ...cloneMemberForBlueWeek(member,entryDate),
+      rank:index+1
+    }))
+  };
+
+  const market=snapshot.benchmarkMarket||'SE';
+  const bench=benchmarkValueOnOrBefore(market,entryDate);
+  if(Number.isFinite(bench)){
+    snapshot.benchmarkStart=bench;
+    snapshot.benchmarkSignalStart=bench
+  }
+  return true
+}
+
+function repairKnownBlueHistoryV2083(force=false){
+  if(!force&&localStorage.getItem(BLUE_HISTORY_REPAIR_V2083_KEY)==='done'){
+    return{changed:false,message:'Blå-historiken är redan reparerad'}
+  }
+
+  const w31=blueSnapshotByWeek('2026-W31');
+  const w32=blueSnapshotByWeek('2026-W32');
+  const w33=blueSnapshotByWeek('2026-W33');
+  if(!w31||!w32||!w33||!(w31.portfolios?.blue?.members||[]).length){
+    return{changed:false,message:'W31–W33 saknas; ingen specialreparation kördes'}
+  }
+
+  // Verifierad faktisk historik från den liveportfölj som användes:
+  // W31 -> W32 var helt orörd.
+  // W32 -> W33: BIOG B ut, RAIL in.
+  const base31=cloneJson(w31.portfolios.blue.members||[]);
+  const baseByTicker=new Map(base31.map(m=>[memberTickerKey(m),m]));
+
+  // W32: exakt samma medlemskap som W31, men entry/veckovärdering från 2026-07-31 close.
+  const w32Members=base31.map(m=>cloneJson(m));
+  setBlueSnapshotMembers(w32,w32Members,'2026-07-31');
+
+  // W33: utgå från samma tio och gör endast det verkliga bytet BIOG B -> RAIL.
+  const kept=base31.filter(m=>memberTickerKey(m)!==canonicalTicker('BIOG B'));
+  let rail=null;
+
+  // Först försök hitta Railcare i någon redan sparad W33/W32/W31-medlemslista,
+  // annars bygg medlemmen från aktuell bolagsrad men med historisk 2026-08-07-close.
+  for(const snap of [w33,w32,w31]){
+    const hit=(snap?.portfolios?.blue?.members||[]).find(m=>memberTickerKey(m)===canonicalTicker('RAIL'));
+    if(hit){rail=cloneJson(hit);break}
+  }
+  if(!rail){
+    const idx=rows.findIndex(r=>canonicalTicker(r.ticker)===canonicalTicker('RAIL'));
+    if(idx>=0){
+      const row=rows[idx];
+      const selected=selectedModelValues(row,'blue');
+      rail={
+        ticker:row.ticker,company:row.company,market:row.market,
+        blueScore:selected.b?.total??selected.score,
+        whiteScore:selected.w?.total,
+        averageScore:selected.average,
+        score:selected.score,
+        startPrice:NaN
+      }
+    }
+  }
+
+  if(!rail){
+    return{changed:false,message:'Railcare kunde inte hittas; Blå-historiken lämnades orörd'}
+  }
+
+  const w33Members=[...kept,rail];
+
+  // Behåll ordningen/ranken från den kända W33-snapshoten där det går.
+  const oldW33Order=new Map((w33.portfolios?.blue?.members||[]).map((m,i)=>[memberTickerKey(m),i]));
+  w33Members.sort((a,b)=>{
+    const ai=oldW33Order.has(memberTickerKey(a))?oldW33Order.get(memberTickerKey(a)):999;
+    const bi=oldW33Order.has(memberTickerKey(b))?oldW33Order.get(memberTickerKey(b)):999;
+    return ai-bi
+  });
+
+  setBlueSnapshotMembers(w33,w33Members,'2026-08-07');
+
+  // W31 normaliseras bara i metadata; medlemskap/startpriser lämnas som ursprungligt facit.
+  w31.executionDate='2026-07-24';
+  w31.lockDate='2026-07-24';
+  w31.savedDate='2026-07-24';
+  w31.activationDate='2026-07-27';
+  w31.executionStatus='finalized';
+  w31.executionMode='previous-trading-day-close';
+  w31.weeklyLockVersion=3;
+  w31.blueHistoryRepair='actual-live-history-v2083';
+
+  // Kontroll: W31 och W32 måste vara exakt samma tio tickers.
+  const a=(w31.portfolios.blue.members||[]).map(memberTickerKey).sort().join('|');
+  const b=(w32.portfolios.blue.members||[]).map(memberTickerKey).sort().join('|');
+  if(a!==b)throw new Error('Blå-reparation: W31 och W32 blev inte identiska');
+
+  // Kontroll: W33 får skilja med exakt BIOG B ut och RAIL in.
+  const set32=new Set((w32.portfolios.blue.members||[]).map(memberTickerKey));
+  const set33=new Set((w33.portfolios.blue.members||[]).map(memberTickerKey));
+  const out=[...set32].filter(x=>!set33.has(x));
+  const incoming=[...set33].filter(x=>!set32.has(x));
+  if(out.length!==1||incoming.length!==1
+      ||out[0]!==canonicalTicker('BIOG B')
+      ||incoming[0]!==canonicalTicker('RAIL')){
+    throw new Error(`Blå-reparation: fel W32→W33-byte (${out.join(',')} -> ${incoming.join(',')})`)
+  }
+
+  weeklyPortfolios.sort((x,y)=>String(y.lockDate||'').localeCompare(String(x.lockDate||'')));
+  weeklyPersist();
+  localStorage.setItem(BLUE_HISTORY_REPAIR_V2083_KEY,'done');
+
+  return{
+    changed:true,
+    message:'Blå korrigerad: W31→W32 0 byten; W32→W33 BIOG B ut och RAIL in.'
+  }
 }
 
 function backfillMissingWeeklyPortfolios(){
@@ -9045,9 +9246,19 @@ try{
 }catch(error){console.error('Korrigering av tidigare veckor misslyckades',error)}
 
 try{
+  const blueRepair=repairKnownBlueHistoryV2083(false);
+  if(blueRepair.changed)console.info(blueRepair.message);
+}catch(error){console.error('Blå-historikens specialreparation misslyckades',error)}
+
+try{
   const rebuiltWhiteWeeks=rebuildWhite2WeeklyPortfolios(false);
   if(rebuiltWhiteWeeks)console.info(`${rebuiltWhiteWeeks} historiska veckor räknades om med Vit 2.1 (10/30/30/30 + Top10/Top20).`);
 }catch(error){console.error('Vit 2.1-veckoåterbyggnad misslyckades',error)}
+try{
+  const weekendCreated=backfillMissingWeeklyPortfolios();
+  if(weekendCreated)console.info(`${weekendCreated} saknade veckoportfölj(er) skapades från låst fredagsdata.`);
+}catch(error){console.error('Direkt återställning av saknade veckoportföljer misslyckades',error)}
+
 for(const [name,fn] of [
   ['Poäng/översikt',()=>render()],
   ['Förhandsvisning',()=>renderPreview()],
