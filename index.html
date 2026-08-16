@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.8.7 – korrigerad slutvalidering</h1>
+<h1>MomentumScore v20.8.8 – separerad marknadsdata och veckomotor</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -651,7 +651,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
     <button class="secondary" id="cleanupDatabase">Städa databas</button>
   </div>
   <div id="databaseHealth" class="note" style="margin-top:10px">Ingen kontroll har körts.</div>
-  <div id="cleanupDatabaseStatus" class="note" style="margin-top:8px">Städningen behåller kärndata och tar bort sådant som kan återskapas.</div>
+  <div id="cleanupDatabaseStatus" class="note" style="margin-top:8px">Städningen behåller kärndata och tar bort sådant som kan återskapas. Marknadsuppdatering och veckoportföljmotor körs nu som separata transaktioner.</div>
 </div>
 <p class="note"><b>Uppdateras:</b> aktiekurs, MA200-nivå, avstånd till MA200, MA200-trend 1 vecka, 1 månad och 3 månader samt RSI 14. Trenderna räknas från verkliga dagliga stängningskurser. Aktuellt P/E beräknas automatiskt i bakgrunden från P/E-basen och kursförändringen; basvärdet och övrig rapportdata skrivs inte över. Kurs, Kurs/MA200, RSI 14 samt Blå och Vit poäng sparas i historiken vid varje lyckad uppdatering. Jämförelseindex uppdateras före aktierna. Inför varje massuppdatering används alltid en säkerhetskopia i arbetsminnet. En fullständig lokal dubbelkopia skapas inte längre eftersom den förbrukar nästan dubbelt lagringsutrymme; arbetsminnet används för rollback under uppdateringen och JSON-export är permanent backup. Versionsmigrering lägger bara till saknade fält och bevarar befintliga listor, och uppdateringen avbryts automatiskt om någon äldre historik skulle saknas. Automatisk uppdatering sker endast när sidan är öppen eller öppnas – en lokal HTML-fil kan inte arbeta i bakgrunden när den är stängd.</p>
 <p class="note">Sverige är standard. Välj Danmark, Norge, Finland eller Island när du matar in ett nordiskt bolag. Yahoo-symbolen får då rätt suffix automatiskt, exempelvis NOVO B → NOVO-B.CO, EQNR → EQNR.OL och NOKIA → NOKIA.HE. När ett bolag saknar minst 263 handelsdagar hämtar Yahoo två års grundhistorik. Därefter begär appen ett mycket litet femdagarsfönster men sparar bara den senaste tillgängliga kursen och slår ihop den med den lokala historiken. Appen lagrar de senaste 400 handelsdagarna och räknar själv MA200 och MA200-trenderna. Om Yahoos sista dagscandle är null används meta.regularMarketPrice som den senaste avslutade handelsdagens kurs och läggs till i samma serie. Om ett bolag inte kan hämtas visas det i statusrutan och övriga bolag fortsätter uppdateras.</p>
@@ -9030,7 +9030,7 @@ async function updateAllPrices(silent=false){
   const beforeAll=cloneJson(rows);
   const localBackupCreated=savePreUpdateBackup();
   if(!localBackupCreated)status.textContent='Lokal backup fick inte plats. Uppdateringen fortsätter med minnessäkerhetskopia…';
-  let ok=0,failed=[];
+  let ok=0,failed=[],marketDataCommitted=false;
   const markets=[...new Set([...rows.map(r=>r.market||'SE'),loadWeeklySettings().benchmarkMarket||'SE'])];
   const benchmarkFailed=await updateBenchmarksForMarkets(markets,status);
   failed.push(...benchmarkFailed.map(x=>'Index '+x));
@@ -9068,6 +9068,7 @@ async function updateAllPrices(silent=false){
     rows=compactReconstructableStorage(rows);
     try{
       persist();
+      marketDataCommitted=true;
     }catch(saveError){
       if(isQuotaError(saveError)){
         throw new Error('Webbläsarens lagringsutrymme är fullt. Kursuppdateringen hämtades färdigt men kunde inte sparas. Ingen gammal kärndata har tagits bort.');
@@ -9076,21 +9077,44 @@ async function updateAllPrices(silent=false){
     }
     render();
     const settings=loadMarketSettings();
+    let weeklyError='',weeklyCreated=false;
     if(ok>0){
-      settings.lastUpdate=nowISO();localStorage.setItem(settingsKey,JSON.stringify(settings));
-      const weeklyCreated=ensureWeeklyPortfolioSnapshot();
-      if(weeklyCreated)toast('Nästa veckas portföljer låstes från fredagens slutdata');
+      settings.lastUpdate=nowISO();
+      localStorage.setItem(settingsKey,JSON.stringify(settings));
+
+      // Marknadsuppdateringen är nu redan validerad och permanent sparad.
+      // Veckoportföljmotorn är en SEPARAT operation och får aldrig orsaka
+      // rollback av 117 lyckade kursuppdateringar.
+      try{
+        weeklyCreated=ensureWeeklyPortfolioSnapshot();
+        if(weeklyCreated)toast('Nästa veckas portföljer låstes från fredagens slutdata');
+      }catch(portfolioError){
+        weeklyError=portfolioError?.message||String(portfolioError);
+        console.error('Veckoportföljmotorn misslyckades efter lyckad marknadsuppdatering',portfolioError);
+      }
     }
     renderMarketSettings();
-    renderWeeklyPortfolios();
-    status.innerHTML='<b>'+ok+' bolag uppdaterades.</b><br>Bolag med minst 263 sparade handelsdagar hämtade endast den senaste tillgängliga kursen. Övriga hämtade två års grundhistorik.'+(!localBackupCreated?'<br>⚠️ Lokal backup hoppades över eftersom webbläsarens lagringsutrymme är fullt. Säkerhetskopian i arbetsminnet användes under körningen.':'')+(failed.length?'<br>Misslyckades: '+failed.join(' · '):'');
+    try{renderWeeklyPortfolios()}catch(renderPortfolioError){
+      weeklyError=weeklyError||renderPortfolioError?.message||String(renderPortfolioError);
+      console.error('Veckoportföljvisningen misslyckades',renderPortfolioError);
+    }
+    status.innerHTML='<b>'+ok+' bolag uppdaterades och sparades.</b><br>Bolag med minst 263 sparade handelsdagar hämtade endast den senaste tillgängliga kursen. Övriga hämtade två års grundhistorik.'+(!localBackupCreated?'<br>⚠️ Lokal backup hoppades över eftersom webbläsarens lagringsutrymme är fullt. Säkerhetskopian i arbetsminnet användes under körningen.':'')+(failed.length?'<br>Misslyckade kurshämtningar: '+failed.join(' · '):'')+(weeklyError?'<br>⚠️ Kurserna är sparade, men veckoportföljmotorn gav fel: '+weeklyError:'');
     if(!silent&&failed.length===rows.length)alert('Ingen kurs kunde hämtas. Kontrollera internetanslutning och Yahoo-symboler.');
   }catch(e){
-    rows=beforeAll;
-    try{persist()}catch(rollbackSaveError){console.warn('Rollback fanns kvar i arbetsminnet men localStorage var redan fullt',rollbackSaveError)}
-    render();
-    status.innerHTML='<b>Uppdateringen stoppades och tidigare data behölls.</b><br>'+e.message;
-    if(!silent)alert(isQuotaError(e)?'Uppdateringen kunde inte sparas eftersom webbläsarens lagringsutrymme är fullt. Ingen gammal kärndata togs bort.':'Uppdateringen avbröts. Ingen gammal data togs bort.');
+    if(!marketDataCommitted){
+      rows=beforeAll;
+      try{persist()}catch(rollbackSaveError){console.warn('Rollback fanns kvar i arbetsminnet men localStorage var redan fullt',rollbackSaveError)}
+      render();
+      status.innerHTML='<b>Marknadsuppdateringen stoppades och tidigare data behölls.</b><br>'+e.message;
+      if(!silent)alert(isQuotaError(e)?'Uppdateringen kunde inte sparas eftersom webbläsarens lagringsutrymme är fullt. Ingen gammal kärndata togs bort.':'Marknadsuppdateringen avbröts: '+(e?.message||'okänt fel'));
+    }else{
+      // Något efter slutlig persist gick fel. Kursdata är redan korrekt sparad
+      // och får under inga omständigheter återställas.
+      console.error('Efterfel efter sparad marknadsdata',e);
+      try{render()}catch{}
+      status.innerHTML='<b>'+ok+' bolag uppdaterades och sparades.</b><br>⚠️ Ett efterföljande fel inträffade: '+(e?.message||'okänt fel')+'<br>Kursdata har INTE rullats tillbaka.';
+      if(!silent)alert('Kurserna är sparade. Ett separat efterfel inträffade: '+(e?.message||'okänt fel'));
+    }
   }finally{
     btn.disabled=false;
   if(dashBtn){dashBtn.textContent='✅ Uppdaterat!';setTimeout(()=>{dashBtn.disabled=false;dashBtn.textContent=originalDashText;},2000);}
