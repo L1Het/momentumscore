@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.8.6 – lagringssäker kursuppdatering</h1>
+<h1>MomentumScore v20.8.7 – korrigerad slutvalidering</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -9060,11 +9060,12 @@ async function updateAllPrices(silent=false){
         ok++;
       }catch(e){failed.push((r.company||r.ticker||symbol)+': '+e.message)}
     }
-    // Komprimera endast Yahoo-hämtad dagskurshistorik innan slutlig lagring.
-    // Fundamenta, manuella fält, scorehistorik, veckoportföljer och transaktioner
-    // lämnas helt orörda.
-    rows=compactReconstructableStorage(rows);
+    // Validera den kompletta uppdateringen innan någon återskapningsbar
+    // Yahoo-historik komprimeras.
     validateNoDataLoss(beforeAll,rows);
+
+    // Därefter får enbart priceHistory kortas inför lagring.
+    rows=compactReconstructableStorage(rows);
     try{
       persist();
     }catch(saveError){
