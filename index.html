@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.8.8 – separerad marknadsdata och veckomotor</h1>
+<h1>MomentumScore v20.8.9 – fredagssnapshot från helgdata</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -7881,6 +7881,49 @@ function marketPointOnOrBefore(row,date){
     .sort((a,b)=>String(a.savedAt).localeCompare(String(b.savedAt)));
   return points[points.length-1]||null
 }
+
+function fridayWeekendSignalPoint(row,fridayDate){
+  const friday=dateAtLocalNoon(fridayDate);
+  const monday=followingMonday(friday);
+  const mondayOpen=new Date(monday);
+  mondayOpen.setHours(8,55,0,0);
+  const fridayCutoff=fridayCutoffMoment(friday);
+
+  const exactClose=(Array.isArray(row?.priceHistory)?row.priceHistory:[])
+    .filter(p=>String(p?.date||'').slice(0,10)===String(fridayDate).slice(0,10)&&Number.isFinite(num(p?.close)))
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date))).pop();
+  const close=exactClose?num(exactClose.close):NaN;
+
+  const points=(Array.isArray(row?.marketHistory)?row.marketHistory:[])
+    .filter(point=>{
+      const t=new Date(point?.savedAt||'');
+      if(!Number.isFinite(t.getTime())||t<fridayCutoff||t>=mondayOpen)return false;
+      if(Number.isFinite(close)&&Number.isFinite(num(point?.price)))return Math.abs(num(point.price)-close)<0.0001;
+      return true
+    })
+    .sort((a,b)=>String(a.savedAt).localeCompare(String(b.savedAt)));
+  return points[0]||null
+}
+function historicalCandidateForWeeklyLock(row,cutoffDate){
+  const base=historicalCandidate(row,cutoffDate);
+  const weekend=fridayWeekendSignalPoint(row,cutoffDate);
+  if(!weekend)return base;
+
+  const savedBlue=num(weekend.blueScore??weekend.score);
+  const savedWhite=num(weekend.whiteScore);
+  const blue=Number.isFinite(savedBlue)
+    ?{...base.blue,total:savedBlue,qualified:weekend.blueQualified!==false}
+    :base.blue;
+  const white=Number.isFinite(savedWhite)
+    ?{...base.white,total:savedWhite,qualified:weekend.whiteQualified!==false,dataReady:true}
+    :base.white;
+  const average=Number.isFinite(blue.total)&&Number.isFinite(white.total)?(blue.total+white.total)/2:base.average;
+  const exactClose=(Array.isArray(row?.priceHistory)?row.priceHistory:[])
+    .filter(p=>String(p?.date||'').slice(0,10)===String(cutoffDate).slice(0,10)&&Number.isFinite(num(p?.close)))
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date))).pop();
+  const price=exactClose?num(exactClose.close):base.price;
+  return{...base,price,blue,white,average,blueQualified:blue.qualified,whiteReady:white.dataReady!==false,weekendSignal:weekend}
+}
 function historicalCandidate(row,cutoffDate){
   const prices=priceHistoryOnOrBefore(row,cutoffDate);
   const marketPoint=marketPointOnOrBefore(row,cutoffDate);
@@ -8032,7 +8075,7 @@ function weeklyCandidateComparator(previousKeys){
 function historicalWeeklyMembers(model,cutoffDate,previousSnapshot=null){
   const previousKeys=new Set((previousSnapshot?.portfolios?.[model]?.members||[]).map(weeklyMemberKey).filter(Boolean));
   const candidates=rows.map(row=>{
-    const candidate=historicalCandidate(row,cutoffDate);
+    const candidate=historicalCandidateForWeeklyLock(row,cutoffDate);
     const score=model==='blue'?candidate.blue.total:model==='white'?candidate.white.total:candidate.average;
     const valid=model==='blue'
       ?candidate.blueQualified
@@ -8473,6 +8516,19 @@ function rebuildExistingWeeklyHistoryFromFridayData(force=false){
 }
 
 
+
+
+const W34_RECOVERY_V2089_KEY='momentumscore_w34_recovery_v2089';
+function recoverMissingW34FromWeekendDataV2089(){
+  if(localStorage.getItem(W34_RECOVERY_V2089_KEY)==='done')return false;
+  if(weeklyPortfolios.some(s=>s?.weekKey==='2026-W34')){
+    localStorage.setItem(W34_RECOVERY_V2089_KEY,'done');
+    return false
+  }
+  const created=createHistoricalWeeklySnapshot(new Date('2026-08-14T12:00:00'),true);
+  if(created){localStorage.setItem(W34_RECOVERY_V2089_KEY,'done');return true}
+  return false
+}
 
 const W34_REPAIR_V2085_KEY='momentumscore_w34_repair_v2085';
 
@@ -9120,6 +9176,20 @@ async function updateAllPrices(silent=false){
   if(dashBtn){dashBtn.textContent='✅ Uppdaterat!';setTimeout(()=>{dashBtn.disabled=false;dashBtn.textContent=originalDashText;},2000);}
   }
 }
+
+function weeklyFridayClockTick(){
+  const now=new Date();
+  if(now.getDay()!==5||now.getHours()<18)return;
+  try{
+    const created=ensureNextWeekPortfolioAfterFriday();
+    if(created){
+      renderWeeklyPortfolios();
+      if(developmentMode==='portfolios')renderDevelopmentPortfolios();
+      toast('Nästa veckas portföljer låstes från fredagens slutdata')
+    }
+  }catch(error){console.error('Fredag 18:00-låsning misslyckades',error)}
+}
+
 function maybeAutoUpdate(){
   const s=loadMarketSettings();if(s.auto!=='on'||s.interval==='manual')return;
   const hours=Number(s.interval),last=s.lastUpdate?new Date(s.lastUpdate).getTime():0;
@@ -9413,6 +9483,10 @@ try{
   if(rebuiltWhiteWeeks)console.info(`${rebuiltWhiteWeeks} historiska veckor räknades om med Vit 2.1 (10/30/30/30 + Top10/Top20).`);
 }catch(error){console.error('Vit 2.1-veckoåterbyggnad misslyckades',error)}
 try{
+  if(recoverMissingW34FromWeekendDataV2089())console.info('W34 återskapades från helgens sparade fredagsdata.');
+}catch(error){console.error('W34 helgåterställning misslyckades',error)}
+
+try{
   const weekendCreated=backfillMissingWeeklyPortfolios();
   if(weekendCreated)console.info(`${weekendCreated} saknade veckoportfölj(er) skapades från låst fredagsdata.`);
 }catch(error){console.error('Direkt återställning av saknade veckoportföljer misslyckades',error)}
@@ -9484,7 +9558,9 @@ if(repairedHistoryCount){
 
 setTimeout(()=>{
   try{backfillMissingWeeklyPortfolios()}catch(error){console.error('Veckoportföljernas återställning misslyckades',error)}
-  maybeAutoUpdate()
+  maybeAutoUpdate();
+  weeklyFridayClockTick()
 },600);
+setInterval(weeklyFridayClockTick,60000);
 </script>
 </body></html>
