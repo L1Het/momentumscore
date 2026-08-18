@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v20.9.1 – robust veckobackfill</h1>
+<h1>MomentumScore v21.0.0 – enhetlig veckomotor</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -1944,6 +1944,23 @@ function totalKnownLocalStorageBytes(){
 
 
 const CODE_AUDIT_VERSION='20.9.0';
+
+
+function weeklyEngineAuditV21(){
+  const keys=weeklyPortfolios.map(s=>s?.weekKey).filter(Boolean);
+  const duplicateWeeks=[...new Set(keys.filter((k,i)=>keys.indexOf(k)!==i))];
+  const currentWeekKey=isoWeekInfo(dateAtLocalNoon(todayISO())).key;
+  const currentWeekExists=keys.includes(currentWeekKey);
+  const immutableShape=weeklyPortfolios.every(s=>
+    s?.weekKey &&
+    ['blue','white','average'].every(m=>Array.isArray(s?.portfolios?.[m]?.members))
+  );
+  return{
+    engine:'v21-canonical-weekly-engine',
+    currentWeekKey,currentWeekExists,duplicateWeeks,immutableShape,
+    ok:currentWeekExists&&duplicateWeeks.length===0&&immutableShape
+  }
+}
 
 function runtimeCodeAudit(){
   const weekKeys=weeklyPortfolios.map(s=>s?.weekKey).filter(Boolean);
@@ -8323,6 +8340,7 @@ function createWeekendLockedSnapshotFromFriday(friday,automatic=true){
 }
 
 function createHistoricalWeeklySnapshot(friday,automatic=true){
+  // v21 invariant: historisk vecka byggs enbart från historisk snapshotdata.
   const targetInfo=isoWeekInfo(followingMonday(friday));
   if(weeklyPortfolios.some(snapshot=>snapshot.weekKey===targetInfo.key))return false;
 
@@ -8620,28 +8638,6 @@ function recoverMissingW34FromWeekendDataV2089(){
 }
 
 
-const W34_REPAIR_V2091_KEY='momentumscore_w34_repair_v2091';
-
-function ensureKnownMissingW34V2091(){
-  if(weeklyPortfolios.some(s=>s?.weekKey==='2026-W34')){
-    localStorage.setItem(W34_REPAIR_V2091_KEY,'done');
-    return false
-  }
-
-  // W34 startade måndag 2026-08-17 och ska byggas från fredag 2026-08-14.
-  // Körs oavsett om sidan öppnades fredag, helg eller först på måndagen/tisdagen.
-  const friday=new Date('2026-08-14T12:00:00');
-  let created=createWeekendLockedSnapshotFromFriday(friday,true);
-  if(!created)created=createHistoricalWeeklySnapshot(friday,true);
-
-  if(created){
-    localStorage.setItem(W34_REPAIR_V2091_KEY,'done');
-    weeklyPersist();
-    return true
-  }
-  return false
-}
-
 const W34_REPAIR_V2085_KEY='momentumscore_w34_repair_v2085';
 
 function repairWrongW34V2085(){
@@ -8829,66 +8825,48 @@ function backfillMissingWeeklyPortfolios(){
   const settings=loadWeeklySettings();
   if(settings.autoSave!=='on')return 0;
 
-  // Robust v20.9.1:
-  // gå från första kända veckans efterföljare fram till aktuell ISO-vecka
-  // och fyll varje saknad vecka från dess föregående fredags slutdata.
+  // v21: EN enda generell veckomotor.
+  //
+  // En fryst portfölj för ISO-vecka Wn byggs alltid från föregående
+  // handelsfredags sparade historik. Befintliga veckor är immutable.
+  // Därför fungerar samma kod oavsett om appen öppnas fredag, tisdag
+  // veckan efter eller flera veckor senare.
   const today=dateAtLocalNoon(todayISO());
-  const currentInfo=isoWeekInfo(today);
+  const current=isoWeekInfo(today);
 
-  const known=weeklyPortfolios
-    .filter(s=>s?.weekKey)
-    .slice()
-    .sort((a,b)=>String(a.weekKey).localeCompare(String(b.weekKey)));
-
-  let firstMonday='';
-  if(known.length){
-    firstMonday=isoMondayFromWeekKey(known[0].weekKey)
-  }
-  if(!firstMonday){
-    // Fallback: börja från senaste färdiga fredag -> kommande måndag.
-    firstMonday=isoDate(followingMonday(latestCompletedFriday(today)))
-  }
-
-  let cursor=dateAtLocalNoon(firstMonday);
-  let created=0,guard=0;
+  // Första vecka som motorn behöver kontrollera. Vi använder första redan
+  // kända vecka om sådan finns; annars aktuell vecka.
+  const existingKeys=weeklyPortfolios.map(s=>s?.weekKey).filter(Boolean).sort();
+  const firstKey=existingKeys[0]||current.key;
+  let monday=dateAtLocalNoon(isoMondayFromWeekKey(firstKey));
+  let created=0, guard=0;
 
   while(guard++<520){
-    const info=isoWeekInfo(cursor);
-    if(info.year>currentInfo.year || (info.year===currentInfo.year&&info.week>currentInfo.week))break;
+    const info=isoWeekInfo(monday);
+    if(info.year>current.year||(info.year===current.year&&info.week>current.week))break;
 
-    const weekKey=info.key;
-    const exists=weeklyPortfolios.some(s=>s?.weekKey===weekKey);
-
-    if(!exists){
-      // Veckans signal-/entrydag är föregående fredag (eller senaste gemensamma
-      // handelsdag före måndag). För normal vecka räcker måndag -3 dagar.
-      const friday=new Date(cursor);
+    if(!weeklyPortfolios.some(s=>s?.weekKey===info.key)){
+      // Normalt föregående fredag. buildCanonicalHistoricalWeeklySnapshot()
+      // använder den historik som hör till den tidpunkten; dagens score får
+      // aldrig användas för att rekonstruera en gammal vecka.
+      const friday=new Date(monday);
       friday.setDate(friday.getDate()-3);
       friday.setHours(12,0,0,0);
 
-      let ok=false;
-
-      // För aktuell vecka eller senare öppning: använd den faktiska lagrade
-      // fredagsstatusen om alla exakta fredagskurser finns.
-      ok=createWeekendLockedSnapshotFromFriday(new Date(friday),true);
-
-      // Om det inte går, försök historisk rekonstruktion.
-      if(!ok)ok=createHistoricalWeeklySnapshot(new Date(friday),true);
-
-      if(ok)created++;
+      if(createHistoricalWeeklySnapshot(friday,true))created++;
     }
-
-    cursor.setDate(cursor.getDate()+7)
+    monday.setDate(monday.getDate()+7)
   }
 
-  // Om nästa vecka redan kan låsas efter fredag 18:00, gör det också.
+  // Fredag efter cutoff kan även kommande vecka låsas direkt.
+  // Den funktionen använder faktisk fredagsstatus och fredagsclose.
   if(ensureNextWeekPortfolioAfterFriday())created++;
 
   if(created){
     weeklyPersist();
-    try{renderWeeklyPortfolios()}catch(error){console.error('Render efter veckobackfill misslyckades',error)}
+    try{renderWeeklyPortfolios()}catch(error){console.error('Veckorendering misslyckades',error)}
     if(developmentMode==='portfolios'){
-      try{renderDevelopmentPortfolios()}catch(error){console.error('Portföljrender efter veckobackfill misslyckades',error)}
+      try{renderDevelopmentPortfolios()}catch(error){console.error('Portföljrendering misslyckades',error)}
     }
   }
   return created
@@ -9299,7 +9277,6 @@ async function updateAllPrices(silent=false){
       // Veckoportföljmotorn är en SEPARAT operation och får aldrig orsaka
       // rollback av 117 lyckade kursuppdateringar.
       try{
-        if(ensureKnownMissingW34V2091())weeklyCreated=true;
         const createdFromBackfill=backfillMissingWeeklyPortfolios();
         if(createdFromBackfill)weeklyCreated=true;
         weeklyCreated=ensureWeeklyPortfolioSnapshot()||weeklyCreated;
@@ -9645,10 +9622,6 @@ try{
 try{
   if(recoverMissingW34FromWeekendDataV2089())console.info('W34 återskapades från helgens sparade fredagsdata.');
 }catch(error){console.error('W34 helgåterställning misslyckades',error)}
-
-try{
-  if(ensureKnownMissingW34V2091())console.info('W34 skapades från 2026-08-14 fredagsdata.');
-}catch(error){console.error('W34 v20.9.1-reparation misslyckades',error)}
 
 try{
   const weekendCreated=backfillMissingWeeklyPortfolios();
