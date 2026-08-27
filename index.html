@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.1.0 – fredagsbyte + säker automatik</h1>
+<h1>MomentumScore v21.2.0 – komplett dagsbackfill</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -1963,6 +1963,18 @@ function weeklyEngineAuditV21(){
   }
 }
 
+
+async function runManualDailyGapRepairV212(){
+  if(!confirm('Hämta om två års Yahoo-kurshistorik för samtliga bolag och fyll endast saknade handelsdagar? Manuella data, portföljer och transaktioner ändras inte.'))return;
+  const status=document.getElementById('marketStatus');
+  try{
+    const result=await repairAllDailyPriceHistoryV212(status,true);
+    alert(`Reparation klar.\nKompletterade bolag: ${result.repairedStocks}\nÅterställda handelsdagar: ${result.addedDays}\nSkapade saknade veckor: ${result.weeksCreated||0}\nMisslyckade: ${result.failed.length}`)
+  }catch(error){
+    alert('Reparationen misslyckades: '+error.message)
+  }
+}
+
 function runtimeCodeAudit(){
   const weekKeys=weeklyPortfolios.map(s=>s?.weekKey).filter(Boolean);
   const duplicateWeeks=weekKeys.length-new Set(weekKeys).size;
@@ -1977,6 +1989,7 @@ function runtimeCodeAudit(){
   });
   const currentWeekKey=isoWeekInfo(dateAtLocalNoon(todayISO())).key;
   const currentWeekExists=weeklyPortfolios.some(s=>s?.weekKey===currentWeekKey);
+  const dailyRepairDone=localStorage.getItem(DAILY_GAP_REPAIR_V212_KEY)==='done';
   return{
     version:CODE_AUDIT_VERSION,
     duplicateWeeks,
@@ -7699,10 +7712,11 @@ function technicalFromPriceHistory(history){
     rsi14:calculateRSI(closes,14)
   };
 }
-async function fetchYahooHistory(symbol,existingHistory=[]){
+async function fetchYahooHistory(symbol,existingHistory=[],options={}){
   const hasEnough=Array.isArray(existingHistory)&&existingHistory.length>=263;
-  const range=hasEnough?'5d':'2y';
-  const url='https://momentumscore-yahoo.e-latth.workers.dev/?symbol='+encodeURIComponent(symbol)+'&range='+range;
+  const requestedRange=options.range||(hasEnough?'5d':'2y');
+  const range=requestedRange;
+  const url='https://momentumscore-yahoo.e-latth.workers.dev/?symbol='+encodeURIComponent(symbol)+'&range='+encodeURIComponent(range);
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),18000);
   let response;
@@ -7718,23 +7732,37 @@ async function fetchYahooHistory(symbol,existingHistory=[]){
   const data=await response.json();
   const result=data?.chart?.result?.[0];
   if(!result)throw new Error(data?.chart?.error?.description||'Ingen kursdata');
+
   const timestamps=result.timestamp||[],rawClose=result.indicators?.quote?.[0]?.close||[];
   let incoming=[];
   for(let i=0;i<rawClose.length;i++){
     if(Number.isFinite(rawClose[i])&&timestamps[i]){
-      incoming.push({date:new Date(timestamps[i]*1000).toISOString().slice(0,10),close:rawClose[i]});
+      incoming.push({
+        date:new Date(timestamps[i]*1000).toISOString().slice(0,10),
+        close:rawClose[i]
+      });
     }
   }
+
   const metaPrice=Number(result.meta?.regularMarketPrice),metaTime=Number(result.meta?.regularMarketTime)||0;
   if(Number.isFinite(metaPrice)&&metaTime){
-    incoming.push({date:new Date(metaTime*1000).toISOString().slice(0,10),close:metaPrice});
+    incoming.push({
+      date:new Date(metaTime*1000).toISOString().slice(0,10),
+      close:metaPrice
+    });
   }
+
   incoming=mergeDailyPrices([],incoming);
 
-  // Behåll bara senaste inkommande punkt när full historik redan finns, men slå först
-  // ihop den med den sparade historiken. Därefter används alltid de två senaste unika
-  // handelsdagarna i samma prisserie. Ingen Yahoo-previousClose och ingen kalenderdagsgissning.
-  if(hasEnough&&incoming.length)incoming=[incoming[incoming.length-1]];
+  // v21.2: ALLA nya Yahoo-handelsdagar sparas.
+  // Tidigare kastades alla utom den senaste bort när minst 263 dagar redan fanns.
+  // Det gjorde att t.ex. onsdagen försvann om appen öppnades först på torsdagen.
+  const beforeDates=new Set((Array.isArray(existingHistory)?existingHistory:[])
+    .map(p=>String(p?.date||'').slice(0,10)).filter(Boolean));
+  const newlyAddedDates=incoming
+    .map(p=>p.date)
+    .filter(date=>!beforeDates.has(date));
+
   const priceHistory=mergeDailyPrices(existingHistory,incoming);
   const technical=technicalFromPriceHistory(priceHistory);
   const latestPoint=priceHistory.length?priceHistory[priceHistory.length-1]:null;
@@ -7743,8 +7771,21 @@ async function fetchYahooHistory(symbol,existingHistory=[]){
   const previousClose=priorPoint?num(priorPoint.close):NaN;
   const dailyChangePct=(Number.isFinite(livePrice)&&Number.isFinite(previousClose)&&previousClose!==0)
     ?((livePrice/previousClose)-1)*100:NaN;
-  return{...technical,priceHistory,previousClose,dailyChangePct,fetchMode:hasEnough?'Endast senaste kurs':'Två års grundhistorik'};
+
+  return{
+    ...technical,
+    priceHistory,
+    previousClose,
+    dailyChangePct,
+    incomingCount:incoming.length,
+    addedCount:newlyAddedDates.length,
+    addedDates:newlyAddedDates,
+    fetchMode:options.repair
+      ?'Historikreparation 2 år'
+      :(hasEnough?'Alla nya handelsdagar':'Två års grundhistorik')
+  };
 }
+
 function cloneJson(value){return JSON.parse(JSON.stringify(value))}
 function compactReconstructablePriceHistoryForStorage(list){
   // priceHistory is Yahoo-derived and can be recreated. 263 closes are enough
@@ -9189,6 +9230,130 @@ function exportWeeklyPortfoliosCsv(){
   downloadTextFile(csv,`MomentumScore_Veckoportfoljer_${todayISO()}.csv`,'text/csv;charset=utf-8')
 }
 
+
+const DAILY_GAP_REPAIR_V212_KEY='momentumscore_daily_gap_repair_v212_done';
+let dailyGapRepairRunning=false;
+
+function priceDateSet(list){
+  return new Set((Array.isArray(list)?list:[])
+    .map(p=>String(p?.date||'').slice(0,10))
+    .filter(Boolean))
+}
+
+function countAddedDates(before,after){
+  const old=priceDateSet(before);
+  return [...priceDateSet(after)].filter(d=>!old.has(d)).length
+}
+
+async function repairAllDailyPriceHistoryV212(statusEl=null,force=false){
+  if(dailyGapRepairRunning)return{running:true,repairedStocks:0,addedDays:0,failed:[]};
+  if(!force&&localStorage.getItem(DAILY_GAP_REPAIR_V212_KEY)==='done'){
+    return{alreadyDone:true,repairedStocks:0,addedDays:0,failed:[]}
+  }
+
+  dailyGapRepairRunning=true;
+  const beforeAll=cloneJson(rows);
+  const beforeBench=cloneJson(benchmarkHistories);
+  let repairedStocks=0,addedDays=0;
+  const failed=[];
+
+  try{
+    // Jämförelseindex repareras på samma sätt, annars kan benchmark-serien
+    // fortfarande ha samma tvådagarsluckor.
+    const markets=[...new Set([...rows.map(r=>r.market||'SE'),loadWeeklySettings().benchmarkMarket||'SE'])];
+    for(let m=0;m<markets.length;m++){
+      const market=markets[m],symbol=benchmarkSymbol(market);
+      try{
+        if(statusEl)statusEl.textContent=`Reparerar index ${m+1}/${markets.length}: ${marketLabel(market)}…`;
+        const old=benchmarkHistories[market]||[];
+        const q=await fetchYahooHistory(symbol,old,{range:'2y',repair:true});
+        addedDays+=countAddedDates(old,q.priceHistory);
+        benchmarkHistories[market]=q.priceHistory
+      }catch(error){
+        failed.push(`Index ${marketLabel(market)}: ${error.message}`)
+      }
+    }
+
+    // Alla bolag får en full 2-årsserie från Yahoo och vi MERGAR datum.
+    // Inga manuella eller fundamentala fält ändras.
+    for(let i=0;i<rows.length;i++){
+      const r=rows[i];
+      const symbol=(r.yahooSymbol||inferYahooSymbol(r.ticker,r.market)).trim();
+      if(statusEl)statusEl.textContent=`Reparerar kurshistorik ${i+1}/${rows.length}: ${r.company||r.ticker||symbol}`;
+      if(!symbol){
+        failed.push(`${r.company||r.ticker||'Okänt'}: Yahoo-symbol saknas`);
+        continue
+      }
+
+      try{
+        const oldHistory=Array.isArray(r.priceHistory)?r.priceHistory:[];
+        const q=await fetchYahooHistory(symbol,oldHistory,{range:'2y',repair:true});
+        const added=countAddedDates(oldHistory,q.priceHistory);
+
+        if(added>0){
+          repairedStocks++;
+          addedDays+=added
+        }
+
+        // Endast återskapningsbar marknads-/teknikdata uppdateras.
+        // history, marketHistory, transactions och manuella fält bevaras byte-för-byte.
+        rows[i]={
+          ...r,
+          yahooSymbol:symbol,
+          price:q.price.toFixed(2),
+          ma200Level:q.ma200Level.toFixed(4),
+          ma200:q.ma200.toFixed(2),
+          ma1w:q.ma1w.toFixed(2),
+          ma1m:q.ma1m.toFixed(2),
+          ma3m:q.ma3m.toFixed(2),
+          rsi14:Number.isFinite(q.rsi14)?q.rsi14.toFixed(2):r.rsi14,
+          priceHistory:q.priceHistory,
+          previousClose:Number.isFinite(q.previousClose)?q.previousClose.toFixed(4):r.previousClose,
+          dailyChangePct:Number.isFinite(q.dailyChangePct)?q.dailyChangePct.toFixed(4):r.dailyChangePct,
+          technicalSource:'Yahoo Finance – reparerad komplett dagsserie',
+          technicalSourceDate:nowISO()
+        }
+      }catch(error){
+        failed.push(`${r.company||r.ticker||symbol}: ${error.message}`)
+      }
+    }
+
+    validateNoDataLoss(beforeAll,rows);
+
+    // Håll lagringen slimmad först efter att kompletta tvåårsserien har mergats.
+    rows=compactReconstructableStorage(rows);
+    localStorage.setItem(benchmarkKey,JSON.stringify(benchmarkHistories));
+    persist();
+
+    // Nu när fredagsclose kan ha fyllts tillbaka kan saknade frysta veckor
+    // skapas av den ordinarie, generella veckomotorn.
+    let weeksCreated=0;
+    try{weeksCreated=backfillMissingWeeklyPortfolios()}catch(error){
+      console.error('Veckobackfill efter dagsreparation misslyckades',error)
+    }
+
+    if(failed.length===0){
+      localStorage.setItem(DAILY_GAP_REPAIR_V212_KEY,'done')
+    }
+
+    render();
+    try{renderWeeklyPortfolios()}catch{}
+    if(developmentMode==='portfolios'){
+      try{renderDevelopmentPortfolios()}catch{}
+    }
+
+    return{repairedStocks,addedDays,failed,weeksCreated}
+  }catch(error){
+    rows=beforeAll;
+    benchmarkHistories=beforeBench;
+    try{persist()}catch{}
+    try{localStorage.setItem(benchmarkKey,JSON.stringify(benchmarkHistories))}catch{}
+    throw error
+  }finally{
+    dailyGapRepairRunning=false
+  }
+}
+
 async function updateBenchmarksForMarkets(markets,status){
   const failed=[];
   for(const market of markets){
@@ -9282,7 +9447,7 @@ async function updateAllPrices(silent=false){
       weeklyError=weeklyError||renderPortfolioError?.message||String(renderPortfolioError);
       console.error('Veckoportföljvisningen misslyckades',renderPortfolioError);
     }
-    status.innerHTML='<b>'+ok+' bolag uppdaterades och sparades.</b><br>Bolag med minst 263 sparade handelsdagar hämtade endast den senaste tillgängliga kursen. Övriga hämtade två års grundhistorik.'+(!localBackupCreated?'<br>⚠️ Lokal backup hoppades över eftersom webbläsarens lagringsutrymme är fullt. Säkerhetskopian i arbetsminnet användes under körningen.':'')+(failed.length?'<br>Misslyckade kurshämtningar: '+failed.join(' · '):'')+(weeklyError?'<br>⚠️ Kurserna är sparade, men veckoportföljmotorn gav fel: '+weeklyError:'');
+    status.innerHTML='<b>'+ok+' bolag uppdaterades och sparades.</b><br>Bolag med full grundhistorik sparade alla nya handelsdagar från Yahoo. Övriga hämtade två års grundhistorik.'+(!localBackupCreated?'<br>⚠️ Lokal backup hoppades över eftersom webbläsarens lagringsutrymme är fullt. Säkerhetskopian i arbetsminnet användes under körningen.':'')+(failed.length?'<br>Misslyckade kurshämtningar: '+failed.join(' · '):'')+(weeklyError?'<br>⚠️ Kurserna är sparade, men veckoportföljmotorn gav fel: '+weeklyError:'');
     if(!silent&&failed.length===rows.length)alert('Ingen kurs kunde hämtas. Kontrollera internetanslutning och Yahoo-symboler.');
   }catch(e){
     if(!marketDataCommitted){
@@ -9736,6 +9901,23 @@ if(repairedHistoryCount){
 }
 
 setTimeout(async()=>{
+  try{
+    const status=document.getElementById('marketStatus');
+    const repair=await repairAllDailyPriceHistoryV212(status,false);
+    if(repair.repairedStocks||repair.addedDays||repair.weeksCreated){
+      const parts=[
+        repair.addedDays?`${repair.addedDays} saknade handelsdagar återställdes`:'',
+        repair.repairedStocks?`${repair.repairedStocks} bolag kompletterades`:'',
+        repair.weeksCreated?`${repair.weeksCreated} saknade veckor skapades`:''
+      ].filter(Boolean);
+      if(status)status.innerHTML='<b>Historikreparation klar.</b><br>'+parts.join(' · ')+(repair.failed?.length?'<br>Misslyckades: '+repair.failed.join(' · '):'');
+    }
+  }catch(error){
+    console.error('Automatisk dagsreparation misslyckades',error);
+    const status=document.getElementById('marketStatus');
+    if(status)status.innerHTML='<b>Historikreparation kunde inte slutföras.</b><br>'+error.message
+  }
+
   try{
     const weeklyChanged=await ensureWeeklyFreshnessV211();
     if(weeklyChanged){
