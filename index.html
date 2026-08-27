@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.2.0 – komplett dagsbackfill</h1>
+<h1>MomentumScore v21.2.1 – korrekt dagsdelta + portföljkontroll</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -649,6 +649,8 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
   <div class="actions">
     <button class="secondary" id="checkDatabase">Kontrollera databas</button>
     <button class="secondary" id="cleanupDatabase">Städa databas</button>
+    <button class="secondary" onclick="runManualDailyGapRepairV212()">Reparera saknade kursdagar</button>
+    <button class="secondary" onclick="showHistoricalPortfolioAuditV2121()">Kontrollera gamla portföljer</button>
   </div>
   <div id="databaseHealth" class="note" style="margin-top:10px">Ingen kontroll har körts.</div>
   <div id="cleanupDatabaseStatus" class="note" style="margin-top:8px">Städningen behåller kärndata och tar bort sådant som kan återskapas. Marknadsuppdatering och veckoportföljmotor körs nu som separata transaktioner.</div>
@@ -1946,6 +1948,125 @@ function totalKnownLocalStorageBytes(){
 const CODE_AUDIT_VERSION='20.9.0';
 
 
+
+function snapshotMemberTickerSet(snapshot,model){
+  return new Set((snapshot?.portfolios?.[model]?.members||[])
+    .map(m=>canonicalTicker(m?.ticker))
+    .filter(Boolean))
+}
+
+function compareTickerSets(a,b){
+  const missing=[...a].filter(x=>!b.has(x));
+  const extra=[...b].filter(x=>!a.has(x));
+  return{same:missing.length===0&&extra.length===0,missing,extra}
+}
+
+function historicalPortfolioVerification(snapshot){
+  const friday=snapshotLockFriday(snapshot);
+  if(!friday)return{
+    weekKey:snapshot?.weekKey||'',
+    status:'unverifiable',
+    reason:'Signal-/fredagsdatum saknas',
+    models:{}
+  };
+
+  const cutoffDate=isoDate(friday);
+  const previous=previousWeeklySnapshotBefore(cutoffDate,snapshot.weekKey);
+  const models={};
+  let anyUnverifiable=false,anyMismatch=false;
+
+  for(const model of ['blue','white','average']){
+    const actual=snapshotMemberTickerSet(snapshot,model);
+    if(actual.size!==10){
+      models[model]={status:'unverifiable',reason:`Sparad portfölj har ${actual.size} innehav`};
+      anyUnverifiable=true;
+      continue
+    }
+
+    // historicalWeeklyMembers använder den historik som finns för just fredagen.
+    // Om färre än 10 kan skapas finns inte tillräckligt underlag för säker dom.
+    let expected=[];
+    try{expected=historicalWeeklyMembers(model,cutoffDate,previous)}catch(error){
+      models[model]={status:'unverifiable',reason:error.message||String(error)};
+      anyUnverifiable=true;
+      continue
+    }
+
+    if(expected.length!==10){
+      models[model]={status:'unverifiable',reason:`Endast ${expected.length}/10 historiska kandidater kan verifieras`};
+      anyUnverifiable=true;
+      continue
+    }
+
+    const expectedSet=new Set(expected.map(m=>canonicalTicker(m?.ticker)).filter(Boolean));
+    const comparison=compareTickerSets(actual,expectedSet);
+
+    if(comparison.same){
+      models[model]={status:'verified'}
+    }else{
+      models[model]={
+        status:'mismatch',
+        actual:[...actual],
+        expected:[...expectedSet],
+        shouldOut:comparison.missing,
+        shouldIn:comparison.extra
+      };
+      anyMismatch=true
+    }
+  }
+
+  return{
+    weekKey:snapshot.weekKey,
+    cutoffDate,
+    status:anyMismatch?'mismatch':anyUnverifiable?'unverifiable':'verified',
+    models
+  }
+}
+
+function auditHistoricalFrozenPortfoliosV2121(){
+  return weeklyPortfolios
+    .slice()
+    .sort((a,b)=>String(a.weekKey||'').localeCompare(String(b.weekKey||'')))
+    .map(historicalPortfolioVerification)
+}
+
+function historicalPortfolioAuditSummaryV2121(){
+  const results=auditHistoricalFrozenPortfoliosV2121();
+  return{
+    results,
+    verified:results.filter(x=>x.status==='verified').length,
+    mismatch:results.filter(x=>x.status==='mismatch').length,
+    unverifiable:results.filter(x=>x.status==='unverifiable').length
+  }
+}
+
+
+function showHistoricalPortfolioAuditV2121(){
+  const summary=historicalPortfolioAuditSummaryV2121();
+  const mismatches=summary.results.filter(x=>x.status==='mismatch');
+  const unverifiable=summary.results.filter(x=>x.status==='unverifiable');
+
+  let text=`Historisk portföljkontroll\n\nVerifierade veckor: ${summary.verified}\nAvvikelser: ${summary.mismatch}\nKan inte verifieras säkert: ${summary.unverifiable}`;
+
+  if(mismatches.length){
+    text+='\n\nAVVIKELSER:';
+    for(const week of mismatches){
+      text+=`\n${week.weekKey}:`;
+      for(const [model,data] of Object.entries(week.models)){
+        if(data.status==='mismatch'){
+          text+=`\n  ${model}: ut ${data.shouldOut.join(', ')||'–'} · in ${data.shouldIn.join(', ')||'–'}`
+        }
+      }
+    }
+  }
+
+  if(unverifiable.length){
+    text+='\n\nVeckor som inte kan verifieras säkert skrivs INTE om automatiskt.'
+  }
+
+  alert(text)
+}
+
 function weeklyEngineAuditV21(){
   // v21.1: frozen snapshot and rolling trade share the same Friday executionDate.
   const keys=weeklyPortfolios.map(s=>s?.weekKey).filter(Boolean);
@@ -1990,6 +2111,7 @@ function runtimeCodeAudit(){
   const currentWeekKey=isoWeekInfo(dateAtLocalNoon(todayISO())).key;
   const currentWeekExists=weeklyPortfolios.some(s=>s?.weekKey===currentWeekKey);
   const dailyRepairDone=localStorage.getItem(DAILY_GAP_REPAIR_V212_KEY)==='done';
+  const historicalPortfolioAudit=historicalPortfolioAuditSummaryV2121();
   return{
     version:CODE_AUDIT_VERSION,
     duplicateWeeks,
@@ -2242,30 +2364,79 @@ function listRows(){
 
 
 
-function previousDistinctMarketDayPoint(r){
-  const hist=(Array.isArray(r.marketHistory)?r.marketHistory:[])
-    .filter(p=>p&&p.savedAt)
+function previousTradingDayRecalculatedScores(r){
+  const prices=(Array.isArray(r?.priceHistory)?r.priceHistory:[])
+    .filter(p=>p&&p.date&&Number.isFinite(num(p.close)))
     .slice()
-    .sort((a,b)=>new Date(a.savedAt)-new Date(b.savedAt));
-  if(!hist.length)return null;
-  const latestDate=String(hist[hist.length-1].savedAt).slice(0,10);
-  for(let i=hist.length-1;i>=0;i--){
-    if(String(hist[i].savedAt).slice(0,10)<latestDate)return hist[i]
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+
+  if(prices.length<2)return null;
+
+  // Senaste sparade datapunkt kan vara dagens intradag/meta-pris.
+  // Jämförelsen ska göras mot handelsdagen omedelbart före den.
+  const latestDate=String(prices[prices.length-1].date).slice(0,10);
+  let previousIndex=-1;
+  for(let i=prices.length-2;i>=0;i--){
+    if(String(prices[i].date).slice(0,10)<latestDate){
+      previousIndex=i;
+      break
+    }
   }
-  return null
+  if(previousIndex<0)return null;
+
+  const previousPrices=prices.slice(0,previousIndex+1);
+  if(previousPrices.length<263)return null;
+
+  try{
+    const technical=technicalFromPriceHistory(previousPrices);
+    const previousClose=num(previousPrices[previousPrices.length-1].close);
+
+    // Fundamentala/manuella indata hålls oförändrade. Det enda som flyttas
+    // tillbaka en handelsdag är marknads-/teknikdelen.
+    // Därmed blir dagsdelta inte förorenat av gamla felaktiga score-snapshots.
+    const historicalRow={
+      ...r,
+      ...technical,
+      price:previousClose,
+      priceHistory:previousPrices,
+      ma200Level:Number.isFinite(technical.ma200Level)?technical.ma200Level:r.ma200Level,
+      ma200:Number.isFinite(technical.ma200)?technical.ma200:r.ma200,
+      ma1w:Number.isFinite(technical.ma1w)?technical.ma1w:r.ma1w,
+      ma1m:Number.isFinite(technical.ma1m)?technical.ma1m:r.ma1m,
+      ma3m:Number.isFinite(technical.ma3m)?technical.ma3m:r.ma3m,
+      rsi14:Number.isFinite(technical.rsi14)?technical.rsi14:r.rsi14
+    };
+
+    const blue=calc(historicalRow);
+    const white=whiteCalc(historicalRow);
+    const average=Number.isFinite(blue.total)&&white.dataReady
+      ?(blue.total+white.total)/2
+      :NaN;
+
+    return{
+      date:String(previousPrices[previousPrices.length-1].date).slice(0,10),
+      blue,white,average
+    }
+  }catch(error){
+    console.warn('Föregående handelsdags poäng kunde inte räknas om',r?.ticker,error);
+    return null
+  }
 }
+
 function dailyScoreDeltas(r,blue,white,average){
-  const prev=previousDistinctMarketDayPoint(r);
+  const prev=previousTradingDayRecalculatedScores(r);
   if(!prev)return{blue:NaN,white:NaN,average:NaN};
-  const prevBlue=num(prev.blueScore??prev.score);
-  const prevWhite=num(prev.whiteScore);
-  const prevAverage=Number.isFinite(prevBlue)&&Number.isFinite(prevWhite)?(prevBlue+prevWhite)/2:NaN;
+
   return{
-    blue:Number.isFinite(prevBlue)&&Number.isFinite(blue.total)?blue.total-prevBlue:NaN,
-    white:Number.isFinite(prevWhite)&&white.dataReady&&Number.isFinite(white.total)?white.total-prevWhite:NaN,
-    average:Number.isFinite(prevAverage)&&Number.isFinite(average)?average-prevAverage:NaN
+    blue:Number.isFinite(prev.blue?.total)&&Number.isFinite(blue.total)
+      ?blue.total-prev.blue.total:NaN,
+    white:prev.white?.dataReady&&white.dataReady&&Number.isFinite(prev.white.total)&&Number.isFinite(white.total)
+      ?white.total-prev.white.total:NaN,
+    average:Number.isFinite(prev.average)&&Number.isFinite(average)
+      ?average-prev.average:NaN
   }
 }
+
 function dailyDeltaText(v){
   if(!Number.isFinite(v))return '–';
   if(Math.abs(v)<0.0000001)return '0,0';
@@ -2790,7 +2961,16 @@ function developmentMetrics(r){
   };
 }
 function modelHistoryDelta(r,model,current){
-  const hist=(Array.isArray(r.marketHistory)?r.marketHistory:[]).slice().sort((a,b)=>new Date(a.savedAt)-new Date(b.savedAt));
+  // För dags-/aktuell jämförelse används omräknad föregående handelsdag.
+  const prev=previousTradingDayRecalculatedScores(r);
+  if(prev){
+    const previous=model==='white'?prev.white?.total:model==='average'?prev.average:prev.blue?.total;
+    if(Number.isFinite(previous)&&Number.isFinite(current))return current-previous
+  }
+
+  // Fallback endast när lokal kurshistorik inte räcker.
+  const hist=(Array.isArray(r.marketHistory)?r.marketHistory:[])
+    .slice().sort((a,b)=>new Date(a.savedAt)-new Date(b.savedAt));
   for(let i=hist.length-1;i>=0;i--){
     if(model==='average'){
       const blue=num(hist[i].blueScore),white=num(hist[i].whiteScore);
@@ -2800,12 +2980,9 @@ function modelHistoryDelta(r,model,current){
       if(Number.isFinite(v)&&Number.isFinite(current))return current-v
     }
   }
-  if(model==='blue'){
-    const fallback=developmentMetrics(r).scoreAll;
-    return Number.isFinite(fallback)?fallback:NaN
-  }
   return NaN
 }
+
 
 let developmentMode='stocks';
 
