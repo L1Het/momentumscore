@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.2.3 – generell veckomotor + courtage från start</h1>
+<h1>MomentumScore v21.2.4 – generell veckomotor + courtage från start</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -666,6 +666,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
   <div class="actions">
     <button id="fetchFiveYearBacktest">Hämta 10 år och kör test</button>
     <button id="rerunFiveYearBacktest" class="secondary" disabled>Kör om med nuvarande Vit-platåer</button>
+    <button id="runFiveYearDiagnosticsBtn" class="secondary" disabled>Kör robusthetstester</button>
     <button id="exportFiveYearBacktest" class="secondary" disabled>Exportera resultat CSV</button>
   </div>
   <div class="backtest-progress"><div id="fiveYearBacktestProgress"></div></div>
@@ -3243,7 +3244,7 @@ function buildRollingPortfolio(model,asOfDate=''){
       lastUpdateDate=startDate;
       benchmarkStart=num(snapshot.benchmarkStart);
 
-      // v21.2.3: även de tio första köpen är riktiga affärer och betalar
+      // v21.2.4: även de tio första köpen är riktiga affärer och betalar
       // samma courtage som alla senare köp. Inga specialregler vid start.
       const budgetPerStock=ROLLING_START_CAPITAL/wanted.size;
       let usedCash=0;
@@ -7260,7 +7261,12 @@ function runFiveYearWhiteBacktest(){
   };
   fiveYearBacktestResult=result;
   renderFiveYearBacktest(result);
-  fiveYearDiagnosticsResult=runFiveYearDiagnostics(result);
+  // v21.2.4: det vanliga 10-årstestet ska vara KLART här.
+  // De mycket tunga robusthets-/känslighetstesterna körs separat så att
+  // webbläsaren inte ser ut att fastna på slutet efter 100 % hämtning.
+  fiveYearDiagnosticsResult=null;
+  const diagnosticsBtn=document.getElementById('runFiveYearDiagnosticsBtn');
+  if(diagnosticsBtn)diagnosticsBtn.disabled=false;
   document.getElementById('exportFiveYearBacktest').disabled=false;
   return result
 }
@@ -7554,6 +7560,26 @@ function runTenYearFrozenRobustness(){
   return {weights,yearly,rolling12,rolling24,start,last};
 }
 
+async function runFiveYearDiagnosticsManually(){
+  const btn=document.getElementById('runFiveYearDiagnosticsBtn');
+  const status=document.getElementById('fiveYearBacktestStatus');
+  if(!fiveYearBacktestResult)return alert('Kör 10-årstestet först.');
+  if(btn)btn.disabled=true;
+  if(status)status.textContent='10-årstestet är klart. Kör robusthetstester separat…';
+  // Ge webbläsaren chans att måla klart huvudresultatet innan CPU-arbetet startar.
+  await new Promise(resolve=>setTimeout(resolve,50));
+  try{
+    fiveYearDiagnosticsResult=runFiveYearDiagnostics(fiveYearBacktestResult);
+    if(status)status.textContent=
+      `10-årstest + robusthetstester klara: ${fiveYearBacktestResult.weekCount ?? fiveYearBacktestResult.weeks.length} veckor · ${fiveYearBacktestResult.universe} bolag.`;
+  }catch(error){
+    console.error('Robusthetstester misslyckades',error);
+    if(status)status.textContent='10-årstestet är klart, men robusthetstesterna avbröts: '+(error?.message||error);
+  }finally{
+    if(btn)btn.disabled=false;
+  }
+}
+
 function runFiveYearDiagnostics(base){
   const audit=fiveYearTimeLeakAudit();
   const delayed=fiveYearRunVariant({extraDelay:1});
@@ -7817,7 +7843,8 @@ async function fetchAndRunFiveYearBacktest(){
   const button=document.getElementById('fetchFiveYearBacktest');
   const rerun=document.getElementById('rerunFiveYearBacktest');
   const exportBtn=document.getElementById('exportFiveYearBacktest');
-  button.disabled=true;rerun.disabled=true;exportBtn.disabled=true;
+  const diagnosticsBtn=document.getElementById('runFiveYearDiagnosticsBtn');
+  button.disabled=true;rerun.disabled=true;exportBtn.disabled=true;if(diagnosticsBtn)diagnosticsBtn.disabled=true;
   fiveYearBacktestResult=null;
   document.getElementById('fiveYearBacktestSummary').innerHTML='';
   document.getElementById('fiveYearBacktestVerdict').innerHTML='';
@@ -8946,7 +8973,7 @@ function repairWrongW34V2085(){
   return false
 }
 
-// v21.2.3: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
+// v21.2.4: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
 // bevaras som historik, medan alla nya veckor skapas av den generella veckomotorn.
 
 
@@ -9883,6 +9910,7 @@ document.getElementById('runLaboratory').onclick=runLaboratory;
 document.getElementById('exportLaboratoryCsv').onclick=exportLaboratoryCsv;
 document.getElementById('fetchFiveYearBacktest').onclick=fetchAndRunFiveYearBacktest;
 document.getElementById('rerunFiveYearBacktest').onclick=runFiveYearWhiteBacktest;
+document.getElementById('runFiveYearDiagnosticsBtn').onclick=runFiveYearDiagnosticsManually;
 document.getElementById('exportFiveYearBacktest').onclick=exportFiveYearBacktestCsv;
 document.getElementById('saveSettings').onclick=saveMarketSettings;
 document.getElementById('checkDatabase').onclick=renderDatabaseHealth;
@@ -9907,7 +9935,7 @@ try{
     console.info(`Vit 2.1 aktiverad: 10/30/30/30. ${scorePoints} sparade Vit-poäng räknades om.`)
   }else if(weightChanged){persist()}
 }catch(error){console.error('Vit 2.1 viktmigrering misslyckades',error)}
-// v21.2.3: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
+// v21.2.4: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
 // via den generella motorn, aldrig skriva om W31/W32/... som redan finns.
 try{
   const weekendCreated=backfillMissingWeeklyPortfolios();
