@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.2.4 – generell veckomotor + courtage från start</h1>
+<h1>MomentumScore v21.2.5 – generell veckomotor + courtage från start</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -684,7 +684,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
     <div class="tablewrap"><table id="fiveYearDiagnosticTable"></table></div>
     <div class="rowcard" style="margin-top:18px">
       <h3>Vit 2.1 – vilka aktier fungerar?</h3>
-      <p class="note">Analysen bygger på backtestets faktiska köp och försäljningar: verklig executionDate och kurs, courtage på både köp och sälj samt OMXSPI på exakt samma köp- och säljdatum. Öppna positioner redovisas separat och räknas inte i träffprocenten.</p>
+      <p class="note">Analysen bygger på backtestets faktiska köp och försäljningar: fredagens executionDate och stängningskurs, courtage på både köp och sälj samt OMXSPI på exakt samma köp- och säljdatum. Öppna positioner redovisas separat och räknas inte i träffprocenten.</p>
       <div id="whiteHoldingAnalysisSummary" class="summary"></div><div class="actions" style="margin:8px 0 12px"><button type="button" class="secondary" id="exportWhiteTradeLedger">Exportera affärer CSV</button></div>
       <div class="tablewrap"><table id="whiteHoldingAnalysisCompany"></table></div>
       <div class="tablewrap" style="margin-top:14px"><table id="whiteHoldingAnalysisDuration"></table></div>
@@ -3244,7 +3244,7 @@ function buildRollingPortfolio(model,asOfDate=''){
       lastUpdateDate=startDate;
       benchmarkStart=num(snapshot.benchmarkStart);
 
-      // v21.2.4: även de tio första köpen är riktiga affärer och betalar
+      // v21.2.5: även de tio första köpen är riktiga affärer och betalar
       // samma courtage som alla senare köp. Inga specialregler vid start.
       const budgetPerStock=ROLLING_START_CAPITAL/wanted.size;
       let usedCash=0;
@@ -7095,7 +7095,7 @@ function fiveYearVolatility(points){
 }
 function runFiveYearWhiteBacktest(){
   if(!fiveYearBacktestData?.index?.length||!fiveYearBacktestData?.stocks?.length){
-    alert('Hämta femårshistoriken först.');
+    alert('Hämta 10-årshistoriken först.');
     return null
   }
   const testStart=historicalBacktestStartDate(fiveYearBacktestData.index);
@@ -7107,7 +7107,10 @@ function runFiveYearWhiteBacktest(){
   const frozenWeights=normalizedWhiteWeights({distanceMa200:10,ma50Spread:30,ma200Slope1m:30,trendStability5d:30});
   for(let s=0;s<signals.length-1;s++){
     const signal=signals[s];
-    const executionDate=fiveYearNextDate(fiveYearBacktestData.index,signal.date);
+    // v21.2.5: samma regel som levande portföljen.
+    // Fredagens stängningsdata bestämmer urvalet och samma fredags stängningskurs
+    // är köp-/säljkursen för portföljen som benämns nästa vecka.
+    const executionDate=signal.date;
     if(!executionDate)continue;
     const ranked=fiveYearTopN(signal.date,Object.keys(state.positions),20,frozenWeights);
     if(ranked.length<5)continue;
@@ -7261,7 +7264,7 @@ function runFiveYearWhiteBacktest(){
   };
   fiveYearBacktestResult=result;
   renderFiveYearBacktest(result);
-  // v21.2.4: det vanliga 10-årstestet ska vara KLART här.
+  // v21.2.5: det vanliga 10-årstestet ska vara KLART här.
   // De mycket tunga robusthets-/känslighetstesterna körs separat så att
   // webbläsaren inte ser ut att fastna på slutet efter 100 % hämtning.
   fiveYearDiagnosticsResult=null;
@@ -7308,7 +7311,9 @@ function fiveYearRunVariant(options={}){
   let benchmarkStart=NaN,started=false,previousTarget=[],activeTarget=[];
   for(let s=0;s<signals.length-1;s++){
     const signal=signals[s];
-    let executionDate=fiveYearNextDate(fiveYearBacktestData.index,signal.date);
+    // Basfallet exekverar på signalens fredagsstängning. extraDelay används bara
+    // av explicita fördröjningstester och flyttar då fram exekveringen handelsdagar.
+    let executionDate=signal.date;
     if(executionDate&&extraDelay)executionDate=fiveYearAdvanceDate(fiveYearBacktestData.index,executionDate,extraDelay);
     if(!executionDate)continue;
     const shouldRebalance=!started||(s%rebalanceEvery===0);
@@ -7415,9 +7420,11 @@ function fiveYearTimeLeakAudit(){
   const cfg=loadWhitePlateaus();
   let checks=0,violations=[];
   for(let s=0;s<signals.length-1;s++){
-    const signal=signals[s],executionDate=fiveYearNextDate(fiveYearBacktestData.index,signal.date);
+    const signal=signals[s],executionDate=signal.date;
     if(!executionDate)continue;
-    if(String(executionDate)<=String(signal.date))violations.push(`Exekvering ${executionDate} är inte efter signal ${signal.date}`);
+    // Produktionskonvention: signal och affär låses på samma fredagsstängning.
+    // Auditens uppgift är därför att säkerställa att ingen teknisk datapunkt ligger EFTER fredagen.
+    if(String(executionDate)!==String(signal.date))violations.push(`Exekvering ${executionDate} matchar inte signalens fredagsstängning ${signal.date}`);
     checks++;
     for(const item of fiveYearBacktestData.stocks){
       const r=whiteHistoricalScore(item.series,signal.date,cfg);
@@ -8973,7 +8980,7 @@ function repairWrongW34V2085(){
   return false
 }
 
-// v21.2.4: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
+// v21.2.5: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
 // bevaras som historik, medan alla nya veckor skapas av den generella veckomotorn.
 
 
@@ -9935,7 +9942,7 @@ try{
     console.info(`Vit 2.1 aktiverad: 10/30/30/30. ${scorePoints} sparade Vit-poäng räknades om.`)
   }else if(weightChanged){persist()}
 }catch(error){console.error('Vit 2.1 viktmigrering misslyckades',error)}
-// v21.2.4: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
+// v21.2.5: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
 // via den generella motorn, aldrig skriva om W31/W32/... som redan finns.
 try{
   const weekendCreated=backfillMissingWeeklyPortfolios();
