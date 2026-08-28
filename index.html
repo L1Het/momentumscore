@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.2.1 – korrekt dagsdelta + portföljkontroll</h1>
+<h1>MomentumScore v21.2.2 – korrekt historiska rullande affärer</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -2096,6 +2096,37 @@ async function runManualDailyGapRepairV212(){
   }
 }
 
+
+function rollingHistoricalTradeAuditV2122(){
+  const issues=[];
+  for(const model of ['blue','white','average']){
+    let portfolio=null;
+    try{portfolio=buildRollingPortfolio(model,'')}catch(error){
+      issues.push({model,type:'engine-error',message:error.message||String(error)});
+      continue
+    }
+    for(const tx of portfolio?.transactions||[]){
+      if(tx.type!=='Sälj')continue;
+      const idx=findStockIndex(tx);
+      const row=idx>=0?rows[idx]:null;
+      if(!row)continue;
+      const exact=(Array.isArray(row.priceHistory)?row.priceHistory:[])
+        .find(p=>String(p?.date||'').slice(0,10)===String(tx.date||'').slice(0,10));
+      const exactPrice=num(exact?.close);
+      if(Number.isFinite(exactPrice)&&Math.abs(num(tx.price)-exactPrice)>0.0001){
+        issues.push({
+          model,
+          weekKey:tx.weekKey,
+          ticker:tx.ticker,
+          transactionPrice:num(tx.price),
+          exactClose:exactPrice
+        })
+      }
+    }
+  }
+  return{ok:issues.length===0,issues}
+}
+
 function runtimeCodeAudit(){
   const weekKeys=weeklyPortfolios.map(s=>s?.weekKey).filter(Boolean);
   const duplicateWeeks=weekKeys.length-new Set(weekKeys).size;
@@ -2112,6 +2143,7 @@ function runtimeCodeAudit(){
   const currentWeekExists=weeklyPortfolios.some(s=>s?.weekKey===currentWeekKey);
   const dailyRepairDone=localStorage.getItem(DAILY_GAP_REPAIR_V212_KEY)==='done';
   const historicalPortfolioAudit=historicalPortfolioAuditSummaryV2121();
+  const rollingTradeAudit=rollingHistoricalTradeAuditV2122();
   return{
     version:CODE_AUDIT_VERSION,
     duplicateWeeks,
@@ -3130,12 +3162,33 @@ function rollingSalePrice(holding,snapshot){
   const rowIndex=findStockIndex(holding);
   const row=rowIndex>=0?rows[rowIndex]:null;
 
-  // Vid fredagsombalansering används exakt samma stängningskursprincip
-  // för försäljning som för de nya portföljernas startPrice.
-  if(row&&String(snapshot?.cutoffTime||'')==='18:00'){
-    const close=fridayClosingPrice(row,date);
-    if(Number.isFinite(close)&&close>0)return close
+  // v21.2.2: HISTORISK affär måste alltid använda kursen på just affärsdagen.
+  // Den tidigare fridayClosingPrice()-vägen kunde använda row.price när
+  // marketUpdatedAt var senare än den gamla fredagen. Eftersom row.price är
+  // dagens senaste kurs kunde en försäljning 7/8 då räknas till kursen 28/8.
+  //
+  // Exakt datapunkt för executionDate är därför första sanningskälla.
+  if(row){
+    const exact=(Array.isArray(row.priceHistory)?row.priceHistory:[])
+      .filter(point=>
+        String(point?.date||'').slice(0,10)===date &&
+        Number.isFinite(num(point?.close)) &&
+        num(point.close)>0
+      )
+      .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    if(exact.length)return num(exact[exact.length-1].close)
   }
+
+  // För endast den allra senaste fredagen kan row.price användas som fallback,
+  // men bara om själva radens senaste marknadsdatum motsvarar executionDate.
+  if(row&&String(snapshot?.cutoffTime||'')==='18:00'){
+    const updatedDate=String(row?.marketUpdatedAt||row?.technicalSourceDate||'').slice(0,10);
+    if(updatedDate===date&&Number.isFinite(num(row?.price))&&num(row.price)>0){
+      return num(row.price)
+    }
+  }
+
+  // Sista fallback använder historisk kurs på/innan datumet, aldrig dagens kurs.
   return rollingPriceAt(holding,date)
 }
 function rollingValuationPrice(holding,asOfDate=''){
