@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.2.2 – korrekt historiska rullande affärer</h1>
+<h1>MomentumScore v21.2.3 – generell veckomotor + courtage från start</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -3243,8 +3243,10 @@ function buildRollingPortfolio(model,asOfDate=''){
       lastUpdateDate=startDate;
       benchmarkStart=num(snapshot.benchmarkStart);
 
-      const allocation=ROLLING_START_CAPITAL/wanted.size;
-      let invested=0;
+      // v21.2.3: även de tio första köpen är riktiga affärer och betalar
+      // samma courtage som alla senare köp. Inga specialregler vid start.
+      const budgetPerStock=ROLLING_START_CAPITAL/wanted.size;
+      let usedCash=0;
 
       for(const [key,member] of wanted){
         const buyPrice=rollingEntryPrice(member,snapshot);
@@ -3252,8 +3254,16 @@ function buildRollingPortfolio(model,asOfDate=''){
           warnings.push(`${member.ticker||member.company}: startkurs saknas`);
           continue
         }
-        const shares=allocation/buyPrice;
-        invested+=allocation;
+        const marketValue=budgetPerStock/(1+ROLLING_FEE_RATE);
+        const fee=marketValue*ROLLING_FEE_RATE;
+        const shares=marketValue/buyPrice;
+        const totalCost=marketValue+fee;
+
+        usedCash+=totalCost;
+        fees+=fee;
+        buyCount++;
+        turnoverValue+=marketValue;
+
         holdings.set(key,{
           ...member,
           key,
@@ -3261,11 +3271,27 @@ function buildRollingPortfolio(model,asOfDate=''){
           buyDate:tradeDate,
           buyWeek:snapshot.weekKey,
           buyPrice,
-          cost:allocation,
-          costBasis:allocation
+          cost:marketValue,
+          costBasis:totalCost,
+          buyFee:fee
+        });
+
+        transactions.push({
+          id:`${model}-${snapshot.weekKey}-buy-${key}`,
+          date:tradeDate,
+          weekKey:snapshot.weekKey,
+          type:'Köp',
+          ticker:member.ticker,
+          company:member.company,
+          shares,
+          price:buyPrice,
+          value:marketValue,
+          totalCost,
+          fee,
+          initial:true
         })
       }
-      cash=Math.max(0,ROLLING_START_CAPITAL-invested);
+      cash=Math.max(0,ROLLING_START_CAPITAL-usedCash);
       continue
     }
 
@@ -3442,7 +3468,7 @@ function buildRollingPortfolio(model,asOfDate=''){
 
   return{
     type:'rolling',
-    engineVersion:2,
+    engineVersion:3,
     model,
     startDate,
     lastUpdateDate:lastUpdateDate||startDate,
@@ -8920,168 +8946,9 @@ function repairWrongW34V2085(){
   return false
 }
 
-const BLUE_HISTORY_REPAIR_V2083_KEY='momentumscore_blue_history_repair_v2083';
+// v21.2.3: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
+// bevaras som historik, medan alla nya veckor skapas av den generella veckomotorn.
 
-function memberTickerKey(member){
-  return canonicalTicker(member?.ticker||member?.company||'')
-}
-function cloneMemberForBlueWeek(member,entryDate){
-  const copy=cloneJson(member);
-  const rowIndex=findStockIndex(copy);
-  const row=rowIndex>=0?rows[rowIndex]:null;
-  let price=NaN;
-
-  if(row){
-    const exact=(Array.isArray(row.priceHistory)?row.priceHistory:[])
-      .filter(p=>String(p?.date||'').slice(0,10)===entryDate&&Number.isFinite(num(p?.close)))
-      .sort((a,b)=>String(a.date).localeCompare(String(b.date))).pop();
-    if(exact)price=num(exact.close)
-  }
-
-  // Fallback till redan sparad prisinformation om exakt historik saknas.
-  if(!Number.isFinite(price)&&Number.isFinite(num(copy.signalPrice)))price=num(copy.signalPrice);
-  if(!Number.isFinite(price)&&Number.isFinite(num(copy.startPrice)))price=num(copy.startPrice);
-
-  copy.startPrice=price;
-  copy.signalPrice=price;
-  copy.executionPrice=price;
-  copy.executionDate=entryDate;
-  copy.closeDate=entryDate;
-  copy.selectionModel='blue';
-  copy.selectionSource='blue-actual-history-repair-v2083';
-  return copy
-}
-function blueSnapshotByWeek(weekKey){
-  return weeklyPortfolios.find(snapshot=>snapshot?.weekKey===weekKey)||null
-}
-function setBlueSnapshotMembers(snapshot,members,entryDate){
-  if(!snapshot)return false;
-  snapshot.executionDate=entryDate;
-  snapshot.lockDate=entryDate;
-  snapshot.savedDate=entryDate;
-  snapshot.executionStatus='finalized';
-  snapshot.executionMode='previous-trading-day-close';
-  snapshot.weeklyLockVersion=3;
-  snapshot.blueHistoryRepair='actual-live-history-v2083';
-
-  if(!snapshot.portfolios)snapshot.portfolios={};
-  snapshot.portfolios.blue={
-    ...(snapshot.portfolios.blue||{}),
-    name:'Blå',
-    members:members.map((member,index)=>({
-      ...cloneMemberForBlueWeek(member,entryDate),
-      rank:index+1
-    }))
-  };
-
-  const market=snapshot.benchmarkMarket||'SE';
-  const bench=benchmarkValueOnOrBefore(market,entryDate);
-  if(Number.isFinite(bench)){
-    snapshot.benchmarkStart=bench;
-    snapshot.benchmarkSignalStart=bench
-  }
-  return true
-}
-
-function repairKnownBlueHistoryV2083(force=false){
-  if(!force&&localStorage.getItem(BLUE_HISTORY_REPAIR_V2083_KEY)==='done'){
-    return{changed:false,message:'Blå-historiken är redan reparerad'}
-  }
-
-  const w31=blueSnapshotByWeek('2026-W31');
-  const w32=blueSnapshotByWeek('2026-W32');
-  const w33=blueSnapshotByWeek('2026-W33');
-  if(!w31||!w32||!w33||!(w31.portfolios?.blue?.members||[]).length){
-    return{changed:false,message:'W31–W33 saknas; ingen specialreparation kördes'}
-  }
-
-  // Verifierad faktisk historik från den liveportfölj som användes:
-  // W31 -> W32 var helt orörd.
-  // W32 -> W33: BIOG B ut, RAIL in.
-  const base31=cloneJson(w31.portfolios.blue.members||[]);
-  const baseByTicker=new Map(base31.map(m=>[memberTickerKey(m),m]));
-
-  // W32: exakt samma medlemskap som W31, men entry/veckovärdering från 2026-07-31 close.
-  const w32Members=base31.map(m=>cloneJson(m));
-  setBlueSnapshotMembers(w32,w32Members,'2026-07-31');
-
-  // W33: utgå från samma tio och gör endast det verkliga bytet BIOG B -> RAIL.
-  const kept=base31.filter(m=>memberTickerKey(m)!==canonicalTicker('BIOG B'));
-  let rail=null;
-
-  // Först försök hitta Railcare i någon redan sparad W33/W32/W31-medlemslista,
-  // annars bygg medlemmen från aktuell bolagsrad men med historisk 2026-08-07-close.
-  for(const snap of [w33,w32,w31]){
-    const hit=(snap?.portfolios?.blue?.members||[]).find(m=>memberTickerKey(m)===canonicalTicker('RAIL'));
-    if(hit){rail=cloneJson(hit);break}
-  }
-  if(!rail){
-    const idx=rows.findIndex(r=>canonicalTicker(r.ticker)===canonicalTicker('RAIL'));
-    if(idx>=0){
-      const row=rows[idx];
-      const selected=selectedModelValues(row,'blue');
-      rail={
-        ticker:row.ticker,company:row.company,market:row.market,
-        blueScore:selected.b?.total??selected.score,
-        whiteScore:selected.w?.total,
-        averageScore:selected.average,
-        score:selected.score,
-        startPrice:NaN
-      }
-    }
-  }
-
-  if(!rail){
-    return{changed:false,message:'Railcare kunde inte hittas; Blå-historiken lämnades orörd'}
-  }
-
-  const w33Members=[...kept,rail];
-
-  // Behåll ordningen/ranken från den kända W33-snapshoten där det går.
-  const oldW33Order=new Map((w33.portfolios?.blue?.members||[]).map((m,i)=>[memberTickerKey(m),i]));
-  w33Members.sort((a,b)=>{
-    const ai=oldW33Order.has(memberTickerKey(a))?oldW33Order.get(memberTickerKey(a)):999;
-    const bi=oldW33Order.has(memberTickerKey(b))?oldW33Order.get(memberTickerKey(b)):999;
-    return ai-bi
-  });
-
-  setBlueSnapshotMembers(w33,w33Members,'2026-08-07');
-
-  // W31 normaliseras bara i metadata; medlemskap/startpriser lämnas som ursprungligt facit.
-  w31.executionDate='2026-07-24';
-  w31.lockDate='2026-07-24';
-  w31.savedDate='2026-07-24';
-  w31.activationDate='2026-07-27';
-  w31.executionStatus='finalized';
-  w31.executionMode='previous-trading-day-close';
-  w31.weeklyLockVersion=3;
-  w31.blueHistoryRepair='actual-live-history-v2083';
-
-  // Kontroll: W31 och W32 måste vara exakt samma tio tickers.
-  const a=(w31.portfolios.blue.members||[]).map(memberTickerKey).sort().join('|');
-  const b=(w32.portfolios.blue.members||[]).map(memberTickerKey).sort().join('|');
-  if(a!==b)throw new Error('Blå-reparation: W31 och W32 blev inte identiska');
-
-  // Kontroll: W33 får skilja med exakt BIOG B ut och RAIL in.
-  const set32=new Set((w32.portfolios.blue.members||[]).map(memberTickerKey));
-  const set33=new Set((w33.portfolios.blue.members||[]).map(memberTickerKey));
-  const out=[...set32].filter(x=>!set33.has(x));
-  const incoming=[...set33].filter(x=>!set32.has(x));
-  if(out.length!==1||incoming.length!==1
-      ||out[0]!==canonicalTicker('BIOG B')
-      ||incoming[0]!==canonicalTicker('RAIL')){
-    throw new Error(`Blå-reparation: fel W32→W33-byte (${out.join(',')} -> ${incoming.join(',')})`)
-  }
-
-  weeklyPortfolios.sort((x,y)=>String(y.lockDate||'').localeCompare(String(x.lockDate||'')));
-  weeklyPersist();
-  localStorage.setItem(BLUE_HISTORY_REPAIR_V2083_KEY,'done');
-
-  return{
-    changed:true,
-    message:'Blå korrigerad: W31→W32 0 byten; W32→W33 BIOG B ut och RAIL in.'
-  }
-}
 
 function backfillMissingWeeklyPortfolios(){
   const settings=loadWeeklySettings();
@@ -10040,26 +9907,8 @@ try{
     console.info(`Vit 2.1 aktiverad: 10/30/30/30. ${scorePoints} sparade Vit-poäng räknades om.`)
   }else if(weightChanged){persist()}
 }catch(error){console.error('Vit 2.1 viktmigrering misslyckades',error)}
-try{
-  const weeklyRepair=rebuildExistingWeeklyHistoryFromFridayData(false);
-  if(weeklyRepair.rebuilt||weeklyRepair.fallback||weeklyRepair.removed){
-    console.info('Veckolås v20.8.2:',weeklyRepair)
-  }
-}catch(error){console.error('Korrigering av tidigare veckor misslyckades',error)}
-
-try{
-  const blueRepair=repairKnownBlueHistoryV2083(false);
-  if(blueRepair.changed)console.info(blueRepair.message);
-}catch(error){console.error('Blå-historikens specialreparation misslyckades',error)}
-
-try{
-  if(repairWrongW34V2085())console.info('W34 reparerades från 2026-08-14 fredagsclose.');
-}catch(error){console.error('W34-reparation misslyckades',error)}
-
-try{
-  const rebuiltWhiteWeeks=rebuildWhite2WeeklyPortfolios(false);
-  if(rebuiltWhiteWeeks)console.info(`${rebuiltWhiteWeeks} historiska veckor räknades om med Vit 2.1 (10/30/30/30 + Top10/Top20).`);
-}catch(error){console.error('Vit 2.1-veckoåterbyggnad misslyckades',error)}
+// v21.2.3: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
+// via den generella motorn, aldrig skriva om W31/W32/... som redan finns.
 try{
   const weekendCreated=backfillMissingWeeklyPortfolios();
   if(weekendCreated)console.info(`${weekendCreated} saknade veckoportfölj(er) skapades från låst fredagsdata.`);
