@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.2.5 – generell veckomotor + courtage från start</h1>
+<h1>MomentumScore v21.3.0 – generell veckomotor + courtage från start</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -662,7 +662,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
 <div class="card" id="whiteFiveYearBacktestCard">
   <h2>⚪ Vit – 10-årstest mot OMXSPI</h2>
   <p class="note"><b>Aktiv Vit 2.1:</b> 10/30/30/30 i faktorvikter. Vit-portföljen använder Top10 in / Top20 ut. Snitt räknas om med den nya Vit-poängen men behåller sin egen Top10-logik.</p>
-  <p class="note">Hämtar exakt Yahoo range=10y med dagliga stängningskurser. De första cirka 220 handelsdagarna fungerar som uppvärmning för MA200 och räknar modellen historiskt utan framtidsdata. Den frysta huvudmodellen är 10/30/30/30 i faktorvikter samt Top10 in / Top20 ut. Varje fredags stängning används som signal, affärer genomförs på nästa tillgängliga handelsdag och courtage är 0,069 % vid köp och försäljning. Referenslogik och årsdeltester exporteras också.</p>
+  <p class="note">Hämtar exakt Yahoo range=10y med dagliga stängningskurser. De första cirka 220 handelsdagarna fungerar som uppvärmning för MA200 och räknar modellen historiskt utan framtidsdata. Den frysta huvudmodellen är 10/30/30/30 i faktorvikter samt Top10 in / Top20 ut. Varje veckas sista handelsdags stängning används som signal och som köp-/säljkurs för nästa veckas portfölj. Courtage är 0,069 % vid köp och försäljning. Referenslogik och årsdeltester exporteras också.</p>
   <div class="actions">
     <button id="fetchFiveYearBacktest">Hämta 10 år och kör test</button>
     <button id="rerunFiveYearBacktest" class="secondary" disabled>Kör om med nuvarande Vit-platåer</button>
@@ -670,6 +670,17 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
     <button id="exportFiveYearBacktest" class="secondary" disabled>Exportera resultat CSV</button>
   </div>
   <div class="backtest-progress"><div id="fiveYearBacktestProgress"></div></div>
+  <div class="card" style="margin-top:12px">
+    <h3>🟢 Grön-labb – rå faktorstudie</h3>
+    <p class="note">Använder samma 10-årsdata som Vit-testet. Varje rad är <b>vecka × aktie</b>. Alla signaler beräknas enbart med information till och med veckans sista handelsdags stängning. Nästa veckas aktie- och OMX-avkastning finns endast som analysfacit. Ingen Grön poängmodell eller optimerade vikter används.</p>
+    <div class="actions">
+      <button id="runGreenResearchLab" class="secondary" disabled>Bygg Grön forskningsdata</button>
+      <button id="exportGreenResearchLab" class="secondary" disabled>Exportera Grön CSV</button>
+    </div>
+    <div id="greenResearchStatus" class="note" style="margin-top:8px">Hämta 10-årshistoriken först.</div>
+    <div id="greenResearchSummary" class="summary" style="margin-top:10px"></div>
+  </div>
+
   <div id="fiveYearBacktestStatus" class="note">Ingen 10-årshistorik hämtad i denna session.</div>
   <div id="fiveYearBacktestSummary" class="summary" style="margin-top:12px"></div>
   <div id="fiveYearBacktestVerdict"></div>
@@ -3244,7 +3255,7 @@ function buildRollingPortfolio(model,asOfDate=''){
       lastUpdateDate=startDate;
       benchmarkStart=num(snapshot.benchmarkStart);
 
-      // v21.2.5: även de tio första köpen är riktiga affärer och betalar
+      // v21.3.0: även de tio första köpen är riktiga affärer och betalar
       // samma courtage som alla senare köp. Inga specialregler vid start.
       const budgetPerStock=ROLLING_START_CAPITAL/wanted.size;
       let usedCash=0;
@@ -7093,6 +7104,173 @@ function fiveYearVolatility(points){
   const variance=rets.reduce((s,x)=>s+(x-mean)**2,0)/(rets.length-1);
   return Math.sqrt(variance)*Math.sqrt(52)*100
 }
+
+let greenResearchResult=null;
+
+function greenMean(arr){
+  const v=arr.filter(Number.isFinite);
+  return v.length?v.reduce((a,b)=>a+b,0)/v.length:NaN
+}
+function greenStd(arr){
+  const v=arr.filter(Number.isFinite);
+  if(v.length<2)return NaN;
+  const m=greenMean(v);
+  return Math.sqrt(v.reduce((s,x)=>s+(x-m)**2,0)/(v.length-1))
+}
+function greenReturnBetween(series,startIdx,endIdx){
+  if(startIdx<0||endIdx<0||endIdx<=startIdx||endIdx>=series.length)return NaN;
+  const a=num(series[startIdx]?.close),b=num(series[endIdx]?.close);
+  return Number.isFinite(a)&&Number.isFinite(b)&&a>0?(b/a-1)*100:NaN
+}
+function greenIndexAtOrBefore(series,date){
+  return labFindIndexPoint(series,date)
+}
+function greenAlignedReturns(stockSeries,indexSeries,date,lookback){
+  const sEnd=greenIndexAtOrBefore(stockSeries,date),iEnd=greenIndexAtOrBefore(indexSeries,date);
+  if(sEnd<lookback||iEnd<lookback)return null;
+  const sMap=new Map(stockSeries.slice(Math.max(1,sEnd-lookback-15),sEnd+1).map((p,j,a)=>[p.date,p]));
+  const iSlice=indexSeries.slice(Math.max(1,iEnd-lookback-15),iEnd+1);
+  const dates=iSlice.map(p=>p.date).filter(d=>sMap.has(d)).slice(-(lookback+1));
+  if(dates.length<Math.max(25,lookback*.75))return null;
+  const sr=[],ir=[];
+  for(let k=1;k<dates.length;k++){
+    const d0=dates[k-1],d1=dates[k];
+    const s0=num(sMap.get(d0)?.close),s1=num(sMap.get(d1)?.close);
+    const ii0=indexSeries.find(p=>p.date===d0),ii1=indexSeries.find(p=>p.date===d1);
+    const i0=num(ii0?.close),i1=num(ii1?.close);
+    if([s0,s1,i0,i1].every(Number.isFinite)&&s0>0&&i0>0){
+      sr.push(s1/s0-1);ir.push(i1/i0-1)
+    }
+  }
+  return sr.length>=20?{sr,ir}:null
+}
+function greenBeta(stockSeries,indexSeries,date,lookback){
+  const x=greenAlignedReturns(stockSeries,indexSeries,date,lookback);
+  if(!x)return NaN;
+  const ms=greenMean(x.sr),mi=greenMean(x.ir);
+  let cov=0,v=0;
+  for(let k=0;k<x.sr.length;k++){cov+=(x.sr[k]-ms)*(x.ir[k]-mi);v+=(x.ir[k]-mi)**2}
+  return v>0?cov/v:NaN
+}
+function greenResidualMomentum(stockSeries,indexSeries,date,lookback,beta){
+  const se=greenIndexAtOrBefore(stockSeries,date),ie=greenIndexAtOrBefore(indexSeries,date);
+  if(se<lookback||ie<lookback||!Number.isFinite(beta))return NaN;
+  const rs=greenReturnBetween(stockSeries,se-lookback,se);
+  const ri=greenReturnBetween(indexSeries,ie-lookback,ie);
+  return Number.isFinite(rs)&&Number.isFinite(ri)?rs-beta*ri:NaN
+}
+function greenRelativeMomentum(stockSeries,indexSeries,date,lookback){
+  const se=greenIndexAtOrBefore(stockSeries,date),ie=greenIndexAtOrBefore(indexSeries,date);
+  if(se<lookback||ie<lookback)return NaN;
+  const rs=greenReturnBetween(stockSeries,se-lookback,se),ri=greenReturnBetween(indexSeries,ie-lookback,ie);
+  return Number.isFinite(rs)&&Number.isFinite(ri)?rs-ri:NaN
+}
+function greenVolatility(series,date,lookback=63){
+  const end=greenIndexAtOrBefore(series,date);
+  if(end<lookback)return NaN;
+  const rets=[];
+  for(let i=end-lookback+1;i<=end;i++){
+    const a=num(series[i-1]?.close),b=num(series[i]?.close);
+    if(Number.isFinite(a)&&Number.isFinite(b)&&a>0)rets.push(b/a-1)
+  }
+  return greenStd(rets)*Math.sqrt(252)*100
+}
+function greenBreakoutDistance(series,date,lookback){
+  const end=greenIndexAtOrBefore(series,date);
+  if(end<lookback-1)return NaN;
+  const p=num(series[end]?.close);
+  const high=Math.max(...series.slice(end-lookback+1,end+1).map(x=>num(x.close)).filter(Number.isFinite));
+  return Number.isFinite(p)&&Number.isFinite(high)&&high>0?(p/high-1)*100:NaN
+}
+function greenForwardWeekReturn(series,date,nextDate){
+  const a=fiveYearPriceOnOrBefore(series,date),b=fiveYearPriceOnOrBefore(series,nextDate);
+  return Number.isFinite(a)&&Number.isFinite(b)&&a>0?(b/a-1)*100:NaN
+}
+function greenOmxBucket(r){
+  if(!Number.isFinite(r))return '';
+  if(r<0)return '<0%';
+  if(r<1)return '0–1%';
+  if(r<2)return '1–2%';
+  if(r<3)return '2–3%';
+  return '>3%';
+}
+function greenRegime(indexSeries,date){
+  const end=greenIndexAtOrBefore(indexSeries,date);
+  if(end<200)return {regime:'',omxMa200Distance:NaN,omxMom1m:NaN,omxMom3m:NaN,omxVol1m:NaN};
+  const closes=indexSeries.map(p=>num(p.close));
+  const p=num(closes[end]),ma200=labMA(closes,end,200);
+  const dist=Number.isFinite(ma200)&&ma200>0?(p/ma200-1)*100:NaN;
+  const m1=greenReturnBetween(indexSeries,end-21,end),m3=greenReturnBetween(indexSeries,end-63,end);
+  const vol=greenVolatility(indexSeries,date,21);
+  // Forskningsetikett, inte en produktionssignal.
+  const regime=(dist>0&&m1>0&&m3>0)?'stabil risk-on':(dist<0&&m1<0&&m3<0)?'risk-off':'övergång/osäker';
+  return {regime,omxMa200Distance:dist,omxMom1m:m1,omxMom3m:m3,omxVol1m:vol}
+}
+function buildGreenResearchLab(){
+  if(!fiveYearBacktestData?.index?.length||!fiveYearBacktestData?.stocks?.length)return alert('Hämta 10-årshistoriken först.');
+  const status=document.getElementById('greenResearchStatus'),btn=document.getElementById('runGreenResearchLab');
+  btn.disabled=true;
+  if(status)status.textContent='Bygger faktorobservationer…';
+  setTimeout(()=>{
+    try{
+      const index=fiveYearBacktestData.index;
+      const start=historicalBacktestStartDate(index);
+      const signals=fiveYearWeeklySignals(index).filter(x=>!start||x.date>=start);
+      const observations=[];
+      for(let w=0;w<signals.length-1;w++){
+        const signal=signals[w],next=signals[w+1];
+        const omxNext=greenForwardWeekReturn(index,signal.date,next.date);
+        const regime=greenRegime(index,signal.date);
+        for(const item of fiveYearBacktestData.stocks){
+          const sEnd=greenIndexAtOrBefore(item.series,signal.date);
+          if(sEnd<252)continue;
+          const beta3m=greenBeta(item.series,index,signal.date,63);
+          const beta6m=greenBeta(item.series,index,signal.date,126);
+          const beta12m=greenBeta(item.series,index,signal.date,252);
+          const rel1m=greenRelativeMomentum(item.series,index,signal.date,21);
+          const rel3m=greenRelativeMomentum(item.series,index,signal.date,63);
+          const rel6m=greenRelativeMomentum(item.series,index,signal.date,126);
+          const residual1m=greenResidualMomentum(item.series,index,signal.date,21,beta6m);
+          const residual3m=greenResidualMomentum(item.series,index,signal.date,63,beta6m);
+          const residual6m=greenResidualMomentum(item.series,index,signal.date,126,beta12m);
+          const prevDate=item.series[Math.max(0,sEnd-21)]?.date;
+          const prevRel1m=prevDate?greenRelativeMomentum(item.series,index,prevDate,21):NaN;
+          const acceleration=Number.isFinite(rel1m)&&Number.isFinite(prevRel1m)?rel1m-prevRel1m:NaN;
+          const vol1m=greenVolatility(item.series,signal.date,21),vol3m=greenVolatility(item.series,signal.date,63);
+          const breakout20=greenBreakoutDistance(item.series,signal.date,20),breakout50=greenBreakoutDistance(item.series,signal.date,50),breakout63=greenBreakoutDistance(item.series,signal.date,63);
+          const white=fiveYearWeightedHistoricalScore(item.series,signal.date,loadWhitePlateaus(),FROZEN_WHITE_WEIGHTS);
+          const stockNext=greenForwardWeekReturn(item.series,signal.date,next.date);
+          if(!Number.isFinite(stockNext)||!Number.isFinite(omxNext))continue;
+          observations.push({
+            week:signal.weekKey,signalDate:signal.date,nextWeekEnd:next.date,ticker:item.ticker,company:item.company,
+            beta3m,beta6m,beta12m,residual1m,residual3m,residual6m,relative1m:rel1m,relative3m:rel3m,relative6m:rel6m,
+            acceleration,volatility1m:vol1m,volatility3m:vol3m,breakout20,breakout50,breakout63,
+            whiteScore:white?.score??NaN,...regime,nextStockReturn:stockNext,nextOmxReturn:omxNext,
+            nextExcess:stockNext-omxNext,nextOmxBucket:greenOmxBucket(omxNext)
+          })
+        }
+      }
+      greenResearchResult={observations,createdAt:new Date().toISOString(),stocks:fiveYearBacktestData.stocks.length,weeks:signals.length-1};
+      document.getElementById('exportGreenResearchLab').disabled=!observations.length;
+      const summary=document.getElementById('greenResearchSummary');
+      if(summary)summary.innerHTML=`<div><b>${observations.length.toLocaleString('sv-SE')}</b><span>observationer</span></div><div><b>${fiveYearBacktestData.stocks.length}</b><span>bolag</span></div><div><b>${signals.length-1}</b><span>veckor</span></div>`;
+      if(status)status.textContent='Grön forskningsdata klar. Nästa veckas avkastning är endast facit och används inte i signalerna.';
+    }catch(e){
+      console.error(e);if(status)status.textContent='Grön-labbet avbröts: '+(e?.message||e)
+    }finally{btn.disabled=false}
+  },50)
+}
+function exportGreenResearchCsv(){
+  const r=greenResearchResult;
+  if(!r?.observations?.length)return alert('Bygg Grön forskningsdata först.');
+  const cols=['week','signalDate','nextWeekEnd','ticker','company','beta3m','beta6m','beta12m','residual1m','residual3m','residual6m','relative1m','relative3m','relative6m','acceleration','volatility1m','volatility3m','breakout20','breakout50','breakout63','whiteScore','regime','omxMa200Distance','omxMom1m','omxMom3m','omxVol1m','nextStockReturn','nextOmxReturn','nextExcess','nextOmxBucket'];
+  const esc=v=>{const s=Number.isFinite(v)?String(v):String(v??'');return /[;"\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};
+  const lines=[cols.join(';')];
+  for(const o of r.observations)lines.push(cols.map(c=>esc(o[c])).join(';'));
+  const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='MomentumScore_Gron_forskningsdata_'+new Date().toISOString().slice(0,10)+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)
+}
+
 function runFiveYearWhiteBacktest(){
   if(!fiveYearBacktestData?.index?.length||!fiveYearBacktestData?.stocks?.length){
     alert('Hämta 10-årshistoriken först.');
@@ -7107,7 +7285,7 @@ function runFiveYearWhiteBacktest(){
   const frozenWeights=normalizedWhiteWeights({distanceMa200:10,ma50Spread:30,ma200Slope1m:30,trendStability5d:30});
   for(let s=0;s<signals.length-1;s++){
     const signal=signals[s];
-    // v21.2.5: samma regel som levande portföljen.
+    // v21.3.0: samma regel som levande portföljen.
     // Fredagens stängningsdata bestämmer urvalet och samma fredags stängningskurs
     // är köp-/säljkursen för portföljen som benämns nästa vecka.
     const executionDate=signal.date;
@@ -7264,7 +7442,7 @@ function runFiveYearWhiteBacktest(){
   };
   fiveYearBacktestResult=result;
   renderFiveYearBacktest(result);
-  // v21.2.5: det vanliga 10-årstestet ska vara KLART här.
+  // v21.3.0: det vanliga 10-årstestet ska vara KLART här.
   // De mycket tunga robusthets-/känslighetstesterna körs separat så att
   // webbläsaren inte ser ut att fastna på slutet efter 100 % hämtning.
   fiveYearDiagnosticsResult=null;
@@ -7852,7 +8030,9 @@ async function fetchAndRunFiveYearBacktest(){
   const exportBtn=document.getElementById('exportFiveYearBacktest');
   const diagnosticsBtn=document.getElementById('runFiveYearDiagnosticsBtn');
   button.disabled=true;rerun.disabled=true;exportBtn.disabled=true;if(diagnosticsBtn)diagnosticsBtn.disabled=true;
-  fiveYearBacktestResult=null;
+  fiveYearBacktestResult=null;greenResearchResult=null;
+  const greenBtn=document.getElementById('runGreenResearchLab'),greenExport=document.getElementById('exportGreenResearchLab');
+  if(greenBtn)greenBtn.disabled=true;if(greenExport)greenExport.disabled=true;
   document.getElementById('fiveYearBacktestSummary').innerHTML='';
   document.getElementById('fiveYearBacktestVerdict').innerHTML='';
   document.getElementById('fiveYearBacktestChart').classList.add('hidden');
@@ -7881,6 +8061,8 @@ async function fetchAndRunFiveYearBacktest(){
   }
   fiveYearSetProgress(items.length,items.length,`Hämtning klar: ${stocks.length} bolag + OMXSPI. Kör historiskt test…`);
   rerun.disabled=false;
+  if(greenBtn)greenBtn.disabled=false;
+  const greenStatus=document.getElementById('greenResearchStatus');if(greenStatus)greenStatus.textContent='10-årsdata klar. Grön-labbet kan byggas.';
   runFiveYearWhiteBacktest();
   button.disabled=false
 
@@ -8980,7 +9162,7 @@ function repairWrongW34V2085(){
   return false
 }
 
-// v21.2.5: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
+// v21.3.0: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
 // bevaras som historik, medan alla nya veckor skapas av den generella veckomotorn.
 
 
@@ -9916,6 +10098,8 @@ document.getElementById('labMode').onchange=toggleLaboratoryMode;
 document.getElementById('runLaboratory').onclick=runLaboratory;
 document.getElementById('exportLaboratoryCsv').onclick=exportLaboratoryCsv;
 document.getElementById('fetchFiveYearBacktest').onclick=fetchAndRunFiveYearBacktest;
+document.getElementById('runGreenResearchLab').onclick=buildGreenResearchLab;
+document.getElementById('exportGreenResearchLab').onclick=exportGreenResearchCsv;
 document.getElementById('rerunFiveYearBacktest').onclick=runFiveYearWhiteBacktest;
 document.getElementById('runFiveYearDiagnosticsBtn').onclick=runFiveYearDiagnosticsManually;
 document.getElementById('exportFiveYearBacktest').onclick=exportFiveYearBacktestCsv;
@@ -9942,7 +10126,7 @@ try{
     console.info(`Vit 2.1 aktiverad: 10/30/30/30. ${scorePoints} sparade Vit-poäng räknades om.`)
   }else if(weightChanged){persist()}
 }catch(error){console.error('Vit 2.1 viktmigrering misslyckades',error)}
-// v21.2.5: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
+// v21.3.0: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
 // via den generella motorn, aldrig skriva om W31/W32/... som redan finns.
 try{
   const weekendCreated=backfillMissingWeeklyPortfolios();
