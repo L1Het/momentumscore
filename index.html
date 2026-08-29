@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.4.1 – generell veckomotor + courtage från start</h1>
+<h1>MomentumScore v21.5.0 – generell veckomotor + courtage från start</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -699,6 +699,17 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
         <div id="greenV02AuditStatus" class="note" style="margin-top:8px">Hämta 10-årshistoriken först.</div>
         <div id="greenV02AuditSummary" class="summary" style="margin-top:10px"></div>
         <div class="tablewrap"><table id="greenV02AuditTable"></table></div>
+      <div class="card" style="margin-top:12px">
+        <h3>Grön v0.3 – walk-forward-labb</h3>
+        <p class="note">Liten fördefinierad kandidatmatris för att undvika parameterjakt. <b>2017–2022 väljer modell</b>; <b>2023–2026 är låst validering</b>. Labbet testar både regimdisciplin och aktieurval, men rangordnar kandidater enbart på träningsperiodens faktiska Grön-minus-Vit.</p>
+        <div class="actions">
+          <button id="runGreenV03Lab" class="secondary" disabled>Kör Grön v0.3-labb</button>
+          <button id="exportGreenV03Lab" class="secondary" disabled>Exportera v0.3-resultat</button>
+        </div>
+        <div id="greenV03Status" class="note" style="margin-top:8px">Hämta 10-årshistoriken först.</div>
+        <div id="greenV03Summary" class="summary" style="margin-top:10px"></div>
+        <div class="tablewrap"><table id="greenV03Table"></table></div>
+      </div>
       </div>
     </div>
   </div>
@@ -3277,7 +3288,7 @@ function buildRollingPortfolio(model,asOfDate=''){
       lastUpdateDate=startDate;
       benchmarkStart=num(snapshot.benchmarkStart);
 
-      // v21.4.1: även de tio första köpen är riktiga affärer och betalar
+      // v21.5.0: även de tio första köpen är riktiga affärer och betalar
       // samma courtage som alla senare köp. Inga specialregler vid start.
       const budgetPerStock=ROLLING_START_CAPITAL/wanted.size;
       let usedCash=0;
@@ -7583,6 +7594,124 @@ function runGreenV02Audit(){
     finally{btn.disabled=false}
   },50)
 }
+
+let greenV03Result=null;
+
+const GREEN_V03_CANDIDATES=[
+ {id:'B12-P80',label:'Beta12 · P80',selector:'b12',threshold:GREEN_V02.threshold,cooldown:0,maxStreak:99},
+ {id:'B12-P85',label:'Beta12 · P85',selector:'b12',threshold:0.294,cooldown:0,maxStreak:99},
+ {id:'B12-P90',label:'Beta12 · P90',selector:'b12',threshold:0.342,cooldown:0,maxStreak:99},
+ {id:'B12-P80-S2',label:'Beta12 · P80 · max 2 signalveckor i rad',selector:'b12',threshold:GREEN_V02.threshold,cooldown:0,maxStreak:2},
+ {id:'B12-P80-CD1',label:'Beta12 · P80 · 1 veckas cooldown',selector:'b12',threshold:GREEN_V02.threshold,cooldown:1,maxStreak:99},
+ {id:'B6B12-P80',label:'Beta6/12 · P80',selector:'b6b12',threshold:GREEN_V02.threshold,cooldown:0,maxStreak:99},
+ {id:'B6B12-P85',label:'Beta6/12 · P85',selector:'b6b12',threshold:0.294,cooldown:0,maxStreak:99},
+ {id:'B12RES-P80',label:'Beta12 + konträr residual6 · P80',selector:'b12res',threshold:GREEN_V02.threshold,cooldown:0,maxStreak:99},
+ {id:'B12VOL-P80',label:'Beta12 + volatilitet3 · P80',selector:'b12vol',threshold:GREEN_V02.threshold,cooldown:0,maxStreak:99}
+];
+
+function greenV03Rank(date,kind){
+  const raw=[];
+  for(const item of fiveYearBacktestData.stocks){
+    const b12=greenBeta(item.series,fiveYearBacktestData.index,date,252);
+    if(!Number.isFinite(b12))continue;
+    const b6=greenBeta(item.series,fiveYearBacktestData.index,date,126);
+    const res6=greenResidualMomentum(item.series,fiveYearBacktestData.index,date,126,Number.isFinite(b12)?b12:b6);
+    const vol3=greenVolatility(item.series,date,63);
+    raw.push({...item,b12,b6,res6,vol3})
+  }
+  const pct=(arr,key,asc=false)=>{
+    const vals=arr.map(x=>x[key]).filter(Number.isFinite).sort((a,b)=>a-b);
+    for(const x of arr){
+      const v=x[key]; if(!Number.isFinite(v)){x[key+'Pct']=.5;continue}
+      let lo=0;while(lo<vals.length&&vals[lo]<v)lo++;
+      const p=vals.length>1?lo/(vals.length-1):.5;x[key+'Pct']=asc?1-p:p
+    }
+  };
+  pct(raw,'b12');pct(raw,'b6');pct(raw,'res6',true);pct(raw,'vol3');
+  for(const x of raw){
+    if(kind==='b6b12')x.greenScore=.55*x.b12Pct+.45*x.b6Pct;
+    else if(kind==='b12res')x.greenScore=.75*x.b12Pct+.25*x.res6Pct;
+    else if(kind==='b12vol')x.greenScore=.8*x.b12Pct+.2*x.vol3Pct;
+    else x.greenScore=x.b12Pct
+  }
+  return raw.sort((a,b)=>b.greenScore-a.greenScore)
+}
+function greenV03SignalFlags(signals,c){
+  const flags=[];let streak=0,cool=0;
+  for(const s of signals){
+    const p=greenV02Probability(s.date);
+    let on=Number.isFinite(p)&&p>=c.threshold;
+    if(cool>0){on=false;cool--}
+    if(on&&streak>=c.maxStreak)on=false;
+    if(on){streak++;if(c.cooldown)cool=c.cooldown}else streak=0;
+    flags.push({on,p})
+  }
+  return flags
+}
+function greenV03RunCandidate(c,signals){
+  const white=greenCloneState(),hybrid=greenCloneState(),rows=[];
+  const flags=greenV03SignalFlags(signals,c);
+  for(let s=0;s<signals.length-1;s++){
+    const signal=signals[s],next=signals[s+1],f=flags[s];
+    const wt=greenTargetWhiteOnly(signal.date,white);
+    const ht=f.on?greenV03Rank(signal.date,c.selector).slice(0,10):greenTargetWhiteOnly(signal.date,hybrid);
+    if(wt.length<5||ht.length<5)continue;
+    greenExecuteTarget(white,wt,signal.date);greenExecuteTarget(hybrid,ht,signal.date);
+    const ws=fiveYearPortfolioValue(white,signal.date),hs=fiveYearPortfolioValue(hybrid,signal.date);
+    const we=fiveYearPortfolioValue(white,next.date),he=fiveYearPortfolioValue(hybrid,next.date);
+    rows.push({date:signal.date,week:signal.weekKey,mode:f.on?'Grön':'Vit',pGreen:f.p,
+      whiteReturn:(we/ws-1)*100,hybridReturn:(he/hs-1)*100,
+      increment:((he/hs)-(we/ws))*100,nextOmxReturn:greenForwardWeekReturn(fiveYearBacktestData.index,signal.date,next.date)})
+  }
+  const summarize=part=>{
+    const rr=rows.filter(r=>part==='train'?r.date<'2023-01-01':r.date>='2023-01-01');
+    const gg=rr.filter(r=>r.mode==='Grön');
+    let w=1,h=1,peakW=1,peakH=1,ddW=0,ddH=0;
+    for(const r of rr){w*=1+r.whiteReturn/100;h*=1+r.hybridReturn/100;peakW=Math.max(peakW,w);peakH=Math.max(peakH,h);ddW=Math.min(ddW,w/peakW-1);ddH=Math.min(ddH,h/peakH-1)}
+    return {weeks:rr.length,greenWeeks:gg.length,whiteTotal:(w-1)*100,hybridTotal:(h-1)*100,
+      edge:greenMean(gg.map(x=>x.increment)),hit:gg.length?gg.filter(x=>x.increment>0).length/gg.length*100:NaN,
+      omx:greenMean(gg.map(x=>x.nextOmxReturn)),ddWhite:ddW*100,ddHybrid:ddH*100}
+  };
+  return {candidate:c,rows,train:summarize('train'),test:summarize('test'),feesWhite:white.fees,feesHybrid:hybrid.fees,tradesWhite:white.trades,tradesHybrid:hybrid.trades}
+}
+function runGreenV03Lab(){
+  if(!fiveYearBacktestData?.index?.length)return alert('Hämta 10-årshistoriken först.');
+  const btn=document.getElementById('runGreenV03Lab'),status=document.getElementById('greenV03Status');
+  btn.disabled=true;if(status)status.textContent='Kör fördefinierade kandidater. Valideringen används inte för modellval…';
+  setTimeout(()=>{
+    try{
+      const start=historicalBacktestStartDate(fiveYearBacktestData.index);
+      const signals=fiveYearWeeklySignals(fiveYearBacktestData.index).filter(x=>!start||x.date>=start);
+      const results=GREEN_V03_CANDIDATES.map(c=>greenV03RunCandidate(c,signals));
+      // Selection criterion fixed in advance: highest train mean edge, at least 8 train Green weeks.
+      const eligible=results.filter(x=>x.train.greenWeeks>=8).sort((a,b)=>(b.train.edge||-999)-(a.train.edge||-999));
+      const winner=eligible[0]||results[0];
+      greenV03Result={results,winner,selectionRule:'Högst genomsnittlig Grön−Vit 2017–2022, minst 8 Grön-veckor'};
+      document.getElementById('exportGreenV03Lab').disabled=false;
+      const s=document.getElementById('greenV03Summary'),w=winner;
+      s.innerHTML=`<div><b>${w.candidate.label}</b><span>vald på 2017–2022</span></div>
+        <div><b>${w.train.edge.toFixed(2)}%</b><span>train Grön−Vit / signal</span></div>
+        <div><b>${w.test.edge.toFixed(2)}%</b><span>OOS 2023–26 Grön−Vit</span></div>
+        <div><b>${w.test.greenWeeks}</b><span>OOS Grön-signaler</span></div>
+        <div><b>${w.test.hybridTotal.toFixed(1)}%</b><span>OOS hybrid total</span></div>
+        <div><b>${w.test.whiteTotal.toFixed(1)}%</b><span>OOS Vit total</span></div>`;
+      document.getElementById('greenV03Table').innerHTML='<thead><tr><th>Kandidat</th><th>Train signaler</th><th>Train edge</th><th>Train hit</th><th>OOS signaler</th><th>OOS edge</th><th>OOS hit</th><th>OOS hybrid</th><th>OOS Vit</th></tr></thead><tbody>'+
+        results.slice().sort((a,b)=>b.train.edge-a.train.edge).map(x=>`<tr${x===winner?' style="font-weight:700"':''}><td>${x.candidate.label}</td><td>${x.train.greenWeeks}</td><td>${x.train.edge.toFixed(2)}%</td><td>${x.train.hit.toFixed(0)}%</td><td>${x.test.greenWeeks}</td><td>${x.test.edge.toFixed(2)}%</td><td>${x.test.hit.toFixed(0)}%</td><td>${x.test.hybridTotal.toFixed(1)}%</td><td>${x.test.whiteTotal.toFixed(1)}%</td></tr>`).join('')+'</tbody>';
+      if(status)status.textContent='Klar. Fet rad är vald enbart på 2017–2022. OOS-kolumnerna är facit och påverkar inte vinnaren.';
+    }catch(e){console.error(e);if(status)status.textContent='v0.3-labbet avbröts: '+(e?.message||e)}
+    finally{btn.disabled=false}
+  },50)
+}
+function exportGreenV03Lab(){
+  if(!greenV03Result)return alert('Kör Grön v0.3-labbet först.');
+  const lines=['candidate;label;period;weeks;greenWeeks;whiteTotal;hybridTotal;edge;hit;greenOmx;ddWhite;ddHybrid;selected'];
+  for(const x of greenV03Result.results)for(const period of ['train','test']){
+    const m=x[period];lines.push([x.candidate.id,x.candidate.label,period,m.weeks,m.greenWeeks,m.whiteTotal,m.hybridTotal,m.edge,m.hit,m.omx,m.ddWhite,m.ddHybrid,x===greenV03Result.winner?'YES':''].join(';'))
+  }
+  const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='MomentumScore_Gron_v0_3_walkforward_'+new Date().toISOString().slice(0,10)+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)
+}
+
 function exportGreenV02AuditCsv(){
   const r=greenV02AuditResult;
   if(!r?.rows?.length)return alert('Kör den rena Vit vs Grön-auditen först.');
@@ -7616,7 +7745,7 @@ function runFiveYearWhiteBacktest(){
   const frozenWeights=normalizedWhiteWeights({distanceMa200:10,ma50Spread:30,ma200Slope1m:30,trendStability5d:30});
   for(let s=0;s<signals.length-1;s++){
     const signal=signals[s];
-    // v21.4.1: samma regel som levande portföljen.
+    // v21.5.0: samma regel som levande portföljen.
     // Fredagens stängningsdata bestämmer urvalet och samma fredags stängningskurs
     // är köp-/säljkursen för portföljen som benämns nästa vecka.
     const executionDate=signal.date;
@@ -7773,7 +7902,7 @@ function runFiveYearWhiteBacktest(){
   };
   fiveYearBacktestResult=result;
   renderFiveYearBacktest(result);
-  // v21.4.1: det vanliga 10-årstestet ska vara KLART här.
+  // v21.5.0: det vanliga 10-årstestet ska vara KLART här.
   // De mycket tunga robusthets-/känslighetstesterna körs separat så att
   // webbläsaren inte ser ut att fastna på slutet efter 100 % hämtning.
   fiveYearDiagnosticsResult=null;
@@ -8366,6 +8495,7 @@ async function fetchAndRunFiveYearBacktest(){
   if(greenBtn)greenBtn.disabled=true;if(greenExport)greenExport.disabled=true;
   const greenV02Btn=document.getElementById('runGreenV02'),greenV02Export=document.getElementById('exportGreenV02');if(greenV02Btn)greenV02Btn.disabled=true;if(greenV02Export)greenV02Export.disabled=true;greenV02Result=null;
   const greenAuditBtn=document.getElementById('runGreenV02Audit'),greenAuditExport=document.getElementById('exportGreenV02Audit');if(greenAuditBtn)greenAuditBtn.disabled=true;if(greenAuditExport)greenAuditExport.disabled=true;greenV02AuditResult=null;
+  const greenV03Btn=document.getElementById('runGreenV03Lab'),greenV03Export=document.getElementById('exportGreenV03Lab');if(greenV03Btn)greenV03Btn.disabled=true;if(greenV03Export)greenV03Export.disabled=true;greenV03Result=null;
   document.getElementById('fiveYearBacktestSummary').innerHTML='';
   document.getElementById('fiveYearBacktestVerdict').innerHTML='';
   document.getElementById('fiveYearBacktestChart').classList.add('hidden');
@@ -8394,7 +8524,7 @@ async function fetchAndRunFiveYearBacktest(){
   }
   fiveYearSetProgress(items.length,items.length,`Hämtning klar: ${stocks.length} bolag + OMXSPI. Kör historiskt test…`);
   rerun.disabled=false;
-  if(greenBtn)greenBtn.disabled=false;if(greenV02Btn)greenV02Btn.disabled=false;if(greenAuditBtn)greenAuditBtn.disabled=false;
+  if(greenBtn)greenBtn.disabled=false;if(greenV02Btn)greenV02Btn.disabled=false;if(greenAuditBtn)greenAuditBtn.disabled=false;if(greenV03Btn)greenV03Btn.disabled=false;
   const gvStatus=document.getElementById('greenV02Status');if(gvStatus)gvStatus.textContent='10-årsdata klar. Grön v0.2 kan köras.';
   const greenStatus=document.getElementById('greenResearchStatus');if(greenStatus)greenStatus.textContent='10-årsdata klar. Grön-labbet kan byggas.';
   runFiveYearWhiteBacktest();
@@ -9496,7 +9626,7 @@ function repairWrongW34V2085(){
   return false
 }
 
-// v21.4.1: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
+// v21.5.0: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
 // bevaras som historik, medan alla nya veckor skapas av den generella veckomotorn.
 
 
@@ -10435,6 +10565,8 @@ document.getElementById('fetchFiveYearBacktest').onclick=fetchAndRunFiveYearBack
 document.getElementById('runGreenResearchLab').onclick=buildGreenResearchLab;
 document.getElementById('runGreenV02').onclick=runGreenV02Backtest;
 document.getElementById('runGreenV02Audit').onclick=runGreenV02Audit;
+document.getElementById('runGreenV03Lab').onclick=runGreenV03Lab;
+document.getElementById('exportGreenV03Lab').onclick=exportGreenV03Lab;
 document.getElementById('exportGreenV02Audit').onclick=exportGreenV02AuditCsv;
 document.getElementById('exportGreenV02').onclick=exportGreenV02Csv;
 document.getElementById('exportGreenResearchLab').onclick=exportGreenResearchCsv;
@@ -10464,7 +10596,7 @@ try{
     console.info(`Vit 2.1 aktiverad: 10/30/30/30. ${scorePoints} sparade Vit-poäng räknades om.`)
   }else if(weightChanged){persist()}
 }catch(error){console.error('Vit 2.1 viktmigrering misslyckades',error)}
-// v21.4.1: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
+// v21.5.0: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
 // via den generella motorn, aldrig skriva om W31/W32/... som redan finns.
 try{
   const weekendCreated=backfillMissingWeeklyPortfolios();
