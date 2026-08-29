@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.10.0 – generell veckomotor + courtage från start</h1>
+<h1>MomentumScore v21.12.0 – generell veckomotor + courtage från start</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -409,7 +409,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 <div><label>Ägande</label><select id="ownershipFilter"><option value="all">Alla</option><option value="owned">Ägs nu</option><option value="notOwned">Ägs inte</option><option value="ownedBefore">Har ägts tidigare</option><option value="neverOwned">Aldrig ägts</option></select></div>
 <div><label>Modell</label><select id="modelFilter"><option value="all">Visa alla</option><option value="blue">Kvalificerad Blå</option><option value="white">Kvalificerad Vit</option><option value="both">Kvalificerad i båda</option></select></div>
 <div><label>Börs</label><select id="scoreMarketFilter"><option value="all">Alla nordiska</option><option value="SE">Stockholm</option><option value="DK">Köpenhamn</option><option value="NO">Oslo</option><option value="FI">Helsingfors</option><option value="IS">Reykjavik</option></select></div>
-<div><label>Sortering</label><select id="sortField"><option value="averageScore" selected>Snitt (Blå + Vit) / 2</option><option value="blueScore">Blå poäng</option><option value="whiteScore">Vit poäng</option><option value="createdAt">Inlagd</option><option value="updatedAt">Senast uppdaterad</option><option value="ticker">Ticker</option><option value="company">Bolag</option></select></div>
+<div><label>Sortering</label><select id="sortField"><option value="averageScore" selected>Snitt (Blå + Vit) / 2</option><option value="blueScore">Blå poäng</option><option value="whiteScore">Vit poäng</option><option value="greenScore">Grön poäng</option><option value="createdAt">Inlagd</option><option value="updatedAt">Senast uppdaterad</option><option value="ticker">Ticker</option><option value="company">Bolag</option></select></div>
 </div></div>
 <div class="card tablewrap"><table id="scoreTable"></table></div>
 <div class="actions">
@@ -2193,7 +2193,7 @@ function runtimeCodeAudit(){
   const weekKeys=weeklyPortfolios.map(s=>s?.weekKey).filter(Boolean);
   const duplicateWeeks=weekKeys.length-new Set(weekKeys).size;
   const malformedWeeks=weeklyPortfolios.filter(s=>!s?.weekKey||!s?.activationDate||!s?.portfolios).length;
-  const rollingModels=['blue','white','average'].map(model=>{
+  const rollingModels=['blue','white','average','green','hybrid'].map(model=>{
     try{
       const p=rollingPortfolio(model);
       return{model,ok:!!p,warnings:p?.warnings?.length||0}
@@ -2393,6 +2393,7 @@ function scoreSortValue(item,key){
   if(key==='market')return marketLabel(item.r.market||'SE');
   if(key==='blueScore')return item.c.total;
   if(key==='whiteScore')return item.w.total;
+  if(key==='greenScore')return greenScoreForRow(item.r);
   if(key==='averageScore')return average;
   if(key==='status')return average;
   if(key==='price')return num(item.r.price);
@@ -2672,6 +2673,7 @@ function render(){
       scoreSortableHeading('market','Börs')+
       scoreSortableHeading('blueScore','🔵 Blå')+
       scoreSortableHeading('whiteScore','⚪ Vit')+
+      scoreSortableHeading('greenScore','🟢 Grön')+
       scoreSortableHeading('averageScore','🟣 Snitt')+
       scoreSortableHeading('status','Status')+
       scoreSortableHeading('price','Kurs')+
@@ -3305,7 +3307,7 @@ function buildRollingPortfolio(model,asOfDate=''){
       lastUpdateDate=startDate;
       benchmarkStart=num(snapshot.benchmarkStart);
 
-      // v21.10.0: även de tio första köpen är riktiga affärer och betalar
+      // v21.12.0: även de tio första köpen är riktiga affärer och betalar
       // samma courtage som alla senare köp. Inga specialregler vid start.
       const budgetPerStock=ROLLING_START_CAPITAL/wanted.size;
       let usedCash=0;
@@ -3646,6 +3648,7 @@ function developmentPortfolioMemberValue(item,key){
   if(key==='profitKr')return item.profitKr;
   if(key==='blue')return num(item.member.blueScore);
   if(key==='white')return num(item.member.whiteScore);
+  if(key==='green')return num(item.member.greenScore);
   if(key==='average')return num(item.member.averageScore);
   return NaN
 }
@@ -3699,6 +3702,7 @@ function renderDevelopmentPortfolioMembers(x){
     heading('profitKr','Resultat kr')+
     heading('blue','Blå')+
     heading('white','Vit')+
+    heading('green','Grön')+
     heading('average','Snitt')+
     '</tr>'+
     items.map(item=>`<tr class="unified-stock-row" data-stock-index="${item.stockIndex}">
@@ -3711,6 +3715,7 @@ function renderDevelopmentPortfolioMembers(x){
       <td class="${portfolioReturnClass(item.profitKr)}"><b>${Number.isFinite(item.profitKr)?signed(item.profitKr,' kr'):'–'}</b></td>
       <td>${scoreLinkHtml(item.stockIndex,item.member.blueScore,'blue',Number.isFinite(item.member.blueScore),false)}</td>
       <td>${scoreLinkHtml(item.stockIndex,item.member.whiteScore,'white',Number.isFinite(item.member.whiteScore),false)}</td>
+      <td>${greenScoreText(Number.isFinite(num(item.member.greenScore))?num(item.member.greenScore):greenScoreForRow(rows[item.stockIndex]))}</td>
       <td>${scoreLinkHtml(item.stockIndex,item.member.averageScore,'average',Number.isFinite(item.member.averageScore),false)}</td>
     </tr>`).join('');
 
@@ -4858,7 +4863,7 @@ function renderCombinationResult(result){
     current.slice(0,30).map(x=>`<tr>
       <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td><td><b>${x.matches.length} av ${result.factors.length}</b></td>
       <td class="wrap">${x.matches.map(f=>labFactorDefinition(f).name).join(', ')||'Inga'}</td>
-      <td class="model-blue">${blueScoreHtml(calc(x.r).total,true)}</td><td class="model-white">${whiteScoreText(whiteCalc(x.r).total)}</td>
+      <td class="model-blue">${blueScoreHtml(calc(x.r).total,true)}</td><td class="model-white">${whiteScoreText(whiteCalc(x.r).total)}</td><td>${greenScoreText(greenScoreForRow(x.r))}</td>
     </tr>`).join('');
 
   const total=result.complete.length;
@@ -6883,7 +6888,7 @@ function openDetail(i){
   detailIndex=i;
   const r=normalizeRow(rows[i]),c=calc(r),w=whiteCalc(r),h=holdings(r),g=growthLabel(r);
 document.getElementById('detailTitle').textContent=`${r.ticker||''} ${r.company||''}`.trim();const losses=[['Trend',30-c.trend],['Tillväxt',15-c.rev],['Vinst',20-c.eps],['P/E',20-c.peScore],['ROE',5-c.roe],['Skuld',5-c.debt],['FCF',5-c.fcf]].filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
-document.getElementById('detailCurrent').innerHTML=`<div class="summary"><div class="metric"><small>Blå</small><b>${scoreLinkHtml(i,c.total,'blue',true,true)}</b></div><div class="metric"><small>Vit</small><b>${scoreLinkHtml(i,w.total,'white',w.dataReady,true)}</b></div><div class="metric"><small>Snitt</small><b>${scoreLinkHtml(i,averageScoreFromResults(c,w),'average',w.dataReady,true)}</b></div><div class="metric"><small>Status snitt</small><b class="${scoreStatusClass(averageScoreFromResults(c,w),w.dataReady)}">${scoreRating(averageScoreFromResults(c,w),w.dataReady)}</b></div><div class="metric"><small>Börs</small><b style="font-size:15px">${marketLabel(r.market||'SE')}</b></div><div class="metric"><small>Marknadsdata</small><b class="${ageClass(r.marketUpdatedAt||r.technicalSourceDate)}" style="font-size:15px">${ageText(r.marketUpdatedAt||r.technicalSourceDate)}</b></div><div class="metric"><small>Rapportdata</small><b class="${ageClass(r.fundamentalUpdatedAt||r.updatedAt)}" style="font-size:15px">${ageText(r.fundamentalUpdatedAt||r.updatedAt)}</b></div><div class="metric"><small>Inlagd</small><b style="font-size:15px">${dateFmt(r.createdAt)}</b></div></div><div class="status ${c.qualified?'ok':'no'}"><b>🔵 Blå:</b> ${c.qualified?'Alla grundregler är uppfyllda':'Ej kvalificerad: '+c.warning}</div><div class="status ${w.dataReady?'ok':'no'}"><b>⚪ Vit:</b> ${w.dataReady?w.rating:'Underlag saknas'}</div>${detailScoreHistoryHtml(r)}${stockDataAuditHtml(r,c,w)}<div class="card"><h3>Nuvarande poäng</h3><div class="summary">${[['Trend',c.trend+'/30'],[g+' momentum',c.revMomentum+'/10'],[g+' historik',c.revHistory+'/5'],[g+' totalt',c.rev+'/15'],['Vinst momentum',c.epsMomentum+'/15'],['Vinst historik',c.epsHistory+'/5'],['Vinst totalt',c.eps+'/20'],['P/E',c.peScore+'/20'],['ROE',c.roe+'/5'],['Skuld',c.debt+'/5'],['FCF',c.fcf+'/5']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('')}</div><h3>Vit platåmodell</h3><div class="summary"><div class="metric"><small>Total Vit</small><b class="${scoreStatusClass(w.total,w.dataReady)}">${whiteScoreText(w.total)} / 100</b></div>${whitePartsHtml(w)}</div><h3>Poäng som saknas till 100</h3><div class="score-loss">${losses.length?losses.map(([a,b])=>`<div class="loss-item"><small>${a}</small><b>−${b} p</b></div>`).join(''):'<div class="note">Full poäng i samtliga kategorier.</div>'}</div><h3>Historikberäkning</h3><div class="summary"><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt Y-Y':'Median omsättning Q1–Q4'}</small><b>${fmt(c.revMedian)} %</b></div><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt 3 år':'Omsättningstillväxt 3 år'}</small><b>${fmt(num(r.companyType==='investment'?r.ek3y:r.rev3y))} %</b></div><div class="metric"><small>Historikpoäng ${g.toLowerCase()}</small><b>${c.revHistory}/5</b></div><div class="metric"><small>Median vinst Q1–Q4</small><b>${fmt(c.epsMedian)} %</b></div><div class="metric"><small>Vinsttillväxt 3 år</small><b>${fmt(num(r.eps3y))} %</b></div><div class="metric"><small>Historikpoäng vinst</small><b>${c.epsHistory}/5</b></div></div></div>`;document.getElementById('oldPrice').value=r.price||'';document.getElementById('newPrice').value='';document.getElementById('newPe').value='';document.getElementById('peTool').classList.add('hidden');document.getElementById('txDate').value=todayISO();reasonUI();document.getElementById('holdingSummary').innerHTML=[['Antal',fmt(h.shares)],['GAV',fmt(h.avg)],['Realiserat',fmt(h.realized)],['Utdelningar',fmt(h.dividends)],['Courtage',fmt(h.fees)],['Status',h.shares>0?'Ägs':'Ägs inte']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');const safeHistory=normalizeHistoryEntries(r);
+document.getElementById('detailCurrent').innerHTML=`<div class="summary"><div class="metric"><small>Blå</small><b>${scoreLinkHtml(i,c.total,'blue',true,true)}</b></div><div class="metric"><small>Vit</small><b>${scoreLinkHtml(i,w.total,'white',w.dataReady,true)}</b></div><div class="metric"><small>Grön</small><b>${greenScoreText(greenScoreForRow(r))}</b></div><div class="metric"><small>Snitt</small><b>${scoreLinkHtml(i,averageScoreFromResults(c,w),'average',w.dataReady,true)}</b></div><div class="metric"><small>Status snitt</small><b class="${scoreStatusClass(averageScoreFromResults(c,w),w.dataReady)}">${scoreRating(averageScoreFromResults(c,w),w.dataReady)}</b></div><div class="metric"><small>Börs</small><b style="font-size:15px">${marketLabel(r.market||'SE')}</b></div><div class="metric"><small>Marknadsdata</small><b class="${ageClass(r.marketUpdatedAt||r.technicalSourceDate)}" style="font-size:15px">${ageText(r.marketUpdatedAt||r.technicalSourceDate)}</b></div><div class="metric"><small>Rapportdata</small><b class="${ageClass(r.fundamentalUpdatedAt||r.updatedAt)}" style="font-size:15px">${ageText(r.fundamentalUpdatedAt||r.updatedAt)}</b></div><div class="metric"><small>Inlagd</small><b style="font-size:15px">${dateFmt(r.createdAt)}</b></div></div><div class="status ${c.qualified?'ok':'no'}"><b>🔵 Blå:</b> ${c.qualified?'Alla grundregler är uppfyllda':'Ej kvalificerad: '+c.warning}</div><div class="status ${w.dataReady?'ok':'no'}"><b>⚪ Vit:</b> ${w.dataReady?w.rating:'Underlag saknas'}</div>${detailScoreHistoryHtml(r)}${stockDataAuditHtml(r,c,w)}<div class="card"><h3>Nuvarande poäng</h3><div class="summary">${[['Trend',c.trend+'/30'],[g+' momentum',c.revMomentum+'/10'],[g+' historik',c.revHistory+'/5'],[g+' totalt',c.rev+'/15'],['Vinst momentum',c.epsMomentum+'/15'],['Vinst historik',c.epsHistory+'/5'],['Vinst totalt',c.eps+'/20'],['P/E',c.peScore+'/20'],['ROE',c.roe+'/5'],['Skuld',c.debt+'/5'],['FCF',c.fcf+'/5']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('')}</div><h3>Vit platåmodell</h3><div class="summary"><div class="metric"><small>Total Vit</small><b class="${scoreStatusClass(w.total,w.dataReady)}">${whiteScoreText(w.total)} / 100</b></div>${whitePartsHtml(w)}</div><h3>Poäng som saknas till 100</h3><div class="score-loss">${losses.length?losses.map(([a,b])=>`<div class="loss-item"><small>${a}</small><b>−${b} p</b></div>`).join(''):'<div class="note">Full poäng i samtliga kategorier.</div>'}</div><h3>Historikberäkning</h3><div class="summary"><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt Y-Y':'Median omsättning Q1–Q4'}</small><b>${fmt(c.revMedian)} %</b></div><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt 3 år':'Omsättningstillväxt 3 år'}</small><b>${fmt(num(r.companyType==='investment'?r.ek3y:r.rev3y))} %</b></div><div class="metric"><small>Historikpoäng ${g.toLowerCase()}</small><b>${c.revHistory}/5</b></div><div class="metric"><small>Median vinst Q1–Q4</small><b>${fmt(c.epsMedian)} %</b></div><div class="metric"><small>Vinsttillväxt 3 år</small><b>${fmt(num(r.eps3y))} %</b></div><div class="metric"><small>Historikpoäng vinst</small><b>${c.epsHistory}/5</b></div></div></div>`;document.getElementById('oldPrice').value=r.price||'';document.getElementById('newPrice').value='';document.getElementById('newPe').value='';document.getElementById('peTool').classList.add('hidden');document.getElementById('txDate').value=todayISO();reasonUI();document.getElementById('holdingSummary').innerHTML=[['Antal',fmt(h.shares)],['GAV',fmt(h.avg)],['Realiserat',fmt(h.realized)],['Utdelningar',fmt(h.dividends)],['Courtage',fmt(h.fees)],['Status',h.shares>0?'Ägs':'Ägs inte']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');const safeHistory=normalizeHistoryEntries(r);
 document.getElementById('historyList').innerHTML=safeHistory.slice().reverse().map(x=>{
   const score=safeHistoricalScore(x,r);
   const raw=safeHistoricalRaw(x);
@@ -7921,7 +7926,7 @@ function runFiveYearWhiteBacktest(){
   const frozenWeights=normalizedWhiteWeights({distanceMa200:10,ma50Spread:30,ma200Slope1m:30,trendStability5d:30});
   for(let s=0;s<signals.length-1;s++){
     const signal=signals[s];
-    // v21.10.0: samma regel som levande portföljen.
+    // v21.12.0: samma regel som levande portföljen.
     // Fredagens stängningsdata bestämmer urvalet och samma fredags stängningskurs
     // är köp-/säljkursen för portföljen som benämns nästa vecka.
     const executionDate=signal.date;
@@ -8078,7 +8083,7 @@ function runFiveYearWhiteBacktest(){
   };
   fiveYearBacktestResult=result;
   renderFiveYearBacktest(result);
-  // v21.10.0: det vanliga 10-årstestet ska vara KLART här.
+  // v21.12.0: det vanliga 10-årstestet ska vara KLART här.
   // De mycket tunga robusthets-/känslighetstesterna körs separat så att
   // webbläsaren inte ser ut att fastna på slutet efter 100 % hämtning.
   fiveYearDiagnosticsResult=null;
@@ -9237,22 +9242,37 @@ function historicalCandidate(row,cutoffDate){
 
 function fridayClosingPrice(row,cutoffDate){
   const cutoff=String(cutoffDate||'').slice(0,10);
-  const friday=dateAtLocalNoon(cutoff);
 
-  // En kurs får vara startkurs först när just det bolaget har uppdaterats
-  // efter fredagens 18:00-gräns (eller vid en senare uppdatering under helgen).
-  // Då är row.price Yahoo:s senaste färdiga kurs och blir sanningskällan.
-  if(rowUpdatedAfterFridayCutoff(row,friday)&&Number.isFinite(num(row?.price))&&num(row.price)>0){
-    return num(row.price)
-  }
-
-  // Historiken används bara om den uttryckligen innehåller fredagens datapunkt.
-  // Vi faller INTE tillbaka till torsdagens kurs för en ny veckoportfölj.
+  // Universal rule: an historical Friday ALWAYS uses that Friday's exact
+  // priceHistory close. Never substitute today's row.price for an older date.
   const exact=(Array.isArray(row?.priceHistory)?row.priceHistory:[])
-    .filter(point=>String(point?.date||'').slice(0,10)===cutoff&&Number.isFinite(num(point?.close)))
+    .filter(point=>
+      String(point?.date||'').slice(0,10)===cutoff &&
+      Number.isFinite(num(point?.close)) &&
+      num(point.close)>0
+    )
     .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
   if(exact.length)return num(exact[exact.length-1].close);
 
+  // row.price is allowed only when the row itself proves that its latest
+  // market date IS the requested cutoff date. This covers the just-finished
+  // Friday before priceHistory persistence without leaking future prices.
+  const rowMarketDate=String(
+    row?.technicalSourceDate||
+    row?.marketSourceDate||
+    row?.priceDate||
+    ''
+  ).slice(0,10);
+  if(rowMarketDate===cutoff&&Number.isFinite(num(row?.price))&&num(row.price)>0){
+    return num(row.price)
+  }
+
+  // Final current-Friday fallback is gated both by date and the 18:00 update.
+  const friday=dateAtLocalNoon(cutoff);
+  const updatedDate=String(row?.marketUpdatedAt||'').slice(0,10);
+  if(updatedDate===cutoff&&rowUpdatedAfterFridayCutoff(row,friday)&&Number.isFinite(num(row?.price))&&num(row.price)>0){
+    return num(row.price)
+  }
   return NaN
 }
 
@@ -9296,16 +9316,18 @@ function greenProductionRank(cutoffDate){
   raw.forEach(x=>x.greenScore=.75*x.b12Pct+.25*x.res6Pct);
   return raw.sort((a,b)=>b.greenScore-a.greenScore)
 }
+let currentGreenScoreCache={stamp:'',map:new Map()};
+function currentGreenScores(){
+  const cutoff=(greenProductionIndexSeries().at(-1)?.date)||'';
+  const stamp=cutoff+'|'+rows.length;
+  if(currentGreenScoreCache.stamp===stamp)return currentGreenScoreCache.map;
+  const map=new Map(greenProductionRank(cutoff).map(x=>[String(x.row?.ticker||''),x.greenScore*100]));
+  currentGreenScoreCache={stamp,map};return map
+}
+function greenScoreForRow(row){return currentGreenScores().get(String(row?.ticker||''))??NaN}
+function greenScoreText(v){return Number.isFinite(v)?v.toFixed(1).replace('.',','):'–'}
 function greenProductionMembers(cutoffDate,previousSnapshot=null){
-  const p=greenProductionProbability(cutoffDate),greenOn=Number.isFinite(p)&&p>=GREEN_V02.threshold;
-  if(!greenOn){
-    // Normalläge är exakt samma Vit Top10-in/Top20-ut-logik, men lagras som egen Grön-portfölj.
-    const proxyPrev=previousSnapshot?.portfolios?.green
-      ?{...previousSnapshot,portfolios:{...previousSnapshot.portfolios,white:previousSnapshot.portfolios.green}}
-      :previousSnapshot;
-    return topListMembersForSnapshot('white',cutoffDate,proxyPrev).map((m,i)=>({...m,rank:i+1,selectionModel:'green',
-      selectionSource:GREEN_PRODUCTION_VERSION,greenMode:'white',greenProbability:p,greenScore:NaN}))
-  }
+  const p=greenProductionProbability(cutoffDate);
   const ranked=greenProductionRank(cutoffDate).filter(x=>{
     const px=fridayClosingPrice(x.row,cutoffDate);return Number.isFinite(px)&&px>0
   }).slice(0,10);
@@ -9313,8 +9335,8 @@ function greenProductionMembers(cutoffDate,previousSnapshot=null){
     const blue=calc(x.row),white=whiteCalc(x.row),average=averageScoreFromResults(blue,white);
     return{rank:i+1,ticker:x.row.ticker||'',company:x.row.company||'',market:x.row.market||'SE',
       startPrice:fridayClosingPrice(x.row,cutoffDate),closeDate:String(cutoffDate).slice(0,10),
-      blueScore:blue.total,whiteScore:white.total,averageScore:average,selectionScore:x.greenScore,
-      greenScore:x.greenScore,beta12:x.b12,residual6:x.res6,greenMode:'green',greenProbability:p,
+      blueScore:blue.total,whiteScore:white.total,averageScore:average,selectionScore:x.greenScore*100,
+      greenScore:x.greenScore*100,beta12:x.b12,residual6:x.res6,greenMode:'pure',greenProbability:p,
       selectionModel:'green',selectionSource:GREEN_PRODUCTION_VERSION}
   })
 }
@@ -9333,20 +9355,21 @@ function hybridProductionMembers(cutoffDate,previousSnapshot=null){
       const blue=calc(x.row),white=whiteCalc(x.row),average=averageScoreFromResults(blue,white);
       return{rank:i+1,ticker:x.row.ticker||'',company:x.row.company||'',market:x.row.market||'SE',
         startPrice:fridayClosingPrice(x.row,cutoffDate),closeDate:String(cutoffDate).slice(0,10),
-        blueScore:blue.total,whiteScore:white.total,averageScore:average,selectionScore:x.greenScore,
-        greenScore:x.greenScore,beta12:x.b12,residual6:x.res6,hybridMode:'green',greenProbability:p,
+        blueScore:blue.total,whiteScore:white.total,averageScore:average,selectionScore:x.greenScore*100,
+        greenScore:x.greenScore*100,beta12:x.b12,residual6:x.res6,hybridMode:'green',greenProbability:p,
         selectionModel:'hybrid',selectionSource:'hybrid-v01-green-v03'}
     })
   }
-  // IMPORTANT: Hybrid uses its own previous holdings for Vit Top10-in/Top20-out.
-  // After a Green week, those Green holdings therefore enter the next Vit hysteresis only
-  // if they are still within Vit Top20; otherwise they are replaced by current Vit leaders.
+  // Hybrid owns its own hysteresis state. The actual White ranking is always
+  // reconstructed from data available at cutoffDate, so historical rebuilds
+  // can never leak today's score into an older week.
   const proxyPrev=previousSnapshot?.portfolios?.hybrid
     ?{...previousSnapshot,portfolios:{...previousSnapshot.portfolios,white:previousSnapshot.portfolios.hybrid}}
     :previousSnapshot;
-  return topListMembersForSnapshot('white',cutoffDate,proxyPrev).map((m,i)=>({...m,rank:i+1,
+  const greenMap=new Map(greenProductionRank(cutoffDate).map(x=>[String(x.row?.ticker||''),x.greenScore*100]));
+  return historicalWeeklyMembers('white',cutoffDate,proxyPrev).map((m,i)=>({...m,rank:i+1,
     selectionModel:'hybrid',selectionSource:'hybrid-v01-green-v03',hybridMode:'white',
-    greenProbability:p,greenScore:NaN}))
+    greenProbability:p,greenScore:greenMap.get(String(m.ticker||''))??NaN}))
 }
 function decorateHybridMembers(members,cutoffDate){
   return members.map((m,i)=>({...m,rank:i+1,closeDate:cutoffDate,executionDate:cutoffDate,
@@ -9464,6 +9487,30 @@ function historicalWeeklyMembers(model,cutoffDate,previousSnapshot=null){
     }))
 }
 
+
+const WEEKLY_MODELS=['blue','white','average','green','hybrid'];
+function weeklyPortfolioObjectName(model){
+  return model==='blue'?'Blå':model==='white'?'Vit':model==='average'?'Snitt':model==='green'?'Grön':'Hybrid'
+}
+function decorateCoreWeeklyMembers(members,model,cutoffDate){
+  return members.map((member,index)=>({
+    ...member,
+    rank:index+1,
+    closeDate:cutoffDate,
+    executionDate:cutoffDate,
+    signalPrice:Number.isFinite(num(member.startPrice))?num(member.startPrice):member.signalPrice,
+    selectionModel:model,
+    selectionSource:'locked-friday-close-five-model-v1'
+  }))
+}
+function fiveModelMembersAtFriday(cutoffDate,previousSnapshot=null){
+  const blue=historicalWeeklyMembers('blue',cutoffDate,previousSnapshot);
+  const white=historicalWeeklyMembers('white',cutoffDate,previousSnapshot);
+  const average=historicalWeeklyMembers('average',cutoffDate,previousSnapshot);
+  const green=greenProductionMembers(cutoffDate,previousSnapshot);
+  const hybrid=hybridProductionMembers(cutoffDate,previousSnapshot);
+  return{blue,white,average,green,hybrid}
+}
 function buildCanonicalHistoricalWeeklySnapshot(friday,previousSnapshot=null){
   const cutoffDate=isoDate(friday);
   const monday=followingMonday(friday);
@@ -9471,23 +9518,15 @@ function buildCanonicalHistoricalWeeklySnapshot(friday,previousSnapshot=null){
   const settings=loadWeeklySettings();
   const benchmarkMarket=settings.benchmarkMarket||'SE';
 
-  const blue=historicalWeeklyMembers('blue',cutoffDate,previousSnapshot);
-  const white=historicalWeeklyMembers('white',cutoffDate,previousSnapshot);
-  const average=historicalWeeklyMembers('average',cutoffDate,previousSnapshot);
-  if(blue.length<10||white.length<10||average.length<10)return null;
+  const members=fiveModelMembersAtFriday(cutoffDate,previousSnapshot);
+  if(WEEKLY_MODELS.some(model=>(members[model]||[]).length!==10)){
+    console.warn('Femmodellsmotorn kunde inte låsa veckan',cutoffDate,
+      Object.fromEntries(WEEKLY_MODELS.map(model=>[model,(members[model]||[]).length])));
+    return null
+  }
 
   const benchmarkStart=benchmarkValueOnOrBefore(benchmarkMarket,cutoffDate);
   if(!Number.isFinite(benchmarkStart))return null;
-
-  const decorate=(members,model)=>members.map((member,index)=>({
-    ...member,
-    rank:index+1,
-    closeDate:cutoffDate,
-    executionDate:cutoffDate,
-    signalPrice:Number.isFinite(num(member.startPrice))?num(member.startPrice):member.signalPrice,
-    selectionModel:model,
-    selectionSource:'locked-friday-close-weekly-v2'
-  }));
 
   return{
     id:`${targetInfo.key}-${cutoffDate}`,
@@ -9501,121 +9540,43 @@ function buildCanonicalHistoricalWeeklySnapshot(friday,previousSnapshot=null){
     activationDate:isoDate(monday),
     executionDate:cutoffDate,
     executionStatus:'finalized',
-    executionMode:'previous-trading-day-close',
-    preparedFrom:'locked-friday-close',
-    selectionSource:'locked-friday-close-weekly-v2',
-    weeklyLockVersion:2,
+    executionMode:'friday-close',
+    preparedFrom:'canonical-five-model-friday-engine',
+    selectionSource:'locked-friday-close-five-model-v1',
+    weeklyLockVersion:6,
     benchmarkMarket,
     benchmarkSymbol:benchmarkSymbol(benchmarkMarket),
     benchmarkStart,
     benchmarkSignalStart:benchmarkStart,
     portfolios:{
-      blue:{name:'Blå',members:decorate(blue,'blue')},
-      white:{name:'Vit',members:decorate(white,'white')},
-      average:{name:'Snitt',members:decorate(average,'average')},
-      green:{name:'Grön',members:decorateGreenMembers(green,cutoffDate),modelVersion:GREEN_PRODUCTION_VERSION},
-      hybrid:{name:'Hybrid',members:decorateHybridMembers(hybrid,cutoffDate),modelVersion:'hybrid-v01-green-v03'},
-      hybrid:{name:'Hybrid',members:decorateHybridMembers(hybrid,cutoffDate),modelVersion:'hybrid-v01-green-v03'}
+      blue:{name:'Blå',members:decorateCoreWeeklyMembers(members.blue,'blue',cutoffDate)},
+      white:{name:'Vit',members:decorateCoreWeeklyMembers(members.white,'white',cutoffDate)},
+      average:{name:'Snitt',members:decorateCoreWeeklyMembers(members.average,'average',cutoffDate)},
+      green:{name:'Grön',members:decorateGreenMembers(members.green,cutoffDate),modelVersion:GREEN_PRODUCTION_VERSION},
+      hybrid:{name:'Hybrid',members:decorateHybridMembers(members.hybrid,cutoffDate),modelVersion:'hybrid-v01-green-v03'}
     }
   }
 }
-
-
-function createWeekendLockedSnapshotFromFriday(friday,automatic=true){
-  const cutoffDate=isoDate(friday);
-  const monday=followingMonday(friday);
-  const activationDate=isoDate(monday);
-  const targetInfo=isoWeekInfo(monday);
-  if(weeklyPortfolios.some(snapshot=>snapshot.weekKey===targetInfo.key))return false;
-
-  const settings=loadWeeklySettings();
-  const benchmarkMarket=settings.benchmarkMarket||'SE';
-  const previousSnapshot=previousWeeklySnapshotBefore(cutoffDate,targetInfo.key);
-
-  const candidates=(model)=>{
-    const previousKeys=new Set((previousSnapshot?.portfolios?.[model]?.members||[]).map(weeklyMemberKey).filter(Boolean));
-    return rows.map(r=>{
-      const blue=calc(r),white=whiteCalc(r),average=averageScoreFromResults(blue,white);
-      const score=model==='blue'?blue.total:model==='white'?white.total:average;
-      const valid=model==='blue'?blue.qualified:model==='white'?white.dataReady:(blue.qualified&&white.dataReady&&Number.isFinite(average));
-      const price=fridayClosingPrice(r,cutoffDate);
-      return{r,blue,white,average,score,valid,price}
-    }).filter(x=>x.valid&&Number.isFinite(x.score)&&Number.isFinite(x.price)&&x.price>0)
-      .sort(weeklyCandidateComparator(previousKeys))
-  };
-
-  const makeMembers=(model)=>candidates(model).slice(0,10).map((x,i)=>({
-    rank:i+1,
-    ticker:x.r.ticker||'',
-    company:x.r.company||'',
-    market:x.r.market||'SE',
-    startPrice:x.price,
-    signalPrice:x.price,
-    executionPrice:x.price,
-    executionDate:cutoffDate,
-    closeDate:cutoffDate,
-    blueScore:x.blue.total,
-    whiteScore:x.white.total,
-    averageScore:x.average,
-    selectionModel:model,
-    selectionSource:'actual-friday-state-weekend-lock-v2085'
-  }));
-
-  const blue=makeMembers('blue');
-  const white=makeMembers('white');
-  const average=makeMembers('average');
-  const green=greenProductionMembers(cutoffDate,previousSnapshot);
-  const hybrid=hybridProductionMembers(cutoffDate,previousSnapshot);
-  if(blue.length<10||white.length<10||average.length<10||green.length<10||hybrid.length<10)return false;
-
-  const benchmarkStart=benchmarkValueOnOrBefore(benchmarkMarket,cutoffDate);
-  if(!Number.isFinite(benchmarkStart))return false;
-
-  const snapshot={
-    id:`${targetInfo.key}-${cutoffDate}`,
-    weekKey:targetInfo.key,year:targetInfo.year,week:targetInfo.week,
-    savedAt:nowISO(),savedDate:cutoffDate,lockDate:cutoffDate,cutoffTime:'18:00',
-    activationDate,
-    executionDate:cutoffDate,
-    executionStatus:'finalized',
-    executionMode:'previous-trading-day-close',
-    preparedFrom:'actual-friday-state-weekend-lock-v2085',
-    selectionSource:'actual-friday-state-weekend-lock-v2085',
-    weeklyLockVersion:5,
-    benchmarkMarket,
-    benchmarkSymbol:benchmarkSymbol(benchmarkMarket),
-    benchmarkStart,
-    benchmarkSignalStart:benchmarkStart,
-    portfolios:{
-      blue:{name:'Blå',members:blue},
-      white:{name:'Vit',members:white},
-      average:{name:'Snitt',members:average},
-      green:{name:'Grön',members:decorateGreenMembers(green,cutoffDate),modelVersion:GREEN_PRODUCTION_VERSION}
-    }
-  };
-
+function persistCanonicalWeeklySnapshot(snapshot,automatic=true){
+  if(!snapshot)return false;
+  if(weeklyPortfolios.some(s=>s.weekKey===snapshot.weekKey))return false;
   weeklyPortfolios.push(snapshot);
-  weeklyPortfolios.sort((a,b)=>String(b.lockDate||'').localeCompare(String(a.lockDate||'')));
+  weeklyPortfolios.sort((a,b)=>String(b.lockDate||b.executionDate||'').localeCompare(String(a.lockDate||a.executionDate||'')));
   weeklyPersist();
-  if(!automatic)toast(`${targetInfo.key} låstes från fredagens faktiska modell och slutkurser`);
+  if(!automatic)toast(`${snapshot.weekKey} låstes med femmodellsmotorn från fredagens close`);
   return true
 }
-
-function createHistoricalWeeklySnapshot(friday,automatic=true){
-  // v21 invariant: historisk vecka byggs enbart från historisk snapshotdata.
-  const targetInfo=isoWeekInfo(followingMonday(friday));
-  if(weeklyPortfolios.some(snapshot=>snapshot.weekKey===targetInfo.key))return false;
-
-  const cutoffDate=isoDate(friday);
+function createWeekendLockedSnapshotFromFriday(friday,automatic=true){
+  const cutoffDate=isoDate(friday),targetInfo=isoWeekInfo(followingMonday(friday));
+  if(weeklyPortfolios.some(s=>s.weekKey===targetInfo.key))return false;
   const previousSnapshot=previousWeeklySnapshotBefore(cutoffDate,targetInfo.key);
-  const snapshot=buildCanonicalHistoricalWeeklySnapshot(friday,previousSnapshot);
-  if(!snapshot)return false;
-
-  weeklyPortfolios.push(snapshot);
-  weeklyPortfolios.sort((a,b)=>String(b.lockDate||'').localeCompare(String(a.lockDate||'')));
-  weeklyPersist();
-  if(!automatic)toast('Veckoportföljen skapades och låstes från fredagens slutdata');
-  return true
+  return persistCanonicalWeeklySnapshot(buildCanonicalHistoricalWeeklySnapshot(friday,previousSnapshot),automatic)
+}
+function createHistoricalWeeklySnapshot(friday,automatic=true){
+  return createWeekendLockedSnapshotFromFriday(friday,automatic)
+}
+function createCurrentDataWeeklySnapshot(friday,automatic=true,forceRebuild=false){
+  return createWeekendLockedSnapshotFromFriday(friday,automatic)
 }
 
 function mondayFromWeekKey(weekKey){
@@ -9909,7 +9870,7 @@ function repairWrongW34V2085(){
   return false
 }
 
-// v21.10.0: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
+// v21.12.0: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
 // bevaras som historik, medan alla nya veckor skapas av den generella veckomotorn.
 
 
@@ -10107,139 +10068,74 @@ function weeklyPersist(){
   }))
 }
 function createWeeklySnapshot(overwrite=false,automatic=false){
-  const settings=loadWeeklySettings();
-  const benchmarkMarket=document.getElementById('weeklyBenchmarkMarket')?.value||settings.benchmarkMarket||'SE';
-  const info=isoWeekInfo();
-  const existingIndex=weeklyPortfolios.findIndex(x=>x.weekKey===info.key);
-  if(existingIndex>=0){
-    if(!automatic)alert('Veckans portföljer är redan låsta. Radera veckan uttryckligen först om du verkligen vill skapa om den.');
+  const friday=latestCompletedFriday(new Date());
+  const targetInfo=isoWeekInfo(followingMonday(friday));
+  if(weeklyPortfolios.some(s=>s.weekKey===targetInfo.key)){
+    if(!automatic)alert('Veckans portföljer är redan låsta. En låst vecka skrivs inte om.');
     return false
   }
-  const manualCutoff=isoDate(latestCompletedFriday(new Date()));
-  const previousSnapshot=previousWeeklySnapshotBefore(manualCutoff,info.key);
-  const blue=topListMembersForSnapshot('blue',manualCutoff,previousSnapshot),white=topListMembersForSnapshot('white',manualCutoff,previousSnapshot),average=topListMembersForSnapshot('average',manualCutoff,previousSnapshot);
-  if(blue.length<10||white.length<10||average.length<10){
-    if(!automatic)alert(`För få giltiga bolag för Top 10. Blå ${blue.length}, Vit ${white.length}, Snitt ${average.length}.`);
-    return false
+  return createWeekendLockedSnapshotFromFriday(friday,automatic)
+}
+
+
+const FIVE_MODEL_INTEGRITY_MIGRATION_KEY='momentumscore_five_model_integrity_v2112';
+
+function exactHistoricalCloseForMember(member,cutoffDate){
+  const idx=findStockIndex(member),row=idx>=0?rows[idx]:null;
+  if(!row)return NaN;
+  const exact=(Array.isArray(row.priceHistory)?row.priceHistory:[])
+    .filter(p=>String(p?.date||'').slice(0,10)===cutoffDate&&Number.isFinite(num(p?.close))&&num(p.close)>0);
+  return exact.length?num(exact[exact.length-1].close):NaN
+}
+function extendedPortfolioMatchesInvariant(snapshot,model,expected){
+  const actual=snapshot?.portfolios?.[model]?.members||[];
+  if(actual.length!==10||expected.length!==10)return false;
+  for(let i=0;i<10;i++){
+    if(weeklyMemberKey(actual[i])!==weeklyMemberKey(expected[i]))return false;
+    const exact=exactHistoricalCloseForMember(actual[i],String(snapshot.executionDate||snapshot.lockDate||'').slice(0,10));
+    if(!Number.isFinite(exact)||Math.abs(num(actual[i].startPrice)-exact)>1e-8)return false;
+    if(model==='hybrid'&&String(actual[i].hybridMode||'')!==String(expected[i].hybridMode||''))return false
   }
-  const benchmarkStart=currentBenchmarkValue(benchmarkMarket);
-  const snapshot={
-    id:`${info.key}-${Date.now()}`,
-    weekKey:info.key,
-    year:info.year,
-    week:info.week,
-    savedAt:nowISO(),
-    savedDate:todayISO(),
-    activationDate:todayISO(),
-    benchmarkMarket,
-    benchmarkSymbol:benchmarkSymbol(benchmarkMarket),
-    benchmarkStart,
-    portfolios:{
-      blue:{name:'Blå',members:blue},
-      white:{name:'Vit',members:white},
-      average:{name:'Snitt',members:average}
+  return true
+}
+function migrateExtendedModelsToCanonicalEngine(){
+  if(localStorage.getItem(FIVE_MODEL_INTEGRITY_MIGRATION_KEY))return false;
+  const ordered=weeklyPortfolios.slice().sort((a,b)=>String(a.executionDate||a.lockDate||'').localeCompare(String(b.executionDate||b.lockDate||'')));
+  let changed=false,previous=null,repaired=0;
+
+  for(const snapshot of ordered){
+    const cutoff=String(snapshot.executionDate||snapshot.lockDate||snapshot.savedDate||'').slice(0,10);
+    if(!cutoff){previous=snapshot;continue}
+    const green=greenProductionMembers(cutoff,previous);
+    const hybrid=hybridProductionMembers(cutoff,previous);
+    if(green.length!==10||hybrid.length!==10){previous=snapshot;continue}
+
+    const expectedGreen=decorateGreenMembers(green,cutoff);
+    const expectedHybrid=decorateHybridMembers(hybrid,cutoff);
+    const greenOK=extendedPortfolioMatchesInvariant(snapshot,'green',expectedGreen);
+    const hybridOK=extendedPortfolioMatchesInvariant(snapshot,'hybrid',expectedHybrid);
+
+    // Migration repairs only the two models introduced by the recent versions.
+    // Blå, Vit and Snitt are never rewritten.
+    if(!greenOK||!hybridOK){
+      snapshot.portfolios=snapshot.portfolios||{};
+      snapshot.portfolios.green={name:'Grön',members:expectedGreen,modelVersion:GREEN_PRODUCTION_VERSION,
+        historyStatus:'reconstructed',reconstructedBy:'canonical-five-model-v1'};
+      snapshot.portfolios.hybrid={name:'Hybrid',members:expectedHybrid,modelVersion:'hybrid-v01-green-v03',
+        historyStatus:'reconstructed',reconstructedBy:'canonical-five-model-v1'};
+      snapshot.extendedModelRepair={at:nowISO(),reason:'canonical cutoff/selection/startPrice invariant'};
+      changed=true;repaired++
     }
-  };
-  if(existingIndex>=0)weeklyPortfolios[existingIndex]=snapshot;
-  else weeklyPortfolios.push(snapshot);
-  weeklyPortfolios.sort((a,b)=>String(b.savedAt).localeCompare(String(a.savedAt)));
-  weeklyPersist();
-  renderWeeklyPortfolios();
-  if(!automatic)toast('Veckans tre Top 10-portföljer sparades');
-  return true
-}
-
-const GREEN_LIVE_START_KEY='momentumscore_green_v03_live_start_v1';
-
-const HYBRID_LIVE_START_KEY='momentumscore_hybrid_v01_live_start_v1';
-
-const GREEN_HYBRID_W31_BACKFILL_KEY='momentumscore_green_hybrid_w31_backfill_v1';
-const GREEN_HYBRID_W31_START='2026-07-24';
-
-function greenHybridBackfillWeeks(){
-  // Economic execution starts Friday 2026-07-24; portfolio week is following Monday (W31).
-  const all=weeklyPortfolios.slice().sort((a,b)=>String(a.executionDate||a.signalDate||a.weekStart||'').localeCompare(String(b.executionDate||b.signalDate||b.weekStart||'')));
-  return all.filter(s=>{
-    const d=String(s.executionDate||s.signalDate||'').slice(0,10);
-    return d>=GREEN_HYBRID_W31_START;
-  })
-}
-function backfillGreenHybridFromW31(){
-  if(localStorage.getItem(GREEN_HYBRID_W31_BACKFILL_KEY))return false;
-  const snaps=greenHybridBackfillWeeks();
-  if(!snaps.length)return false;
-
-  // Preflight first: do not partially write history if a Friday cannot be reconstructed.
-  const plan=[]; let previous=null;
-  for(const s of snaps){
-    const cutoff=String(s.executionDate||s.signalDate||'').slice(0,10);
-    if(!cutoff)continue;
-    // previous is a shadow snapshot containing the newly reconstructed Green/Hybrid,
-    // while original Blå/Vit/Snitt remain untouched.
-    const g=greenProductionMembers(cutoff,previous);
-    const h=hybridProductionMembers(cutoff,previous);
-    if(g.length!==10||h.length!==10){
-      console.warn('Green/Hybrid W31 backfill stopped: insufficient historical inputs',s.weekKey,cutoff,g.length,h.length);
-      return false
-    }
-    const green=decorateGreenMembers(g,cutoff),hybrid=decorateHybridMembers(h,cutoff);
-    plan.push({s,cutoff,green,hybrid});
-    previous={...s,portfolios:{...(s.portfolios||{}),green:{name:'Grön',members:green},hybrid:{name:'Hybrid',members:hybrid}}}
+    previous=snapshot
   }
-  if(!plan.length)return false;
-
-  for(const x of plan){
-    // Never alter existing Blå/Vit/Snitt. Only add/replace reconstructed Green/Hybrid.
-    x.s.portfolios=x.s.portfolios||{};
-    x.s.portfolios.green={name:'Grön',members:x.green,modelVersion:GREEN_PRODUCTION_VERSION,
-      historyStatus:'reconstructed',reconstructedFrom:'W31-2026'};
-    x.s.portfolios.hybrid={name:'Hybrid',members:x.hybrid,modelVersion:'hybrid-v01-green-v03',
-      historyStatus:'reconstructed',reconstructedFrom:'W31-2026'};
-    x.s.greenHybridBackfill={status:'reconstructed',createdAt:nowISO(),sourceStart:GREEN_HYBRID_W31_START};
-  }
-  weeklyPersist();
-  localStorage.setItem(GREEN_HYBRID_W31_BACKFILL_KEY,JSON.stringify({
-    createdAt:nowISO(),start:GREEN_HYBRID_W31_START,weeks:plan.map(x=>x.s.weekKey)
-  }));
-  // Force rolling rebuild from the now complete W31 sequence rather than retaining a later live start.
-  try{
-    localStorage.removeItem(ROLLING_STORAGE_KEY);
-    localStorage.removeItem(ROLLING_STATE_KEY);
-  }catch{}
-  return true
-}
-function ensureHybridLiveStartSnapshot(){
-  if(localStorage.getItem(HYBRID_LIVE_START_KEY))return false;
-  const friday=latestCompletedFriday(new Date()),cutoff=isoDate(friday),target=isoWeekInfo(followingMonday(friday));
-  const snapshot=weeklyPortfolios.find(s=>s?.weekKey===target.key);
-  if(!snapshot){localStorage.setItem(HYBRID_LIVE_START_KEY,target.key);return false}
-  if(snapshot.portfolios?.hybrid?.members?.length===10){localStorage.setItem(HYBRID_LIVE_START_KEY,target.key);return false}
-  const previous=previousWeeklySnapshotBefore(cutoff,target.key);
-  const members=hybridProductionMembers(cutoff,previous);
-  if(members.length!==10)return false;
-  snapshot.portfolios.hybrid={name:'Hybrid',members:decorateHybridMembers(members,cutoff),modelVersion:'hybrid-v01-green-v03'};
-  snapshot.hybridAddedAt=nowISO();weeklyPersist();localStorage.setItem(HYBRID_LIVE_START_KEY,target.key);return true
-}
-function ensureGreenLiveStartSnapshot(){
-  if(localStorage.getItem(GREEN_LIVE_START_KEY))return false;
-  const friday=latestCompletedFriday(new Date()),cutoff=isoDate(friday),target=isoWeekInfo(followingMonday(friday));
-  const snapshot=weeklyPortfolios.find(s=>s?.weekKey===target.key);
-  if(!snapshot){localStorage.setItem(GREEN_LIVE_START_KEY,target.key);return false}
-  if(snapshot.portfolios?.green?.members?.length===10){localStorage.setItem(GREEN_LIVE_START_KEY,target.key);return false}
-  const previous=previousWeeklySnapshotBefore(cutoff,target.key);
-  const green=greenProductionMembers(cutoff,previous);
-  if(green.length!==10)return false;
-  snapshot.portfolios.green={name:'Grön',members:decorateGreenMembers(green,cutoff),modelVersion:GREEN_PRODUCTION_VERSION};
-  snapshot.greenAddedAt=nowISO();
-  weeklyPersist();localStorage.setItem(GREEN_LIVE_START_KEY,target.key);
-  return true
+  if(changed)weeklyPersist();
+  localStorage.setItem(FIVE_MODEL_INTEGRITY_MIGRATION_KEY,JSON.stringify({at:nowISO(),repaired}));
+  return changed
 }
 function ensureWeeklyPortfolioSnapshot(){
   const backfilled=backfillMissingWeeklyPortfolios()>0;
-  const greenHybridW31=backfillGreenHybridFromW31();
-  const greenStarted=ensureGreenLiveStartSnapshot();
-  const hybridStarted=ensureHybridLiveStartSnapshot();
-  return backfilled||greenHybridW31||greenStarted||hybridStarted
+  const migrated=migrateExtendedModelsToCanonicalEngine();
+  return backfilled||migrated
 }
 function weeklySnapshotLabel(s){return `${s.weekKey} · ${dateFmt(s.savedAt)}`}
 function renderWeeklyPortfolios(){
@@ -10972,7 +10868,7 @@ try{
     console.info(`Vit 2.1 aktiverad: 10/30/30/30. ${scorePoints} sparade Vit-poäng räknades om.`)
   }else if(weightChanged){persist()}
 }catch(error){console.error('Vit 2.1 viktmigrering misslyckades',error)}
-// v21.10.0: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
+// v21.12.0: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
 // via den generella motorn, aldrig skriva om W31/W32/... som redan finns.
 try{
   const weekendCreated=backfillMissingWeeklyPortfolios();
