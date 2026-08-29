@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.6.0 – generell veckomotor + courtage från start</h1>
+<h1>MomentumScore v21.6.1 – generell veckomotor + courtage från start</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -3299,7 +3299,7 @@ function buildRollingPortfolio(model,asOfDate=''){
       lastUpdateDate=startDate;
       benchmarkStart=num(snapshot.benchmarkStart);
 
-      // v21.6.0: även de tio första köpen är riktiga affärer och betalar
+      // v21.6.1: även de tio första köpen är riktiga affärer och betalar
       // samma courtage som alla senare köp. Inga specialregler vid start.
       const budgetPerStock=ROLLING_START_CAPITAL/wanted.size;
       let usedCash=0;
@@ -7717,12 +7717,38 @@ function runGreenV03Lab(){
 let greenStressResult=null;
 const GREEN_STRESS_CANDIDATE={id:'V03',label:'v0.3 Beta12 + konträr residual6 / P80',selector:'b12res',threshold:GREEN_V02.threshold};
 
-function greenStressRunModel(kind,signals,opts={}){
+
+async function greenStressYield(){return new Promise(resolve=>setTimeout(resolve,0))}
+async function greenStressPrecompute(signals,status){
+  const cache={p:[],b12:[],b12res:[],whiteRank:[]};
+  for(let s=0;s<signals.length-1;s++){
+    const d=signals[s].date;
+    cache.p[s]=greenV02Probability(d);
+    cache.b12[s]=greenBeta12Ranking(d).slice(0,10);
+    cache.b12res[s]=greenV03Rank(d,'b12res').slice(0,10);
+    // Cache full Vit top20 ranking. Hysteresis itself remains portfolio-state dependent.
+    cache.whiteRank[s]=fiveYearTopN(d,[],20,normalizedWhiteWeights({distanceMa200:10,ma50Spread:30,ma200Slope1m:30,trendStability5d:30}));
+    if(s%8===0){
+      if(status)status.textContent=`Förbereder veckodata ${s+1}/${signals.length-1}…`;
+      await greenStressYield()
+    }
+  }
+  return cache
+}
+function greenStressWhiteFromCached(ranked,state){
+  const rankMap=new Map(ranked.map((x,i)=>[x.ticker,i+1])),target=[];
+  for(const ticker of Object.keys(state.positions)){
+    if(rankMap.has(ticker)&&rankMap.get(ticker)<=20&&target.length<10){
+      const item=ranked.find(x=>x.ticker===ticker);if(item)target.push(item)
+    }
+  }
+  for(const item of ranked){if(target.length>=10)break;if(!target.some(x=>x.ticker===item.ticker))target.push(item)}
+  return target
+}
+async function greenStressRunModel(kind,signals,cache,opts={}){
   const feeRate=Number.isFinite(opts.feeRate)?opts.feeRate:FIVE_YEAR_FEE_RATE;
   const delay=opts.delay||0, exclude=opts.exclude||(()=>false), forcedFlags=opts.forcedFlags||null;
   const state=greenCloneState(),rows=[]; let started=false;
-  const oldFee=window.__greenStressFeeOverride;
-  window.__greenStressFeeOverride=feeRate;
   const execute=(target,date)=>{
     const targetTickers=target.map(x=>x.ticker), before={trades:state.trades,fees:state.fees};
     const px=(item,d)=>fiveYearPriceOnOrBefore(item.series,d);
@@ -7745,98 +7771,84 @@ function greenStressRunModel(kind,signals,opts={}){
     }
     return state.trades-before.trades
   };
-  try{
-    for(let s=0;s<signals.length-1;s++){
-      const sig=signals[s],next=signals[s+1]; if(exclude(sig.date,next.date))continue;
-      const execIndex=Math.min(s+delay,signals.length-2),execDate=signals[execIndex].date;
-      const p=greenV02Probability(sig.date);
-      let useGreen=kind!=='white' && Number.isFinite(p)&&p>=GREEN_V02.threshold;
-      if(forcedFlags)useGreen=!!forcedFlags[s];
-      let target;
-      if(kind==='white'||!useGreen)target=greenTargetWhiteOnly(sig.date,state);
-      else if(kind==='v02')target=greenBeta12Ranking(sig.date).slice(0,10);
-      else target=greenV03Rank(sig.date,'b12res').slice(0,10);
-      if(target.length<5)continue;
-      const trades=execute(target,execDate);
-      const startValue=fiveYearPortfolioValue(state,execDate);
-      const endDate=delay?signals[Math.min(execIndex+1,signals.length-1)].date:next.date;
-      const endValue=fiveYearPortfolioValue(state,endDate);
-      rows.push({signalDate:sig.date,execDate,endDate,mode:useGreen?'Grön':'Vit',pGreen:p,trades,
-        startValue,endValue,weekReturn:startValue>0?(endValue/startValue-1)*100:NaN,
-        nextOmxReturn:greenForwardWeekReturn(fiveYearBacktestData.index,sig.date,next.date)})
-    }
-  }finally{window.__greenStressFeeOverride=oldFee}
+  for(let s=0;s<signals.length-1;s++){
+    const sig=signals[s],next=signals[s+1]; if(exclude(sig.date,next.date))continue;
+    const execIndex=Math.min(s+delay,signals.length-2),execDate=signals[execIndex].date;
+    const p=cache.p[s];
+    let useGreen=kind!=='white'&&Number.isFinite(p)&&p>=GREEN_V02.threshold;
+    if(forcedFlags)useGreen=!!forcedFlags[s];
+    let target;
+    if(kind==='white'||!useGreen)target=greenStressWhiteFromCached(cache.whiteRank[s],state);
+    else if(kind==='v02')target=cache.b12[s];
+    else target=cache.b12res[s];
+    if(target.length<5)continue;
+    const trades=execute(target,execDate);
+    const startValue=fiveYearPortfolioValue(state,execDate);
+    const endDate=delay?signals[Math.min(execIndex+1,signals.length-1)].date:next.date;
+    const endValue=fiveYearPortfolioValue(state,endDate);
+    rows.push({signalDate:sig.date,execDate,endDate,mode:useGreen?'Grön':'Vit',pGreen:p,trades,
+      startValue,endValue,weekReturn:startValue>0?(endValue/startValue-1)*100:NaN,
+      nextOmxReturn:greenForwardWeekReturn(fiveYearBacktestData.index,sig.date,next.date)})
+    if(s%30===0)await greenStressYield()
+  }
   let peak=100000,maxDD=0;
   for(const r of rows){peak=Math.max(peak,r.endValue);maxDD=Math.min(maxDD,(r.endValue/peak-1)*100)}
-  const last=rows.at(-1)?.endValue||100000, years=Math.max(1/52,rows.length/52);
+  const last=rows.at(-1)?.endValue||100000,years=Math.max(1/52,rows.length/52);
   return {rows,total:(last/100000-1)*100,cagr:(Math.pow(last/100000,1/years)-1)*100,maxDD,
     fees:state.fees,trades:state.trades,greenWeeks:rows.filter(r=>r.mode==='Grön').length}
 }
-function greenStressSubsetEdge(baseRows,filter){
-  const rr=baseRows.filter(filter),g=rr.filter(x=>x.mode==='Grön');
-  return {weeks:rr.length,greenWeeks:g.length,mean:greenMean(g.map(x=>x.weekReturn)),median:(()=>{
-    const a=g.map(x=>x.weekReturn).filter(Number.isFinite).sort((a,b)=>a-b);return a.length?a[Math.floor(a.length/2)]:NaN})()}
-}
-function greenStressSeeded(seed){
-  let x=seed>>>0; return ()=>((x=(1664525*x+1013904223)>>>0)/4294967296)
-}
-function greenStressPlacebo(signals,greenCount,runs=200){
+function greenStressSeeded(seed){let x=seed>>>0;return ()=>((x=(1664525*x+1013904223)>>>0)/4294967296)}
+async function greenStressPlacebo(signals,cache,greenCount,runs,status){
   const vals=[];
   for(let k=0;k<runs;k++){
     const rnd=greenStressSeeded(12345+k),idx=[...Array(signals.length-1).keys()];
     for(let i=idx.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]]}
     const chosen=new Set(idx.slice(0,greenCount)),flags=signals.map((_,i)=>chosen.has(i));
-    vals.push(greenStressRunModel('v03',signals,{forcedFlags:flags}).total)
+    vals.push((await greenStressRunModel('v03',signals,cache,{forcedFlags:flags})).total);
+    if(k%5===4){if(status)status.textContent=`Slump-placebo ${k+1}/${runs}…`;await greenStressYield()}
   }
   vals.sort((a,b)=>a-b);
   return {p05:vals[Math.floor(.05*vals.length)],median:vals[Math.floor(.5*vals.length)],p95:vals[Math.floor(.95*vals.length)],values:vals}
 }
-function runGreenStress(){
+async function runGreenStress(){
   if(!fiveYearBacktestData?.index?.length)return alert('Hämta 10-årshistoriken först.');
   const btn=document.getElementById('runGreenStress'),status=document.getElementById('greenStressStatus');
-  btn.disabled=true;if(status)status.textContent='Kör låsta modeller och robusthetstester…';
-  setTimeout(()=>{
-    try{
-      const start=historicalBacktestStartDate(fiveYearBacktestData.index);
-      const signals=fiveYearWeeklySignals(fiveYearBacktestData.index).filter(x=>!start||x.date>=start);
-      const white=greenStressRunModel('white',signals),v02=greenStressRunModel('v02',signals),v03=greenStressRunModel('v03',signals);
-      const noCovid=greenStressRunModel('v03',signals,{exclude:(a,b)=>a>='2020-02-14'&&a<='2020-06-30'});
-      const highFee=greenStressRunModel('v03',signals,{feeRate:FIVE_YEAR_FEE_RATE*2});
-      const delayed=greenStressRunModel('v03',signals,{delay:1});
-      const greenRows=v03.rows.filter(r=>r.mode==='Grön').slice().sort((a,b)=>b.weekReturn-a.weekReturn);
-      const best5=new Set(greenRows.slice(0,5).map(x=>x.signalDate));
-      const noBest5=greenStressRunModel('v03',signals,{exclude:(a,b)=>best5.has(a)});
-      const placebo=greenStressPlacebo(signals,v03.greenWeeks,200);
-      const oos=v03.rows.filter(r=>r.signalDate>='2023-01-01'&&r.mode==='Grön');
-      greenStressResult={white,v02,v03,noCovid,highFee,delayed,noBest5,placebo,oos};
-      document.getElementById('exportGreenStress').disabled=false;
-      document.getElementById('greenStressSummary').innerHTML=
-        `<div><b>${white.total.toFixed(1)}%</b><span>Vit-only</span></div>
-         <div><b>${v02.total.toFixed(1)}%</b><span>v0.2 total</span></div>
-         <div><b>${v03.total.toFixed(1)}%</b><span>v0.3 kandidat</span></div>
-         <div><b>${v03.maxDD.toFixed(1)}%</b><span>v0.3 max DD</span></div>
-         <div><b>${noBest5.total.toFixed(1)}%</b><span>utan 5 bästa Grön-veckor</span></div>
-         <div><b>${noCovid.total.toFixed(1)}%</b><span>utan covidfönster</span></div>
-         <div><b>${highFee.total.toFixed(1)}%</b><span>dubbelt courtage</span></div>
-         <div><b>${delayed.total.toFixed(1)}%</b><span>1 veckas delay</span></div>
-         <div><b>${placebo.median.toFixed(1)}%</b><span>placebo median</span></div>`;
-      const tests=[
-        ['Vit-only',white.total,white.cagr,white.maxDD,white.greenWeeks,white.trades,white.fees],
-        ['Grön v0.2',v02.total,v02.cagr,v02.maxDD,v02.greenWeeks,v02.trades,v02.fees],
-        ['Grön v0.3 kandidat',v03.total,v03.cagr,v03.maxDD,v03.greenWeeks,v03.trades,v03.fees],
-        ['v0.3 utan covid',noCovid.total,noCovid.cagr,noCovid.maxDD,noCovid.greenWeeks,noCovid.trades,noCovid.fees],
-        ['v0.3 utan 5 bästa Grön-veckor',noBest5.total,noBest5.cagr,noBest5.maxDD,noBest5.greenWeeks,noBest5.trades,noBest5.fees],
-        ['v0.3 dubbelt courtage',highFee.total,highFee.cagr,highFee.maxDD,highFee.greenWeeks,highFee.trades,highFee.fees],
-        ['v0.3 +1 veckas exekveringsdelay',delayed.total,delayed.cagr,delayed.maxDD,delayed.greenWeeks,delayed.trades,delayed.fees]
-      ];
-      document.getElementById('greenStressTable').innerHTML='<thead><tr><th>Test</th><th>Total</th><th>CAGR</th><th>Max DD</th><th>Grön-v</th><th>Affärsben</th><th>Courtage</th></tr></thead><tbody>'+
-        tests.map(x=>`<tr><td>${x[0]}</td><td>${x[1].toFixed(1)}%</td><td>${x[2].toFixed(1)}%</td><td>${x[3].toFixed(1)}%</td><td>${x[4]}</td><td>${x[5]}</td><td>${Math.round(x[6]).toLocaleString('sv-SE')} kr</td></tr>`).join('')+
-        `<tr><td>Slump-placebo 200 körningar</td><td colspan="6">5:e pct ${placebo.p05.toFixed(1)}% · median ${placebo.median.toFixed(1)}% · 95:e pct ${placebo.p95.toFixed(1)}%</td></tr></tbody>`;
-      if(status)status.textContent='Klar. Inga nya parametrar har valts i stresstestet; det försöker bara slå sönder den låsta v0.3-kandidaten.';
-    }catch(e){console.error(e);if(status)status.textContent='Stresstestet avbröts: '+(e?.message||e)}
-    finally{btn.disabled=false}
-  },50)
+  btn.disabled=true;document.getElementById('exportGreenStress').disabled=true;
+  try{
+    const start=historicalBacktestStartDate(fiveYearBacktestData.index);
+    const signals=fiveYearWeeklySignals(fiveYearBacktestData.index).filter(x=>!start||x.date>=start);
+    const cache=await greenStressPrecompute(signals,status);
+    if(status)status.textContent='Kör Vit-only…';const white=await greenStressRunModel('white',signals,cache);
+    if(status)status.textContent='Kör Grön v0.2…';const v02=await greenStressRunModel('v02',signals,cache);
+    if(status)status.textContent='Kör Grön v0.3…';const v03=await greenStressRunModel('v03',signals,cache);
+    if(status)status.textContent='Stresstest: utan covid…';const noCovid=await greenStressRunModel('v03',signals,cache,{exclude:(a,b)=>a>='2020-02-14'&&a<='2020-06-30'});
+    if(status)status.textContent='Stresstest: dubbelt courtage…';const highFee=await greenStressRunModel('v03',signals,cache,{feeRate:FIVE_YEAR_FEE_RATE*2});
+    if(status)status.textContent='Stresstest: en veckas delay…';const delayed=await greenStressRunModel('v03',signals,cache,{delay:1});
+    const greenRows=v03.rows.filter(r=>r.mode==='Grön').slice().sort((a,b)=>b.weekReturn-a.weekReturn);
+    const best5=new Set(greenRows.slice(0,5).map(x=>x.signalDate));
+    if(status)status.textContent='Stresstest: utan fem bästa Grön-veckorna…';
+    const noBest5=await greenStressRunModel('v03',signals,cache,{exclude:(a,b)=>best5.has(a)});
+    // 100 instead of 200: enough for a useful placebo distribution and far lighter on mobile.
+    const placebo=await greenStressPlacebo(signals,cache,v03.greenWeeks,100,status);
+    const oos=v03.rows.filter(r=>r.signalDate>='2023-01-01'&&r.mode==='Grön');
+    greenStressResult={white,v02,v03,noCovid,highFee,delayed,noBest5,placebo,oos};
+    document.getElementById('exportGreenStress').disabled=false;
+    document.getElementById('greenStressSummary').innerHTML=
+      `<div><b>${white.total.toFixed(1)}%</b><span>Vit-only</span></div><div><b>${v02.total.toFixed(1)}%</b><span>v0.2 total</span></div>
+       <div><b>${v03.total.toFixed(1)}%</b><span>v0.3 kandidat</span></div><div><b>${v03.maxDD.toFixed(1)}%</b><span>v0.3 max DD</span></div>
+       <div><b>${noBest5.total.toFixed(1)}%</b><span>utan 5 bästa Grön-veckor</span></div><div><b>${noCovid.total.toFixed(1)}%</b><span>utan covidfönster</span></div>
+       <div><b>${highFee.total.toFixed(1)}%</b><span>dubbelt courtage</span></div><div><b>${delayed.total.toFixed(1)}%</b><span>1 veckas delay</span></div>
+       <div><b>${placebo.median.toFixed(1)}%</b><span>placebo median</span></div>`;
+    const tests=[['Vit-only',white],['Grön v0.2',v02],['Grön v0.3 kandidat',v03],['v0.3 utan covid',noCovid],
+      ['v0.3 utan 5 bästa Grön-veckor',noBest5],['v0.3 dubbelt courtage',highFee],['v0.3 +1 veckas exekveringsdelay',delayed]];
+    document.getElementById('greenStressTable').innerHTML='<thead><tr><th>Test</th><th>Total</th><th>CAGR</th><th>Max DD</th><th>Grön-v</th><th>Affärsben</th><th>Courtage</th></tr></thead><tbody>'+
+      tests.map(([n,x])=>`<tr><td>${n}</td><td>${x.total.toFixed(1)}%</td><td>${x.cagr.toFixed(1)}%</td><td>${x.maxDD.toFixed(1)}%</td><td>${x.greenWeeks}</td><td>${x.trades}</td><td>${Math.round(x.fees).toLocaleString('sv-SE')} kr</td></tr>`).join('')+
+      `<tr><td>Slump-placebo 100 körningar</td><td colspan="6">5:e pct ${placebo.p05.toFixed(1)}% · median ${placebo.median.toFixed(1)}% · 95:e pct ${placebo.p95.toFixed(1)}%</td></tr></tbody>`;
+    if(status)status.textContent='Klar. Beräkningen kördes i små block så sidan ska förbli responsiv.';
+  }catch(e){console.error(e);if(status)status.textContent='Stresstestet avbröts: '+(e?.message||e)}
+  finally{btn.disabled=false}
 }
+
 function exportGreenStressCsv(){
   if(!greenStressResult)return alert('Kör Grön stresstest först.');
   const r=greenStressResult;
@@ -7893,7 +7905,7 @@ function runFiveYearWhiteBacktest(){
   const frozenWeights=normalizedWhiteWeights({distanceMa200:10,ma50Spread:30,ma200Slope1m:30,trendStability5d:30});
   for(let s=0;s<signals.length-1;s++){
     const signal=signals[s];
-    // v21.6.0: samma regel som levande portföljen.
+    // v21.6.1: samma regel som levande portföljen.
     // Fredagens stängningsdata bestämmer urvalet och samma fredags stängningskurs
     // är köp-/säljkursen för portföljen som benämns nästa vecka.
     const executionDate=signal.date;
@@ -8050,7 +8062,7 @@ function runFiveYearWhiteBacktest(){
   };
   fiveYearBacktestResult=result;
   renderFiveYearBacktest(result);
-  // v21.6.0: det vanliga 10-årstestet ska vara KLART här.
+  // v21.6.1: det vanliga 10-årstestet ska vara KLART här.
   // De mycket tunga robusthets-/känslighetstesterna körs separat så att
   // webbläsaren inte ser ut att fastna på slutet efter 100 % hämtning.
   fiveYearDiagnosticsResult=null;
@@ -9775,7 +9787,7 @@ function repairWrongW34V2085(){
   return false
 }
 
-// v21.6.0: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
+// v21.6.1: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
 // bevaras som historik, medan alla nya veckor skapas av den generella veckomotorn.
 
 
@@ -10747,7 +10759,7 @@ try{
     console.info(`Vit 2.1 aktiverad: 10/30/30/30. ${scorePoints} sparade Vit-poäng räknades om.`)
   }else if(weightChanged){persist()}
 }catch(error){console.error('Vit 2.1 viktmigrering misslyckades',error)}
-// v21.6.0: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
+// v21.6.1: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
 // via den generella motorn, aldrig skriva om W31/W32/... som redan finns.
 try{
   const weekendCreated=backfillMissingWeeklyPortfolios();
