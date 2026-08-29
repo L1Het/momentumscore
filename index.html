@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.4.0 – generell veckomotor + courtage från start</h1>
+<h1>MomentumScore v21.4.1 – generell veckomotor + courtage från start</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -689,6 +689,17 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
       <div id="greenV02Status" class="note" style="margin-top:8px">Hämta 10-årshistoriken först.</div>
       <div id="greenV02Summary" class="summary" style="margin-top:10px"></div>
       <div class="tablewrap"><table id="greenV02Table"></table></div>
+      <div class="card" style="margin-top:12px">
+        <h3>Grön v0.2 – ren A/B-audit mot Vit</h3>
+        <p class="note">Två separata portföljer startar samtidigt på 100 000 kr och använder exakt samma fredagar, priser och courtage. <b>Vit-only</b> kör Vit 2.1 Top10-in/Top20-ut hela tiden. <b>Vit+Grön</b> byter till Top10 Beta12 endast när den frysta Grön-signalen är aktiv. Varje signalrad mäter därefter avkastningen från fredagens affär <b>till nästa veckas fredag</b>.</p>
+        <div class="actions">
+          <button id="runGreenV02Audit" class="secondary" disabled>Kör ren Vit vs Grön-audit</button>
+          <button id="exportGreenV02Audit" class="secondary" disabled>Exportera audit CSV</button>
+        </div>
+        <div id="greenV02AuditStatus" class="note" style="margin-top:8px">Hämta 10-årshistoriken först.</div>
+        <div id="greenV02AuditSummary" class="summary" style="margin-top:10px"></div>
+        <div class="tablewrap"><table id="greenV02AuditTable"></table></div>
+      </div>
     </div>
   </div>
 
@@ -3266,7 +3277,7 @@ function buildRollingPortfolio(model,asOfDate=''){
       lastUpdateDate=startDate;
       benchmarkStart=num(snapshot.benchmarkStart);
 
-      // v21.4.0: även de tio första köpen är riktiga affärer och betalar
+      // v21.4.1: även de tio första köpen är riktiga affärer och betalar
       // samma courtage som alla senare köp. Inga specialregler vid start.
       const budgetPerStock=ROLLING_START_CAPITAL/wanted.size;
       let usedCash=0;
@@ -7425,6 +7436,163 @@ function runGreenV02Backtest(){
     finally{btn.disabled=false}
   },50)
 }
+
+let greenV02AuditResult=null;
+
+function greenCloneState(){
+  return {cash:100000,positions:{},fees:0,trades:0,turnover:0}
+}
+function greenTargetWhiteOnly(date,state){
+  return greenWhiteTarget(date,state).target
+}
+function greenTargetSwitch(date,state,useGreen){
+  return useGreen?greenBeta12Ranking(date).slice(0,10):greenWhiteTarget(date,state).target
+}
+function greenExecuteTarget(state,target,date){
+  const targetTickers=target.map(x=>x.ticker);
+  const before={fees:state.fees,trades:state.trades,turnover:state.turnover};
+  if(!Object.keys(state.positions).length&&state.cash>=99999){
+    const usable=target.filter(x=>Number.isFinite(fiveYearPriceOnOrBefore(x.series,date)));
+    const per=state.cash/usable.length;
+    for(const item of usable){
+      const price=fiveYearPriceOnOrBefore(item.series,date);
+      const gross=per/(1+FIVE_YEAR_FEE_RATE),fee=gross*FIVE_YEAR_FEE_RATE;
+      state.positions[item.ticker]={shares:gross/price,costBasis:gross+fee,buyDate:date};
+      state.cash-=gross+fee;state.fees+=fee;state.turnover+=gross;state.trades++
+    }
+  }else{
+    const outgoing=Object.keys(state.positions).filter(t=>!targetTickers.includes(t));
+    let proceeds=0;
+    for(const ticker of outgoing){
+      const item=fiveYearBacktestData.stockMap[ticker],pos=state.positions[ticker];
+      const price=item?fiveYearPriceOnOrBefore(item.series,date):NaN;
+      if(!Number.isFinite(price))continue;
+      const gross=pos.shares*price,fee=gross*FIVE_YEAR_FEE_RATE;
+      proceeds+=gross-fee;state.fees+=fee;state.turnover+=gross;state.trades++;delete state.positions[ticker]
+    }
+    state.cash+=proceeds;
+    const incoming=target.filter(x=>!state.positions[x.ticker]&&Number.isFinite(fiveYearPriceOnOrBefore(x.series,date)));
+    if(incoming.length&&state.cash>0){
+      const alloc=state.cash/incoming.length;
+      for(const item of incoming){
+        const price=fiveYearPriceOnOrBefore(item.series,date);
+        const gross=alloc/(1+FIVE_YEAR_FEE_RATE),fee=gross*FIVE_YEAR_FEE_RATE;
+        state.positions[item.ticker]={shares:gross/price,costBasis:gross+fee,buyDate:date};
+        state.cash-=gross+fee;state.fees+=fee;state.turnover+=gross;state.trades++
+      }
+    }
+  }
+  return {
+    trades:state.trades-before.trades,
+    fees:state.fees-before.fees,
+    turnover:state.turnover-before.turnover
+  }
+}
+function greenAuditMetrics(rows,key,state){
+  if(!rows.length)return {};
+  const first=rows[0][key+'StartValue'],last=rows[rows.length-1][key+'EndValue'];
+  const years=Math.max(1/52,rows.length/52);
+  let peak=first,maxDD=0;
+  for(const r of rows){
+    const v=r[key+'EndValue'];peak=Math.max(peak,v);maxDD=Math.min(maxDD,(v/peak-1)*100)
+  }
+  const weekly=rows.map(r=>r[key+'WeekReturn']/100).filter(Number.isFinite);
+  const avg=greenMean(weekly),sd=greenStd(weekly);
+  return {
+    total:(last/100000-1)*100,
+    cagr:(Math.pow(last/100000,1/years)-1)*100,
+    maxDD,
+    volatility:Number.isFinite(sd)?sd*Math.sqrt(52)*100:NaN,
+    sharpe:Number.isFinite(sd)&&sd>0?avg/sd*Math.sqrt(52):NaN,
+    fees:state.fees,trades:state.trades,turnover:state.turnover
+  }
+}
+function runGreenV02Audit(){
+  if(!fiveYearBacktestData?.index?.length||!fiveYearBacktestData?.stocks?.length)return alert('Hämta 10-årshistoriken först.');
+  const btn=document.getElementById('runGreenV02Audit'),status=document.getElementById('greenV02AuditStatus');
+  btn.disabled=true;if(status)status.textContent='Kör två separata portföljer vecka för vecka…';
+  setTimeout(()=>{
+    try{
+      const start=historicalBacktestStartDate(fiveYearBacktestData.index);
+      const signals=fiveYearWeeklySignals(fiveYearBacktestData.index).filter(x=>!start||x.date>=start);
+      const white=greenCloneState(),hybrid=greenCloneState(),rows=[];
+      for(let s=0;s<signals.length-1;s++){
+        const signal=signals[s],next=signals[s+1];
+        const pGreen=greenV02Probability(signal.date);
+        const useGreen=Number.isFinite(pGreen)&&pGreen>=GREEN_V02.threshold;
+
+        const whiteTarget=greenTargetWhiteOnly(signal.date,white);
+        const hybridTarget=greenTargetSwitch(signal.date,hybrid,useGreen);
+        if(whiteTarget.length<5||hybridTarget.length<5)continue;
+
+        const whiteExec=greenExecuteTarget(white,whiteTarget,signal.date);
+        const hybridExec=greenExecuteTarget(hybrid,hybridTarget,signal.date);
+
+        // Value immediately after Friday execution and at the next weekly Friday.
+        const whiteStart=fiveYearPortfolioValue(white,signal.date);
+        const hybridStart=fiveYearPortfolioValue(hybrid,signal.date);
+        const whiteEnd=fiveYearPortfolioValue(white,next.date);
+        const hybridEnd=fiveYearPortfolioValue(hybrid,next.date);
+        const wr=whiteStart>0?(whiteEnd/whiteStart-1)*100:NaN;
+        const hr=hybridStart>0?(hybridEnd/hybridStart-1)*100:NaN;
+        const omx=greenForwardWeekReturn(fiveYearBacktestData.index,signal.date,next.date);
+
+        rows.push({
+          week:signal.weekKey,signalDate:signal.date,nextWeekEnd:next.date,
+          mode:useGreen?'Grön':'Vit',pGreen,
+          whiteStartValue:whiteStart,whiteEndValue:whiteEnd,whiteWeekReturn:wr,
+          hybridStartValue:hybridStart,hybridEndValue:hybridEnd,hybridWeekReturn:hr,
+          greenIncrement:Number.isFinite(hr)&&Number.isFinite(wr)?hr-wr:NaN,
+          nextOmxReturn:omx,
+          whiteTrades:whiteExec.trades,hybridTrades:hybridExec.trades,
+          whiteFees:whiteExec.fees,hybridFees:hybridExec.fees,
+          whiteHoldings:Object.keys(white.positions).join(', '),
+          hybridHoldings:Object.keys(hybrid.positions).join(', ')
+        })
+      }
+      const wm=greenAuditMetrics(rows,'white',white),hm=greenAuditMetrics(rows,'hybrid',hybrid);
+      const greenRows=rows.filter(r=>r.mode==='Grön'),vitRows=rows.filter(r=>r.mode==='Vit');
+      const avgGreenIncrement=greenMean(greenRows.map(r=>r.greenIncrement));
+      const hitGreen=greenRows.length?greenRows.filter(r=>r.greenIncrement>0).length/greenRows.length*100:NaN;
+      const greenOmx2=greenRows.length?greenRows.filter(r=>r.nextOmxReturn>=2).length/greenRows.length*100:NaN;
+      const baseOmx2=rows.length?rows.filter(r=>r.nextOmxReturn>=2).length/rows.length*100:NaN;
+      const oos=rows.filter(r=>r.signalDate>='2023-01-01');
+      const oosGreen=oos.filter(r=>r.mode==='Grön');
+      const oosIncrement=greenMean(oosGreen.map(r=>r.greenIncrement));
+      greenV02AuditResult={rows,whiteMetrics:wm,hybridMetrics:hm,greenWeeks:greenRows.length,
+        avgGreenIncrement,hitGreen,greenOmx2,baseOmx2,oosWeeks:oos.length,oosGreenWeeks:oosGreen.length,oosIncrement};
+
+      const sum=document.getElementById('greenV02AuditSummary');
+      sum.innerHTML=`<div><b>${wm.total.toFixed(1)}%</b><span>Vit-only total</span></div>
+        <div><b>${hm.total.toFixed(1)}%</b><span>Vit+Grön total</span></div>
+        <div><b>${(hm.total-wm.total).toFixed(1)} p.e.</b><span>skillnad total</span></div>
+        <div><b>${wm.maxDD.toFixed(1)}%</b><span>Vit max DD</span></div>
+        <div><b>${hm.maxDD.toFixed(1)}%</b><span>Hybrid max DD</span></div>
+        <div><b>${greenRows.length}/${rows.length}</b><span>Grön-signaler</span></div>
+        <div><b>${Number.isFinite(avgGreenIncrement)?avgGreenIncrement.toFixed(2)+'%':'–'}</b><span>Grön vs Vit / signalvecka</span></div>
+        <div><b>${Number.isFinite(oosIncrement)?oosIncrement.toFixed(2)+'%':'–'}</b><span>Grön vs Vit 2023–26</span></div>
+        <div><b>${wm.trades}</b><span>Vit affärsben</span></div>
+        <div><b>${hm.trades}</b><span>Hybrid affärsben</span></div>`;
+
+      const recent=rows.slice(-20).reverse();
+      document.getElementById('greenV02AuditTable').innerHTML='<thead><tr><th>Signalvecka</th><th>Läge</th><th>P</th><th>Vit nästa vecka</th><th>Hybrid nästa vecka</th><th>Grön − Vit</th><th>OMX nästa vecka</th><th>Affärer V/H</th></tr></thead><tbody>'+
+        recent.map(r=>`<tr><td>${r.week}</td><td>${r.mode}</td><td>${(r.pGreen*100).toFixed(1)}%</td><td>${r.whiteWeekReturn.toFixed(2)}%</td><td>${r.hybridWeekReturn.toFixed(2)}%</td><td>${r.greenIncrement.toFixed(2)}%</td><td>${r.nextOmxReturn.toFixed(2)}%</td><td>${r.whiteTrades}/${r.hybridTrades}</td></tr>`).join('')+'</tbody>';
+      document.getElementById('exportGreenV02Audit').disabled=false;
+      if(status)status.textContent=`Klar. ${greenRows.length} Grön-signaler. ≥+2 % OMX inträffade ${greenOmx2.toFixed(1)} % efter Grön mot ${baseOmx2.toFixed(1)} % totalt. OOS 2023–26: ${oosGreen.length} Grön-signaler.`;
+    }catch(e){console.error(e);if(status)status.textContent='A/B-auditen avbröts: '+(e?.message||e)}
+    finally{btn.disabled=false}
+  },50)
+}
+function exportGreenV02AuditCsv(){
+  const r=greenV02AuditResult;
+  if(!r?.rows?.length)return alert('Kör den rena Vit vs Grön-auditen först.');
+  const cols=['week','signalDate','nextWeekEnd','mode','pGreen','whiteStartValue','whiteEndValue','whiteWeekReturn','hybridStartValue','hybridEndValue','hybridWeekReturn','greenIncrement','nextOmxReturn','whiteTrades','hybridTrades','whiteFees','hybridFees','whiteHoldings','hybridHoldings'];
+  const esc=v=>{const s=String(v??'');return /[;"\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};
+  const lines=[cols.join(';'),...r.rows.map(x=>cols.map(c=>esc(x[c])).join(';'))];
+  const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='MomentumScore_Gron_v0_2_AB_audit_'+new Date().toISOString().slice(0,10)+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)
+}
+
 function exportGreenV02Csv(){
   if(!greenV02Result?.weeks?.length)return alert('Kör Grön v0.2 först.');
   const cols=['week','date','mode','pGreen','tradesThisWeek','value','indexValue','nextOmxReturn','holdings'];
@@ -7448,7 +7616,7 @@ function runFiveYearWhiteBacktest(){
   const frozenWeights=normalizedWhiteWeights({distanceMa200:10,ma50Spread:30,ma200Slope1m:30,trendStability5d:30});
   for(let s=0;s<signals.length-1;s++){
     const signal=signals[s];
-    // v21.4.0: samma regel som levande portföljen.
+    // v21.4.1: samma regel som levande portföljen.
     // Fredagens stängningsdata bestämmer urvalet och samma fredags stängningskurs
     // är köp-/säljkursen för portföljen som benämns nästa vecka.
     const executionDate=signal.date;
@@ -7605,7 +7773,7 @@ function runFiveYearWhiteBacktest(){
   };
   fiveYearBacktestResult=result;
   renderFiveYearBacktest(result);
-  // v21.4.0: det vanliga 10-årstestet ska vara KLART här.
+  // v21.4.1: det vanliga 10-årstestet ska vara KLART här.
   // De mycket tunga robusthets-/känslighetstesterna körs separat så att
   // webbläsaren inte ser ut att fastna på slutet efter 100 % hämtning.
   fiveYearDiagnosticsResult=null;
@@ -8197,6 +8365,7 @@ async function fetchAndRunFiveYearBacktest(){
   const greenBtn=document.getElementById('runGreenResearchLab'),greenExport=document.getElementById('exportGreenResearchLab');
   if(greenBtn)greenBtn.disabled=true;if(greenExport)greenExport.disabled=true;
   const greenV02Btn=document.getElementById('runGreenV02'),greenV02Export=document.getElementById('exportGreenV02');if(greenV02Btn)greenV02Btn.disabled=true;if(greenV02Export)greenV02Export.disabled=true;greenV02Result=null;
+  const greenAuditBtn=document.getElementById('runGreenV02Audit'),greenAuditExport=document.getElementById('exportGreenV02Audit');if(greenAuditBtn)greenAuditBtn.disabled=true;if(greenAuditExport)greenAuditExport.disabled=true;greenV02AuditResult=null;
   document.getElementById('fiveYearBacktestSummary').innerHTML='';
   document.getElementById('fiveYearBacktestVerdict').innerHTML='';
   document.getElementById('fiveYearBacktestChart').classList.add('hidden');
@@ -8225,7 +8394,7 @@ async function fetchAndRunFiveYearBacktest(){
   }
   fiveYearSetProgress(items.length,items.length,`Hämtning klar: ${stocks.length} bolag + OMXSPI. Kör historiskt test…`);
   rerun.disabled=false;
-  if(greenBtn)greenBtn.disabled=false;if(greenV02Btn)greenV02Btn.disabled=false;
+  if(greenBtn)greenBtn.disabled=false;if(greenV02Btn)greenV02Btn.disabled=false;if(greenAuditBtn)greenAuditBtn.disabled=false;
   const gvStatus=document.getElementById('greenV02Status');if(gvStatus)gvStatus.textContent='10-årsdata klar. Grön v0.2 kan köras.';
   const greenStatus=document.getElementById('greenResearchStatus');if(greenStatus)greenStatus.textContent='10-årsdata klar. Grön-labbet kan byggas.';
   runFiveYearWhiteBacktest();
@@ -9327,7 +9496,7 @@ function repairWrongW34V2085(){
   return false
 }
 
-// v21.4.0: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
+// v21.4.1: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
 // bevaras som historik, medan alla nya veckor skapas av den generella veckomotorn.
 
 
@@ -10265,6 +10434,8 @@ document.getElementById('exportLaboratoryCsv').onclick=exportLaboratoryCsv;
 document.getElementById('fetchFiveYearBacktest').onclick=fetchAndRunFiveYearBacktest;
 document.getElementById('runGreenResearchLab').onclick=buildGreenResearchLab;
 document.getElementById('runGreenV02').onclick=runGreenV02Backtest;
+document.getElementById('runGreenV02Audit').onclick=runGreenV02Audit;
+document.getElementById('exportGreenV02Audit').onclick=exportGreenV02AuditCsv;
 document.getElementById('exportGreenV02').onclick=exportGreenV02Csv;
 document.getElementById('exportGreenResearchLab').onclick=exportGreenResearchCsv;
 document.getElementById('rerunFiveYearBacktest').onclick=runFiveYearWhiteBacktest;
@@ -10293,7 +10464,7 @@ try{
     console.info(`Vit 2.1 aktiverad: 10/30/30/30. ${scorePoints} sparade Vit-poäng räknades om.`)
   }else if(weightChanged){persist()}
 }catch(error){console.error('Vit 2.1 viktmigrering misslyckades',error)}
-// v21.4.0: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
+// v21.4.1: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
 // via den generella motorn, aldrig skriva om W31/W32/... som redan finns.
 try{
   const weekendCreated=backfillMissingWeeklyPortfolios();
