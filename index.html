@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.13.0 – fem modeller + Grön poäng</h1>
+<h1>MomentumScore v21.14.0 – Grön synlig + fem frysta portföljer</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -312,6 +312,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
         <option value="scoreAverage" selected>🟣 Snittpoäng</option>
         <option value="scoreBlue">🔵 Blå poäng</option>
         <option value="scoreWhite">⚪ Vit poäng</option>
+        <option value="scoreGreen">🟢 Grön poäng</option>
         <option value="deltaBlue">Δ 🔵 Blå dag</option>
         <option value="deltaWhite">Δ ⚪ Vit dag</option>
         <option value="deltaAverage">Δ 🟣 Snitt dag</option>
@@ -326,7 +327,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
     </div>
   </div>
   <div class="card tablewrap"><table id="dashboardTable" class="dashboard-table"></table></div>
-  <p class="note">Klick på ett bolag öppnar alltid samma fullständiga bolagsvy, oavsett flik. Äldre ofullständiga historikposter hanteras utan att bolagsvyn kraschar. Den dagliga översikten kan sorteras på Blå, Vit, Snitt, respektive dagsförändring, kursutveckling, RSI eller bolagsnamn. Välj Högst/bäst eller Lägst/sämst överst. Klickar du på samma kolumnrubrik igen växlar ordningen automatiskt. Saknade värden placeras alltid sist.</p>
+  <p class="note">Klick på ett bolag öppnar alltid samma fullständiga bolagsvy, oavsett flik. Äldre ofullständiga historikposter hanteras utan att bolagsvyn kraschar. Den dagliga översikten kan sorteras på Blå, Vit, Grön, Snitt, respektive dagsförändring, kursutveckling, RSI eller bolagsnamn. Välj Högst/bäst eller Lägst/sämst överst. Klickar du på samma kolumnrubrik igen växlar ordningen automatiskt. Saknade värden placeras alltid sist.</p>
 </section>
 
 <section id="input" class="panel">
@@ -395,7 +396,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </div>
 <div id="scoreAnalysisControls" class="card hidden">
   <div class="searchbar">
-    <div><label>Poängmodell</label><select id="scoreAnalysisModel"><option value="blue" selected>🔵 Blå</option><option value="white">⚪ Vit</option></select></div>
+    <div><label>Poängmodell</label><select id="scoreAnalysisModel"><option value="blue" selected>🔵 Blå</option><option value="white">⚪ Vit</option><option value="green">🟢 Grön</option></select></div>
     <div><label>Poängfaktor</label><select id="scoreFilterFactor"></select></div>
     <div><label>Min poäng</label><input id="scoreFilterMin" inputmode="decimal" placeholder="Ingen min"></div>
     <div><label>Max poäng</label><input id="scoreFilterMax" inputmode="decimal" placeholder="Ingen max"></div>
@@ -419,7 +420,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 
 <section id="top" class="panel">
 <div class="card"><div class="searchbar">
-<div><label>Sortera och visa status efter</label><select id="topModel"><option value="blue">🔵 Blå</option><option value="white">⚪ Vit</option><option value="average" selected>🟣 Snitt</option></select></div>
+<div><label>Sortera och visa status efter</label><select id="topModel"><option value="blue">🔵 Blå</option><option value="white">⚪ Vit</option><option value="green">🟢 Grön</option><option value="average" selected>🟣 Snitt</option></select></div>
 <div><label>Visa</label>
 <select id="topFilter">
 <option value="qualified">Endast kvalificerade</option>
@@ -2546,6 +2547,7 @@ function dailyPriceText(v){
 function dashboardSortModel(sort,fallbackModel){
   if(sort==='scoreBlue'||sort==='deltaBlue')return 'blue';
   if(sort==='scoreWhite'||sort==='deltaWhite')return 'white';
+  if(sort==='scoreGreen')return 'green';
   if(sort==='scoreAverage'||sort==='deltaAverage')return 'average';
   return fallbackModel
 }
@@ -2560,9 +2562,9 @@ function renderDashboard(){
   const statusModel=dashboardSortModel(sort,selectedModel);
 
   let list=rows.map((r,i)=>{
-    const blue=calc(r),white=whiteCalc(r),average=averageScoreFromResults(blue,white);
+    const blue=calc(r),white=whiteCalc(r),average=averageScoreFromResults(blue,white),green=greenScoreForRow(r);
     const s=selectedModelValues(r,statusModel),m=developmentMetrics(r);
-    return{r,i,s,h:holdings(r),m,blue,white,average,deltas:dailyScoreDeltas(r,blue,white,average)}
+    return{r,i,s,h:holdings(r),m,blue,white,green,average,deltas:dailyScoreDeltas(r,blue,white,average)}
   });
 
   if(q)list=list.filter(x=>`${x.r.ticker||''} ${x.r.company||''}`.toLowerCase().includes(q));
@@ -2574,6 +2576,7 @@ function renderDashboard(){
   const numericValue=(x,key)=>{
     if(key==='scoreBlue')return x.blue.total;
     if(key==='scoreWhite')return x.white.total;
+    if(key==='scoreGreen')return x.green;
     if(key==='scoreAverage')return x.average;
     if(key==='deltaBlue')return x.deltas.blue;
     if(key==='deltaWhite')return x.deltas.white;
@@ -2598,7 +2601,7 @@ function renderDashboard(){
   });
 
   const settings=loadMarketSettings();
-  const statusName=statusModel==='blue'?'Blå':statusModel==='white'?'Vit':'Snitt';
+  const statusName=statusModel==='blue'?'Blå':statusModel==='white'?'Vit':statusModel==='green'?'Grön':'Snitt';
   const orderName=direction==='asc'?'Sämst/lägst överst':'Bäst/högst överst';
   document.getElementById('dashboardSummary').innerHTML=[
     ['Visade bolag',list.length],
@@ -2619,6 +2622,7 @@ function renderDashboard(){
      <th class="sortable-head${active('deltaBlue')}" data-dashboard-sort="deltaBlue">Δ🔵 dag</th>
      <th class="sortable-head${active('scoreWhite')}" data-dashboard-sort="scoreWhite">⚪ Vit</th>
      <th class="sortable-head${active('deltaWhite')}" data-dashboard-sort="deltaWhite">Δ⚪ dag</th>
+     <th class="sortable-head${active('scoreGreen')}" data-dashboard-sort="scoreGreen">🟢 Grön</th>
      <th class="sortable-head${active('scoreAverage')}" data-dashboard-sort="scoreAverage">🟣 Snitt</th>
      <th class="sortable-head${active('deltaAverage')}" data-dashboard-sort="deltaAverage">Δ🟣 dag</th>
      <th>Status</th><th>Kurs</th>
@@ -2634,6 +2638,7 @@ function renderDashboard(){
     <td class="${classByValue(x.deltas.blue)}"><b>${dailyDeltaText(x.deltas.blue)}</b></td>
     <td class="model-white">${scoreLinkHtml(x.i,x.white.total,'white',x.white.dataReady,true)}</td>
     <td class="${classByValue(x.deltas.white)}"><b>${dailyDeltaText(x.deltas.white)}</b></td>
+    <td>${greenScoreText(x.green)}</td>
     <td>${scoreLinkHtml(x.i,x.average,'average',x.white.dataReady,true)}</td>
     <td class="${classByValue(x.deltas.average)}"><b>${dailyDeltaText(x.deltas.average)}</b></td>
     <td class="${scoreStatusClass(x.s.score,x.s.dataReady)}">${x.s.rating}</td>
@@ -3300,7 +3305,7 @@ function buildRollingPortfolio(model,asOfDate=''){
       lastUpdateDate=startDate;
       benchmarkStart=num(snapshot.benchmarkStart);
 
-      // v21.13.0: även de tio första köpen är riktiga affärer och betalar
+      // v21.14.0: även de tio första köpen är riktiga affärer och betalar
       // samma courtage som alla senare köp. Inga specialregler vid start.
       const budgetPerStock=ROLLING_START_CAPITAL/wanted.size;
       let usedCash=0;
@@ -7919,7 +7924,7 @@ function runFiveYearWhiteBacktest(){
   const frozenWeights=normalizedWhiteWeights({distanceMa200:10,ma50Spread:30,ma200Slope1m:30,trendStability5d:30});
   for(let s=0;s<signals.length-1;s++){
     const signal=signals[s];
-    // v21.13.0: samma regel som levande portföljen.
+    // v21.14.0: samma regel som levande portföljen.
     // Fredagens stängningsdata bestämmer urvalet och samma fredags stängningskurs
     // är köp-/säljkursen för portföljen som benämns nästa vecka.
     const executionDate=signal.date;
@@ -8076,7 +8081,7 @@ function runFiveYearWhiteBacktest(){
   };
   fiveYearBacktestResult=result;
   renderFiveYearBacktest(result);
-  // v21.13.0: det vanliga 10-årstestet ska vara KLART här.
+  // v21.14.0: det vanliga 10-årstestet ska vara KLART här.
   // De mycket tunga robusthets-/känslighetstesterna körs separat så att
   // webbläsaren inte ser ut att fastna på slutet efter 100 % hämtning.
   fiveYearDiagnosticsResult=null;
@@ -9512,8 +9517,9 @@ function buildCanonicalHistoricalWeeklySnapshot(friday,previousSnapshot=null){
   const benchmarkMarket=settings.benchmarkMarket||'SE';
 
   const members=fiveModelMembersAtFriday(cutoffDate,previousSnapshot);
-  if(WEEKLY_MODELS.some(model=>(members[model]||[]).length!==10)){
-    console.warn('Femmodellsmotorn kunde inte låsa veckan',cutoffDate,
+  const coreModels=['blue','white','average'];
+  if(coreModels.some(model=>(members[model]||[]).length!==10)){
+    console.warn('Kärnportföljerna kunde inte låsas',cutoffDate,
       Object.fromEntries(WEEKLY_MODELS.map(model=>[model,(members[model]||[]).length])));
     return null
   }
@@ -9545,8 +9551,8 @@ function buildCanonicalHistoricalWeeklySnapshot(friday,previousSnapshot=null){
       blue:{name:'Blå',members:decorateCoreWeeklyMembers(members.blue,'blue',cutoffDate)},
       white:{name:'Vit',members:decorateCoreWeeklyMembers(members.white,'white',cutoffDate)},
       average:{name:'Snitt',members:decorateCoreWeeklyMembers(members.average,'average',cutoffDate)},
-      green:{name:'Grön',members:decorateGreenMembers(members.green,cutoffDate),modelVersion:GREEN_PRODUCTION_VERSION},
-      hybrid:{name:'Hybrid',members:decorateHybridMembers(members.hybrid,cutoffDate),modelVersion:'hybrid-v01-green-v03'}
+      ...(members.green.length===10?{green:{name:'Grön',members:decorateGreenMembers(members.green,cutoffDate),modelVersion:GREEN_PRODUCTION_VERSION}}:{}),
+      ...(members.hybrid.length===10?{hybrid:{name:'Hybrid',members:decorateHybridMembers(members.hybrid,cutoffDate),modelVersion:'hybrid-v01-green-v03'}}:{})
     }
   }
 }
@@ -9863,7 +9869,7 @@ function repairWrongW34V2085(){
   return false
 }
 
-// v21.13.0: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
+// v21.14.0: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
 // bevaras som historik, medan alla nya veckor skapas av den generella veckomotorn.
 
 
@@ -10135,7 +10141,18 @@ function ensureWeeklyPortfolioSnapshot(){
   return backfilled||migrated
 }
 function weeklySnapshotLabel(s){return `${s.weekKey} · ${dateFmt(s.savedAt)}`}
+let extendedWeeklyRepairRunning=false;
+function ensureExtendedWeeklyModelsNow(){
+  if(extendedWeeklyRepairRunning)return false;
+  extendedWeeklyRepairRunning=true;
+  try{return migrateExtendedModelsToCanonicalEngine()}
+  catch(error){console.error('Grön/Hybrid-integritetskontroll misslyckades',error);return false}
+  finally{extendedWeeklyRepairRunning=false}
+}
 function renderWeeklyPortfolios(){
+  // Visning är också en integritetsgräns: importerade eller äldre veckor får
+  // aldrig visas utan Grön/Hybrid om de kan rekonstrueras från fredagsdata.
+  ensureExtendedWeeklyModelsNow();
   const benchmark=document.getElementById('weeklyBenchmarkMarket');
   const auto=document.getElementById('weeklyAutoSave');
   if(!benchmark||!auto)return;
@@ -10549,8 +10566,9 @@ async function ensureWeeklyFreshnessV211(){
   try{
     // Först: skapa allt som redan kan skapas från befintlig historik.
     let created=backfillMissingWeeklyPortfolios();
+    const repaired=ensureExtendedWeeklyModelsNow();
 
-    if(!weeklyTargetIsMissing())return created>0;
+    if(!weeklyTargetIsMissing())return created>0||repaired;
 
     // Om fredagens data ännu inte hämtats efter cutoff får "en gång per dygn"
     // INTE stoppa veckomotorn. Tvinga en säker marknadsuppdatering.
@@ -10561,7 +10579,7 @@ async function ensureWeeklyFreshnessV211(){
       created+=backfillMissingWeeklyPortfolios()
     }
 
-    return created>0
+    return created>0||ensureExtendedWeeklyModelsNow()
   }catch(error){
     console.error('Veckofärskheten kunde inte säkerställas',error);
     return false
@@ -10766,6 +10784,7 @@ async function importSelectedFile(file){
   weeklyPortfolios=importedWeekly;
   localStorage.removeItem(WHITE2_WEEKLY_REBUILD_KEY);
   const rebuiltWhiteWeeks=rebuildWhite2WeeklyPortfolios(true);
+  const repairedExtendedWeeks=ensureExtendedWeeklyModelsNow();
   const uiErrors=[];
   for(const [name,fn] of [
     ['Poäng/översikt',()=>render()],
@@ -10776,7 +10795,7 @@ async function importSelectedFile(file){
   ]){
     try{fn()}catch(e){uiErrors.push(name+': '+e.message);console.error(name,e)}
   }
-  setImportStatus(`Import klar: ${rows.length} bolag. ${Object.keys(benchmarkHistories).length?'Jämförelseindex följde med.':'Jämförelseindex saknas – kör kursuppdatering för full uppföljning.'} ${weeklyPortfolios.length?weeklyPortfolios.length+' veckoportföljer återställdes. ':''}${rebuiltWhiteWeeks?rebuiltWhiteWeeks+' veckor räknades om med Vit 2.1. ':''}${result.skipped.length?result.skipped.length+' dubbletter hoppades över. ':''}${uiErrors.length?'Visningsvarning: '+uiErrors.join(' · '):''}`,uiErrors.length>0);
+  setImportStatus(`Import klar: ${rows.length} bolag. ${Object.keys(benchmarkHistories).length?'Jämförelseindex följde med.':'Jämförelseindex saknas – kör kursuppdatering för full uppföljning.'} ${weeklyPortfolios.length?weeklyPortfolios.length+' veckoportföljer återställdes. ':''}${rebuiltWhiteWeeks?rebuiltWhiteWeeks+' veckor räknades om med Vit 2.1. ':''}${repairedExtendedWeeks?'Grön/Hybrid kontrollerades och reparerades. ':''}${result.skipped.length?result.skipped.length+' dubbletter hoppades över. ':''}${uiErrors.length?'Visningsvarning: '+uiErrors.join(' · '):''}`,uiErrors.length>0);
   toast(`Import klar: ${rows.length} bolag`);
 }
 document.getElementById('saveWeeklyNow').onclick=()=>createWeeklySnapshot(false,false);
@@ -10866,7 +10885,7 @@ try{
     console.info(`Vit 2.1 aktiverad: 10/30/30/30. ${scorePoints} sparade Vit-poäng räknades om.`)
   }else if(weightChanged){persist()}
 }catch(error){console.error('Vit 2.1 viktmigrering misslyckades',error)}
-// v21.13.0: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
+// v21.14.0: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
 // via den generella motorn, aldrig skriva om W31/W32/... som redan finns.
 try{
   const weekendCreated=backfillMissingWeeklyPortfolios();
@@ -10932,6 +10951,9 @@ window.addEventListener('unhandledrejection',event=>{
   console.error('MomentumScore asynkront fel',event.reason);
   try{toast('Ett asynkront fel fångades. Se konsolen för exakt felkälla.')}catch{}
 });
+// Kör femmodellsintegriteten direkt vid sidstart; den ska inte kräva en ny kursuppdatering.
+try{ensureExtendedWeeklyModelsNow()}catch(error){console.error('Initial Grön/Hybrid-kontroll misslyckades',error)}
+
 const repairedHistoryCount=rows.reduce((sum,row)=>sum+(row.historyRepairRemoved||0),0);
 if(repairedHistoryCount){
   persist();
