@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.14.0 – Grön synlig + fem frysta portföljer</h1>
+<h1>MomentumScore v21.15.0 – Grön dagsändring + korrekt 1 dag %</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -313,6 +313,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
         <option value="scoreBlue">🔵 Blå poäng</option>
         <option value="scoreWhite">⚪ Vit poäng</option>
         <option value="scoreGreen">🟢 Grön poäng</option>
+        <option value="deltaGreen">Δ🟢 dag</option>
         <option value="deltaBlue">Δ 🔵 Blå dag</option>
         <option value="deltaWhite">Δ ⚪ Vit dag</option>
         <option value="deltaAverage">Δ 🟣 Snitt dag</option>
@@ -2519,17 +2520,37 @@ function previousTradingDayRecalculatedScores(r){
   }
 }
 
+function currentTradingDayKey(row){
+  return String(row?.marketUpdatedAt||row?.technicalSourceDate||row?.marketSourceDate||row?.priceDate||'').slice(0,10)
+}
+function previousTradingClose(row,currentDate){
+  const hist=(Array.isArray(row?.priceHistory)?row.priceHistory:[])
+    .map(p=>({date:String(p?.date||'').slice(0,10),close:num(p?.close)}))
+    .filter(p=>p.date&&p.date<currentDate&&Number.isFinite(p.close)&&p.close>0)
+    .sort((a,b)=>a.date.localeCompare(b.date));
+  return hist.length?hist[hist.length-1]:null
+}
+function todayPriceChangePct(row){
+  const currentDate=currentTradingDayKey(row),current=num(row?.price);
+  if(!currentDate||!Number.isFinite(current)||current<=0)return NaN;
+  const prev=previousTradingClose(row,currentDate);
+  return prev?(current/prev.close-1)*100:NaN
+}
 function dailyScoreDeltas(r,blue,white,average){
   const prev=previousTradingDayRecalculatedScores(r);
-  if(!prev)return{blue:NaN,white:NaN,average:NaN};
-
+  if(!prev)return{blue:NaN,white:NaN,average:NaN,green:NaN};
+  let green=NaN;
+  try{
+    const nowGreen=greenScoreForRow(r);
+    const prevMap=new Map(greenProductionRank(prev.date).map(x=>[String(x.row?.ticker||''),x.greenScore*100]));
+    const prevGreen=prevMap.get(String(r?.ticker||''));
+    if(Number.isFinite(nowGreen)&&Number.isFinite(prevGreen))green=nowGreen-prevGreen
+  }catch(error){console.warn('Grön dagsdelta kunde inte räknas',r?.ticker,error)}
   return{
-    blue:Number.isFinite(prev.blue?.total)&&Number.isFinite(blue.total)
-      ?blue.total-prev.blue.total:NaN,
-    white:prev.white?.dataReady&&white.dataReady&&Number.isFinite(prev.white.total)&&Number.isFinite(white.total)
-      ?white.total-prev.white.total:NaN,
-    average:Number.isFinite(prev.average)&&Number.isFinite(average)
-      ?average-prev.average:NaN
+    blue:Number.isFinite(prev.blue?.total)&&Number.isFinite(blue.total)?blue.total-prev.blue.total:NaN,
+    white:prev.white?.dataReady&&white.dataReady&&Number.isFinite(prev.white.total)&&Number.isFinite(white.total)?white.total-prev.white.total:NaN,
+    average:Number.isFinite(prev.average)&&Number.isFinite(average)?average-prev.average:NaN,
+    green
   }
 }
 
@@ -2547,7 +2568,7 @@ function dailyPriceText(v){
 function dashboardSortModel(sort,fallbackModel){
   if(sort==='scoreBlue'||sort==='deltaBlue')return 'blue';
   if(sort==='scoreWhite'||sort==='deltaWhite')return 'white';
-  if(sort==='scoreGreen')return 'green';
+  if(sort==='scoreGreen'||sort==='deltaGreen')return 'green';
   if(sort==='scoreAverage'||sort==='deltaAverage')return 'average';
   return fallbackModel
 }
@@ -2577,6 +2598,7 @@ function renderDashboard(){
     if(key==='scoreBlue')return x.blue.total;
     if(key==='scoreWhite')return x.white.total;
     if(key==='scoreGreen')return x.green;
+    if(key==='deltaGreen')return x.deltas.green;
     if(key==='scoreAverage')return x.average;
     if(key==='deltaBlue')return x.deltas.blue;
     if(key==='deltaWhite')return x.deltas.white;
@@ -2623,6 +2645,7 @@ function renderDashboard(){
      <th class="sortable-head${active('scoreWhite')}" data-dashboard-sort="scoreWhite">⚪ Vit</th>
      <th class="sortable-head${active('deltaWhite')}" data-dashboard-sort="deltaWhite">Δ⚪ dag</th>
      <th class="sortable-head${active('scoreGreen')}" data-dashboard-sort="scoreGreen">🟢 Grön</th>
+     <th class="sortable-head${active('deltaGreen')}" data-dashboard-sort="deltaGreen">Δ🟢 dag</th>
      <th class="sortable-head${active('scoreAverage')}" data-dashboard-sort="scoreAverage">🟣 Snitt</th>
      <th class="sortable-head${active('deltaAverage')}" data-dashboard-sort="deltaAverage">Δ🟣 dag</th>
      <th>Status</th><th>Kurs</th>
@@ -2638,7 +2661,8 @@ function renderDashboard(){
     <td class="${classByValue(x.deltas.blue)}"><b>${dailyDeltaText(x.deltas.blue)}</b></td>
     <td class="model-white">${scoreLinkHtml(x.i,x.white.total,'white',x.white.dataReady,true)}</td>
     <td class="${classByValue(x.deltas.white)}"><b>${dailyDeltaText(x.deltas.white)}</b></td>
-    <td>${greenScoreText(x.green)}</td>
+    <td>${scoreLinkHtml(x.i,x.green,'green',Number.isFinite(x.green),true)}</td>
+    <td class="${classByValue(x.deltas.green)}"><b>${dailyDeltaText(x.deltas.green)}</b></td>
     <td>${scoreLinkHtml(x.i,x.average,'average',x.white.dataReady,true)}</td>
     <td class="${classByValue(x.deltas.average)}"><b>${dailyDeltaText(x.deltas.average)}</b></td>
     <td class="${scoreStatusClass(x.s.score,x.s.dataReady)}">${x.s.rating}</td>
@@ -2679,6 +2703,7 @@ function render(){
       scoreSortableHeading('blueScore','🔵 Blå')+
       scoreSortableHeading('whiteScore','⚪ Vit')+
       scoreSortableHeading('greenScore','🟢 Grön')+
+      '<th>Δ🟢 dag</th>'+
       scoreSortableHeading('averageScore','🟣 Snitt')+
       scoreSortableHeading('status','Status')+
       scoreSortableHeading('price','Kurs')+
@@ -2697,7 +2722,8 @@ function render(){
           <td>${x.r.ticker||''}</td><td>${x.r.company||''}</td><td>${marketLabel(x.r.market||'SE')}</td>
           <td class="model-blue">${scoreLinkHtml(x.i,x.c.total,'blue',true,true)}</td>
           <td class="model-white">${scoreLinkHtml(x.i,x.w.total,'white',x.w.dataReady,true)}</td>
-          <td>${greenScoreText(greenScoreForRow(x.r))}</td>
+          <td>${scoreLinkHtml(x.i,greenScoreForRow(x.r),'green',Number.isFinite(greenScoreForRow(x.r)),true)}</td>
+          <td class="${classByValue(dailyScoreDeltas(x.r,x.c,x.w,average).green)}"><b>${dailyDeltaText(dailyScoreDeltas(x.r,x.c,x.w,average).green)}</b></td>
           <td>${scoreLinkHtml(x.i,average,'average',x.w.dataReady,true)}</td>
           <td class="${scoreStatusClass(selected,ready)}">${scoreRating(selected,ready)}</td>
           <td>${fmt(num(x.r.price))}</td><td>${signed(num(x.r.ma200),' %')}</td>
@@ -2746,7 +2772,7 @@ function scoreStatusClass(score,dataReady=true){return 'score-status-'+scoreBand
 
 function modelScoreText(score,model){
   if(!Number.isFinite(score))return '–';
-  return model==='white'||model==='average'
+  return model==='white'||model==='green'||model==='average'
     ? score.toFixed(1).replace('.',',')
     : String(Math.round(score))
 }
@@ -2772,7 +2798,7 @@ function bindScoreHistoryLinks(root=document){
 }
 
 function selectedScoreText(s,model){
-  return model==='white'||model==='both'?whiteScoreText(s.score):String(s.score)
+  return model==='white'||model==='green'||model==='both'?whiteScoreText(s.score):String(s.score)
 }
 function selectedScoreHtml(s,model,chip=true){
   return modelScoreHtml(s.score,model,s.dataReady,chip)
@@ -2961,7 +2987,7 @@ function renderTop(){
       <td>${i+1}</td><td>${x.r.ticker||''}</td><td>${x.r.company||''}</td>
       <td class="model-blue">${scoreLinkHtml(x.i,x.s.b.total,'blue',true,true)}</td>
       <td class="model-white">${scoreLinkHtml(x.i,x.s.w.total,'white',x.s.w.dataReady,true)}</td>
-      <td>${greenScoreText(x.s.green)}</td>
+      <td>${scoreLinkHtml(x.i,x.s.green,'green',Number.isFinite(x.s.green),true)}</td>
       <td>${scoreLinkHtml(x.i,x.s.average,'average',x.s.w.dataReady,true)}</td>
       <td class="${scoreStatusClass(x.s.score,x.s.dataReady)}">${x.s.rating}</td>
       <td>${x.h.shares>0?'Ja':'Nej'}</td>
@@ -3039,7 +3065,7 @@ function developmentMetrics(r){
     // Kursutveckling räknas alltid direkt från sparad, kronologisk dagshistorik.
     // Senaste punkten är aktuell kurs och näst senaste är föregående handelsdags stängning.
     // dailyChangePct används inte här eftersom ett äldre importerat värde annars kan ligga kvar.
-    price1:(daily.length>=2?changePct(num(daily[daily.length-2].close),num(daily[daily.length-1].close)):(prev1?changePct(num(prev1.price),currentPrice):NaN)),
+    price1:todayPriceChangePct(r),
     price7:day5?changePct(num(day5.close),num(daily[daily.length-1]?.close??currentPrice)):(prev7?changePct(num(prev7.price),currentPrice):NaN),
     price30:day21?changePct(num(day21.close),num(daily[daily.length-1]?.close??currentPrice)):(prev30?changePct(num(prev30.price),currentPrice):NaN),
     priceAll:first?changePct(num(first.price),currentPrice):NaN,
@@ -3305,7 +3331,7 @@ function buildRollingPortfolio(model,asOfDate=''){
       lastUpdateDate=startDate;
       benchmarkStart=num(snapshot.benchmarkStart);
 
-      // v21.14.0: även de tio första köpen är riktiga affärer och betalar
+      // v21.15.0: även de tio första köpen är riktiga affärer och betalar
       // samma courtage som alla senare köp. Inga specialregler vid start.
       const budgetPerStock=ROLLING_START_CAPITAL/wanted.size;
       let usedCash=0;
@@ -6886,7 +6912,7 @@ function openDetail(i){
   detailIndex=i;
   const r=normalizeRow(rows[i]),c=calc(r),w=whiteCalc(r),h=holdings(r),g=growthLabel(r);
 document.getElementById('detailTitle').textContent=`${r.ticker||''} ${r.company||''}`.trim();const losses=[['Trend',30-c.trend],['Tillväxt',15-c.rev],['Vinst',20-c.eps],['P/E',20-c.peScore],['ROE',5-c.roe],['Skuld',5-c.debt],['FCF',5-c.fcf]].filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
-document.getElementById('detailCurrent').innerHTML=`<div class="summary"><div class="metric"><small>Blå</small><b>${scoreLinkHtml(i,c.total,'blue',true,true)}</b></div><div class="metric"><small>Vit</small><b>${scoreLinkHtml(i,w.total,'white',w.dataReady,true)}</b></div><div class="metric"><small>Grön</small><b>${greenScoreText(greenScoreForRow(r))}</b></div><div class="metric"><small>Snitt</small><b>${scoreLinkHtml(i,averageScoreFromResults(c,w),'average',w.dataReady,true)}</b></div><div class="metric"><small>Status snitt</small><b class="${scoreStatusClass(averageScoreFromResults(c,w),w.dataReady)}">${scoreRating(averageScoreFromResults(c,w),w.dataReady)}</b></div><div class="metric"><small>Börs</small><b style="font-size:15px">${marketLabel(r.market||'SE')}</b></div><div class="metric"><small>Marknadsdata</small><b class="${ageClass(r.marketUpdatedAt||r.technicalSourceDate)}" style="font-size:15px">${ageText(r.marketUpdatedAt||r.technicalSourceDate)}</b></div><div class="metric"><small>Rapportdata</small><b class="${ageClass(r.fundamentalUpdatedAt||r.updatedAt)}" style="font-size:15px">${ageText(r.fundamentalUpdatedAt||r.updatedAt)}</b></div><div class="metric"><small>Inlagd</small><b style="font-size:15px">${dateFmt(r.createdAt)}</b></div></div><div class="status ${c.qualified?'ok':'no'}"><b>🔵 Blå:</b> ${c.qualified?'Alla grundregler är uppfyllda':'Ej kvalificerad: '+c.warning}</div><div class="status ${w.dataReady?'ok':'no'}"><b>⚪ Vit:</b> ${w.dataReady?w.rating:'Underlag saknas'}</div>${detailScoreHistoryHtml(r)}${stockDataAuditHtml(r,c,w)}<div class="card"><h3>Nuvarande poäng</h3><div class="summary">${[['Trend',c.trend+'/30'],[g+' momentum',c.revMomentum+'/10'],[g+' historik',c.revHistory+'/5'],[g+' totalt',c.rev+'/15'],['Vinst momentum',c.epsMomentum+'/15'],['Vinst historik',c.epsHistory+'/5'],['Vinst totalt',c.eps+'/20'],['P/E',c.peScore+'/20'],['ROE',c.roe+'/5'],['Skuld',c.debt+'/5'],['FCF',c.fcf+'/5']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('')}</div><h3>Vit platåmodell</h3><div class="summary"><div class="metric"><small>Total Vit</small><b class="${scoreStatusClass(w.total,w.dataReady)}">${whiteScoreText(w.total)} / 100</b></div>${whitePartsHtml(w)}</div><h3>Poäng som saknas till 100</h3><div class="score-loss">${losses.length?losses.map(([a,b])=>`<div class="loss-item"><small>${a}</small><b>−${b} p</b></div>`).join(''):'<div class="note">Full poäng i samtliga kategorier.</div>'}</div><h3>Historikberäkning</h3><div class="summary"><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt Y-Y':'Median omsättning Q1–Q4'}</small><b>${fmt(c.revMedian)} %</b></div><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt 3 år':'Omsättningstillväxt 3 år'}</small><b>${fmt(num(r.companyType==='investment'?r.ek3y:r.rev3y))} %</b></div><div class="metric"><small>Historikpoäng ${g.toLowerCase()}</small><b>${c.revHistory}/5</b></div><div class="metric"><small>Median vinst Q1–Q4</small><b>${fmt(c.epsMedian)} %</b></div><div class="metric"><small>Vinsttillväxt 3 år</small><b>${fmt(num(r.eps3y))} %</b></div><div class="metric"><small>Historikpoäng vinst</small><b>${c.epsHistory}/5</b></div></div></div>`;document.getElementById('oldPrice').value=r.price||'';document.getElementById('newPrice').value='';document.getElementById('newPe').value='';document.getElementById('peTool').classList.add('hidden');document.getElementById('txDate').value=todayISO();reasonUI();document.getElementById('holdingSummary').innerHTML=[['Antal',fmt(h.shares)],['GAV',fmt(h.avg)],['Realiserat',fmt(h.realized)],['Utdelningar',fmt(h.dividends)],['Courtage',fmt(h.fees)],['Status',h.shares>0?'Ägs':'Ägs inte']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');const safeHistory=normalizeHistoryEntries(r);
+document.getElementById('detailCurrent').innerHTML=`<div class="summary"><div class="metric"><small>Blå</small><b>${scoreLinkHtml(i,c.total,'blue',true,true)}</b></div><div class="metric"><small>Vit</small><b>${scoreLinkHtml(i,w.total,'white',w.dataReady,true)}</b></div><div class="metric"><small>Grön</small><b>${scoreLinkHtml(i,greenScoreForRow(r),'green',Number.isFinite(greenScoreForRow(r)),true)}</b></div><div class="metric"><small>Snitt</small><b>${scoreLinkHtml(i,averageScoreFromResults(c,w),'average',w.dataReady,true)}</b></div><div class="metric"><small>Status snitt</small><b class="${scoreStatusClass(averageScoreFromResults(c,w),w.dataReady)}">${scoreRating(averageScoreFromResults(c,w),w.dataReady)}</b></div><div class="metric"><small>Börs</small><b style="font-size:15px">${marketLabel(r.market||'SE')}</b></div><div class="metric"><small>Marknadsdata</small><b class="${ageClass(r.marketUpdatedAt||r.technicalSourceDate)}" style="font-size:15px">${ageText(r.marketUpdatedAt||r.technicalSourceDate)}</b></div><div class="metric"><small>Rapportdata</small><b class="${ageClass(r.fundamentalUpdatedAt||r.updatedAt)}" style="font-size:15px">${ageText(r.fundamentalUpdatedAt||r.updatedAt)}</b></div><div class="metric"><small>Inlagd</small><b style="font-size:15px">${dateFmt(r.createdAt)}</b></div></div><div class="status ${c.qualified?'ok':'no'}"><b>🔵 Blå:</b> ${c.qualified?'Alla grundregler är uppfyllda':'Ej kvalificerad: '+c.warning}</div><div class="status ${w.dataReady?'ok':'no'}"><b>⚪ Vit:</b> ${w.dataReady?w.rating:'Underlag saknas'}</div>${detailScoreHistoryHtml(r)}${stockDataAuditHtml(r,c,w)}<div class="card"><h3>Nuvarande poäng</h3><div class="summary">${[['Trend',c.trend+'/30'],[g+' momentum',c.revMomentum+'/10'],[g+' historik',c.revHistory+'/5'],[g+' totalt',c.rev+'/15'],['Vinst momentum',c.epsMomentum+'/15'],['Vinst historik',c.epsHistory+'/5'],['Vinst totalt',c.eps+'/20'],['P/E',c.peScore+'/20'],['ROE',c.roe+'/5'],['Skuld',c.debt+'/5'],['FCF',c.fcf+'/5']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('')}</div><h3>Vit platåmodell</h3><div class="summary"><div class="metric"><small>Total Vit</small><b class="${scoreStatusClass(w.total,w.dataReady)}">${whiteScoreText(w.total)} / 100</b></div>${whitePartsHtml(w)}</div><h3>Poäng som saknas till 100</h3><div class="score-loss">${losses.length?losses.map(([a,b])=>`<div class="loss-item"><small>${a}</small><b>−${b} p</b></div>`).join(''):'<div class="note">Full poäng i samtliga kategorier.</div>'}</div><h3>Historikberäkning</h3><div class="summary"><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt Y-Y':'Median omsättning Q1–Q4'}</small><b>${fmt(c.revMedian)} %</b></div><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt 3 år':'Omsättningstillväxt 3 år'}</small><b>${fmt(num(r.companyType==='investment'?r.ek3y:r.rev3y))} %</b></div><div class="metric"><small>Historikpoäng ${g.toLowerCase()}</small><b>${c.revHistory}/5</b></div><div class="metric"><small>Median vinst Q1–Q4</small><b>${fmt(c.epsMedian)} %</b></div><div class="metric"><small>Vinsttillväxt 3 år</small><b>${fmt(num(r.eps3y))} %</b></div><div class="metric"><small>Historikpoäng vinst</small><b>${c.epsHistory}/5</b></div></div></div>`;document.getElementById('oldPrice').value=r.price||'';document.getElementById('newPrice').value='';document.getElementById('newPe').value='';document.getElementById('peTool').classList.add('hidden');document.getElementById('txDate').value=todayISO();reasonUI();document.getElementById('holdingSummary').innerHTML=[['Antal',fmt(h.shares)],['GAV',fmt(h.avg)],['Realiserat',fmt(h.realized)],['Utdelningar',fmt(h.dividends)],['Courtage',fmt(h.fees)],['Status',h.shares>0?'Ägs':'Ägs inte']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');const safeHistory=normalizeHistoryEntries(r);
 document.getElementById('historyList').innerHTML=safeHistory.slice().reverse().map(x=>{
   const score=safeHistoricalScore(x,r);
   const raw=safeHistoricalRaw(x);
@@ -7924,7 +7950,7 @@ function runFiveYearWhiteBacktest(){
   const frozenWeights=normalizedWhiteWeights({distanceMa200:10,ma50Spread:30,ma200Slope1m:30,trendStability5d:30});
   for(let s=0;s<signals.length-1;s++){
     const signal=signals[s];
-    // v21.14.0: samma regel som levande portföljen.
+    // v21.15.0: samma regel som levande portföljen.
     // Fredagens stängningsdata bestämmer urvalet och samma fredags stängningskurs
     // är köp-/säljkursen för portföljen som benämns nästa vecka.
     const executionDate=signal.date;
@@ -8081,7 +8107,7 @@ function runFiveYearWhiteBacktest(){
   };
   fiveYearBacktestResult=result;
   renderFiveYearBacktest(result);
-  // v21.14.0: det vanliga 10-årstestet ska vara KLART här.
+  // v21.15.0: det vanliga 10-årstestet ska vara KLART här.
   // De mycket tunga robusthets-/känslighetstesterna körs separat så att
   // webbläsaren inte ser ut att fastna på slutet efter 100 % hämtning.
   fiveYearDiagnosticsResult=null;
@@ -9869,7 +9895,7 @@ function repairWrongW34V2085(){
   return false
 }
 
-// v21.14.0: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
+// v21.15.0: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
 // bevaras som historik, medan alla nya veckor skapas av den generella veckomotorn.
 
 
@@ -10885,7 +10911,7 @@ try{
     console.info(`Vit 2.1 aktiverad: 10/30/30/30. ${scorePoints} sparade Vit-poäng räknades om.`)
   }else if(weightChanged){persist()}
 }catch(error){console.error('Vit 2.1 viktmigrering misslyckades',error)}
-// v21.14.0: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
+// v21.15.0: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
 // via den generella motorn, aldrig skriva om W31/W32/... som redan finns.
 try{
   const weekendCreated=backfillMissingWeeklyPortfolios();
