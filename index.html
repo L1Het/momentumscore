@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.18.0 – luckfri handelsdag + korrekt 1 dag %</h1>
+<h1>MomentumScore v21.19.0 – korrekt föregående handelsdag + en veckomotor</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -658,7 +658,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
   <div id="cleanupDatabaseStatus" class="note" style="margin-top:8px">Städningen behåller kärndata och tar bort sådant som kan återskapas. Marknadsuppdatering och veckoportföljmotor körs nu som separata transaktioner.</div>
 </div>
 <p class="note"><b>Uppdateras:</b> aktiekurs, MA200-nivå, avstånd till MA200, MA200-trend 1 vecka, 1 månad och 3 månader samt RSI 14. Trenderna räknas från verkliga dagliga stängningskurser. Aktuellt P/E beräknas automatiskt i bakgrunden från P/E-basen och kursförändringen; basvärdet och övrig rapportdata skrivs inte över. Kurs, Kurs/MA200, RSI 14 samt Blå och Vit poäng sparas i historiken vid varje lyckad uppdatering. Jämförelseindex uppdateras före aktierna. Inför varje massuppdatering används alltid en säkerhetskopia i arbetsminnet. En fullständig lokal dubbelkopia skapas inte längre eftersom den förbrukar nästan dubbelt lagringsutrymme; arbetsminnet används för rollback under uppdateringen och JSON-export är permanent backup. Versionsmigrering lägger bara till saknade fält och bevarar befintliga listor, och uppdateringen avbryts automatiskt om någon äldre historik skulle saknas. Automatisk uppdatering sker endast när sidan är öppen eller öppnas – en lokal HTML-fil kan inte arbeta i bakgrunden när den är stängd.</p>
-<p class="note">Sverige är standard. Välj Danmark, Norge, Finland eller Island när du matar in ett nordiskt bolag. Yahoo-symbolen får då rätt suffix automatiskt, exempelvis NOVO B → NOVO-B.CO, EQNR → EQNR.OL och NOKIA → NOKIA.HE. När ett bolag saknar minst 263 handelsdagar hämtar Yahoo två års grundhistorik. Därefter begär appen senaste månaden och sparar alla tillgängliga handelsdagar och slår ihop den med den lokala historiken. Appen lagrar de senaste 400 handelsdagarna och räknar själv MA200 och MA200-trenderna. Om Yahoos sista dagscandle är null används meta.regularMarketPrice som den senaste avslutade handelsdagens kurs och läggs till i samma serie. Om ett bolag inte kan hämtas visas det i statusrutan och övriga bolag fortsätter uppdateras.</p>
+<p class="note">Sverige är standard. Välj Danmark, Norge, Finland eller Island när du matar in ett nordiskt bolag. Yahoo-symbolen får då rätt suffix automatiskt, exempelvis NOVO B → NOVO-B.CO, EQNR → EQNR.OL och NOKIA → NOKIA.HE. När ett bolag saknar minst 263 handelsdagar hämtar Yahoo två års grundhistorik. Därefter begär appen ett mycket litet femdagarsfönster men sparar bara den senaste tillgängliga kursen och slår ihop den med den lokala historiken. Appen lagrar de senaste 400 handelsdagarna och räknar själv MA200 och MA200-trenderna. Om Yahoos sista dagscandle är null används meta.regularMarketPrice som den senaste avslutade handelsdagens kurs och läggs till i samma serie. Om ett bolag inte kan hämtas visas det i statusrutan och övriga bolag fortsätter uppdateras.</p>
 </div>
 
 <div class="card" id="whiteFiveYearBacktestCard">
@@ -2469,9 +2469,7 @@ function modelCacheKey(r){
   const day=String(r?.marketUpdatedAt||r?.technicalSourceDate||r?.marketSourceDate||r?.priceDate||'').slice(0,10);
   const price=Number.isFinite(num(r?.price))?num(r.price):'';
   const histLen=Array.isArray(r?.priceHistory)?r.priceHistory.length:0;
-  const prev=Number.isFinite(num(r?.previousClose))?num(r.previousClose):'';
-  const prevFor=String(r?.previousCloseForMarketDate||'').slice(0,10);
-  return `${ticker}|${day}|${price}|${histLen}|${prevFor}|${prev}`
+  return `${ticker}|${day}|${price}|${histLen}`
 }
 function invalidateModelDayCaches(){
   previousDayScoreCache.clear();
@@ -2498,41 +2496,17 @@ function previousTradingDayRecalculatedScores(r){
     .slice()
     .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
 
-  if(prices.length<1){previousDayScoreCache.set(cacheKey,null);return null;}
+  if(prices.length<2){previousDayScoreCache.set(cacheKey,null);return null;}
 
   const currentDate=currentTradingDayKey(r);
-  const boundDate=String(r?.previousCloseForMarketDate||'').slice(0,10);
-  const yahooPrev=num(r?.previousClose);
+  const expectedPrevious=previousMarketSessionDate(r?.market||'SE',currentDate)
+    ||String(r?.expectedPreviousCloseDate||r?.previousCloseDate||'').slice(0,10);
+  if(!expectedPrevious){previousDayScoreCache.set(cacheKey,null);return null;}
 
-  // If Yahoo says yesterday's close differs from the newest completed candle,
-  // create an in-memory technical series with Yahoo's authoritative previous
-  // close. Persistent priceHistory is never fabricated.
-  let workingPrices=prices;
-  const preCurrent=prices.filter(p=>String(p.date).slice(0,10)<currentDate);
-  const lastPre=preCurrent.length?preCurrent[preCurrent.length-1]:null;
-  if(boundDate===currentDate&&Number.isFinite(yahooPrev)&&yahooPrev>0&&
-     (!lastPre||!samePrice(num(lastPre.close),yahooPrev))){
-    const syntheticDate=String(r?.previousCloseDate||previousWeekdayISO(currentDate)).slice(0,10);
-    workingPrices=preCurrent.concat([{date:syntheticDate,close:yahooPrev,__syntheticPreviousClose:true}])
-      .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
-    // Keep today's point (if present) after the synthetic prior close.
-    workingPrices=workingPrices.concat(prices.filter(p=>String(p.date).slice(0,10)>=currentDate))
-      .sort((a,b)=>String(a.date).localeCompare(String(b.date)))
-  }
-
-  // Senaste sparade datapunkt kan vara dagens intradag/meta-pris.
-  // Jämförelsen ska göras mot handelsdagen omedelbart före den.
-  const latestDate=currentDate||String(workingPrices[workingPrices.length-1].date).slice(0,10);
-  let previousIndex=-1;
-  for(let i=workingPrices.length-1;i>=0;i--){
-    if(String(workingPrices[i].date).slice(0,10)<latestDate){
-      previousIndex=i;
-      break
-    }
-  }
+  const previousIndex=prices.findIndex(p=>String(p.date).slice(0,10)===expectedPrevious);
   if(previousIndex<0){previousDayScoreCache.set(cacheKey,null);return null;}
 
-  const previousPrices=workingPrices.slice(0,previousIndex+1);
+  const previousPrices=prices.slice(0,previousIndex+1);
   if(previousPrices.length<263){previousDayScoreCache.set(cacheKey,null);return null;}
 
   try{
@@ -2588,16 +2562,14 @@ function todayPriceChangePct(row){
   const currentDate=currentTradingDayKey(row),current=num(row?.price);
   if(!currentDate||!Number.isFinite(current)||current<=0)return NaN;
 
-  // Preferred: the previous close that Yahoo returned for this exact market day.
-  const boundDate=String(row?.previousCloseForMarketDate||'').slice(0,10);
-  const storedPrevious=num(row?.previousClose);
-  if(boundDate===currentDate&&Number.isFinite(storedPrevious)&&storedPrevious>0){
-    return (current/storedPrevious-1)*100
-  }
+  const expected=previousMarketSessionDate(row?.market||'SE',currentDate)
+    ||String(row?.expectedPreviousCloseDate||row?.previousCloseDate||'').slice(0,10);
+  if(!expected)return NaN;
 
-  // Backward-compatible fallback for older rows/backups.
-  const prev=previousTradingClose(row,currentDate);
-  return prev?(current/prev.close-1)*100:NaN
+  const close=exactHistoryClose(row?.priceHistory,expected);
+  if(!Number.isFinite(close)||close<=0)return NaN;
+
+  return (current/close-1)*100
 }
 function dailyScoreDeltas(r,blue,white,average){
   const prev=previousTradingDayRecalculatedScores(r);
@@ -3383,7 +3355,7 @@ function buildRollingPortfolio(model,asOfDate=''){
 
   let cash=ROLLING_START_CAPITAL;
   let fees=0,buyCount=0,sellCount=0,turnoverValue=0;
-  let startDate='',lastUpdateDate='',benchmarkStart=NaN;
+  let startDate='',lastUpdateDate='',lastProcessedWeek='',benchmarkStart=NaN;
   const holdings=new Map();
   const transactions=[];
   const warnings=[];
@@ -3398,6 +3370,7 @@ function buildRollingPortfolio(model,asOfDate=''){
       ])
     );
     const tradeDate=rollingSnapshotExecutionDate(snapshot);
+    lastProcessedWeek=snapshot.weekKey||lastProcessedWeek;
 
     // Senast uppdaterad = senaste ekonomiska handelstidpunkt.
     // För veckobyten är det fredagens close.
@@ -3408,7 +3381,7 @@ function buildRollingPortfolio(model,asOfDate=''){
       lastUpdateDate=startDate;
       benchmarkStart=num(snapshot.benchmarkStart);
 
-      // v21.18.0: även de tio första köpen är riktiga affärer och betalar
+      // v21.19.0: även de tio första köpen är riktiga affärer och betalar
       // samma courtage som alla senare köp. Inga specialregler vid start.
       const budgetPerStock=ROLLING_START_CAPITAL/wanted.size;
       let usedCash=0;
@@ -3637,6 +3610,7 @@ function buildRollingPortfolio(model,asOfDate=''){
     model,
     startDate,
     lastUpdateDate:lastUpdateDate||startDate,
+    lastProcessedWeek,
     valuationDate,
     value,
     profit,
@@ -3659,6 +3633,7 @@ function buildRollingPortfolio(model,asOfDate=''){
   }
 }
 function rollingPortfolio(model){
+  repairLegacyWeeklyV2Snapshots();
   return buildRollingPortfolio(model,'')
 }
 function rollingValueAtDate(portfolio,date){
@@ -4010,7 +3985,8 @@ function openRollingDevelopmentPortfolio(model){
     ['Handlad omsättning',signed(x.turnover,' %')],
     ['Resultat sålda',signed(soldProfit,' kr')],
     ['Kontanter',`${Math.round(x.cash).toLocaleString('sv-SE')} kr`],
-    ['Portföljmotor',x.engineVersion===2?'Ledger v2':'Äldre motor'],
+    ['Portföljmotor',x.engineVersion>=3?'Ledger v3':x.engineVersion===2?'Ledger v2':'Äldre motor'],
+    ['Senast behandlad vecka',x.lastProcessedWeek||'–'],
     ['Datavarningar',x.warnings?.length||0]
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
   const table=document.getElementById('devPortfolioMembersTable');
@@ -8027,7 +8003,7 @@ function runFiveYearWhiteBacktest(){
   const frozenWeights=normalizedWhiteWeights({distanceMa200:10,ma50Spread:30,ma200Slope1m:30,trendStability5d:30});
   for(let s=0;s<signals.length-1;s++){
     const signal=signals[s];
-    // v21.18.0: samma regel som levande portföljen.
+    // v21.19.0: samma regel som levande portföljen.
     // Fredagens stängningsdata bestämmer urvalet och samma fredags stängningskurs
     // är köp-/säljkursen för portföljen som benämns nästa vecka.
     const executionDate=signal.date;
@@ -8184,7 +8160,7 @@ function runFiveYearWhiteBacktest(){
   };
   fiveYearBacktestResult=result;
   renderFiveYearBacktest(result);
-  // v21.18.0: det vanliga 10-årstestet ska vara KLART här.
+  // v21.19.0: det vanliga 10-årstestet ska vara KLART här.
   // De mycket tunga robusthets-/känslighetstesterna körs separat så att
   // webbläsaren inte ser ut att fastna på slutet efter 100 % hämtning.
   fiveYearDiagnosticsResult=null;
@@ -8941,28 +8917,28 @@ function previousCompletedCloseFromHistory(history,currentDate){
   return points.length?points[points.length-1]:null
 }
 
-function yahooMetaPreviousClose(meta){
-  const candidates=[
-    meta?.regularMarketPreviousClose,
-    meta?.previousClose,
-    meta?.chartPreviousClose
-  ].map(Number).filter(Number.isFinite);
-  return candidates.length?candidates[0]:NaN
+function marketSessionDates(market){
+  return (benchmarkHistories?.[market]||[])
+    .map(p=>String(p?.date||'').slice(0,10))
+    .filter(Boolean)
+    .filter((d,i,a)=>a.indexOf(d)===i)
+    .sort()
 }
-function samePrice(a,b){
-  a=Number(a);b=Number(b);
-  if(!Number.isFinite(a)||!Number.isFinite(b))return false;
-  return Math.abs(a-b)<=Math.max(0.005,Math.abs(b)*0.0005)
+function previousMarketSessionDate(market,currentDate){
+  const d=String(currentDate||'').slice(0,10);
+  if(!d)return '';
+  const sessions=marketSessionDates(market).filter(x=>x<d);
+  return sessions.length?sessions[sessions.length-1]:''
 }
-function previousWeekdayISO(date){
-  const d=new Date(String(date).slice(0,10)+'T12:00:00Z');
-  if(Number.isNaN(d.getTime()))return '';
-  do{d.setUTCDate(d.getUTCDate()-1)}while(d.getUTCDay()===0||d.getUTCDay()===6);
-  return d.toISOString().slice(0,10)
+function exactHistoryClose(history,date){
+  const d=String(date||'').slice(0,10);
+  const matches=(Array.isArray(history)?history:[])
+    .filter(p=>String(p?.date||'').slice(0,10)===d&&Number.isFinite(num(p?.close))&&num(p.close)>0);
+  return matches.length?num(matches[matches.length-1].close):NaN
 }
 async function fetchYahooHistoryOnce(symbol,existingHistory=[],options={}){
   const hasEnough=Array.isArray(existingHistory)&&existingHistory.length>=263;
-  const requestedRange=options.range||(hasEnough?'1mo':'2y');
+  const requestedRange=options.range||(hasEnough?'1y':'2y');
   const range=requestedRange;
   const url='https://momentumscore-yahoo.e-latth.workers.dev/?symbol='+encodeURIComponent(symbol)+'&range='+encodeURIComponent(range);
   const controller=new AbortController();
@@ -9018,23 +8994,7 @@ async function fetchYahooHistoryOnce(symbol,existingHistory=[],options={}){
   const currentMarketDate=metaTime?new Date(metaTime*1000).toISOString().slice(0,10):(latestPoint?.date||'');
   const previousCompleted=previousCompletedCloseFromHistory(priceHistory,currentMarketDate);
   const livePrice=Number.isFinite(metaPrice)?metaPrice:(latestPoint?num(latestPoint.close):NaN);
-
-  // Yahoo meta is authoritative for today's previous close. The historical
-  // candle is still required for score reconstruction, so disagreement is
-  // explicitly detected instead of silently using an older stored close.
-  const metaPreviousClose=yahooMetaPreviousClose(result.meta||{});
-  const historyPreviousClose=previousCompleted?num(previousCompleted.close):NaN;
-  const historyPreviousDate=previousCompleted?.date||'';
-  const previousClose=Number.isFinite(metaPreviousClose)?metaPreviousClose:historyPreviousClose;
-  const previousCloseMatchesHistory=Number.isFinite(previousClose)&&Number.isFinite(historyPreviousClose)
-    ?samePrice(previousClose,historyPreviousClose)
-    :false;
-  const previousCloseDate=previousCloseMatchesHistory
-    ?historyPreviousDate
-    :(Number.isFinite(metaPreviousClose)?previousWeekdayISO(currentMarketDate):historyPreviousDate);
-  const historyGapDetected=Number.isFinite(metaPreviousClose)&&
-    (!Number.isFinite(historyPreviousClose)||!previousCloseMatchesHistory);
-
+  const previousClose=previousCompleted?num(previousCompleted.close):NaN;
   const dailyChangePct=(Number.isFinite(livePrice)&&Number.isFinite(previousClose)&&previousClose!==0)
     ?((livePrice/previousClose)-1)*100:NaN;
 
@@ -9042,12 +9002,7 @@ async function fetchYahooHistoryOnce(symbol,existingHistory=[],options={}){
     ...technical,
     priceHistory,
     previousClose,
-    previousCloseDate,
-    previousCloseForMarketDate:currentMarketDate,
-    historyPreviousClose,
-    historyPreviousDate,
-    metaPreviousClose,
-    historyGapDetected,
+    previousCloseDate:previousCompleted?.date||'',
     currentMarketDate,
     dailyChangePct,
     incomingCount:incoming.length,
@@ -9063,19 +9018,50 @@ async function fetchYahooHistoryOnce(symbol,existingHistory=[],options={}){
 async function fetchYahooHistory(symbol,existingHistory=[],options={}){
   let q=await fetchYahooHistoryOnce(symbol,existingHistory,options);
 
-  // If today's Yahoo previous-close disagrees with the latest historical candle,
-  // retry that symbol with 2 years before accepting the update. This is generic
-  // gap repair, not ticker/date-specific code.
-  if(q.historyGapDetected && !options.repair && options.range!=='2y'){
+  // Generic gap check: for a stock, the benchmark calendar tells us which
+  // trading session should be the immediately preceding completed session.
+  // If that exact daily candle is missing, retry with a deeper supported range.
+  const market=options.market||'';
+  const expectedPrev=market?previousMarketSessionDate(market,q.currentMarketDate):'';
+
+  if(expectedPrev && !Number.isFinite(exactHistoryClose(q.priceHistory,expectedPrev)) && !options.gapRetry){
     const retry=await fetchYahooHistoryOnce(symbol,existingHistory,{...options,range:'2y',gapRetry:true});
-    if(!retry.historyGapDetected){
-      retry.fetchMode='Luckreparation 2 år + föregående close verifierad';
+    const retryExpected=previousMarketSessionDate(market,retry.currentMarketDate)||expectedPrev;
+    const retryClose=exactHistoryClose(retry.priceHistory,retryExpected);
+
+    if(Number.isFinite(retryClose)){
+      retry.previousClose=retryClose;
+      retry.previousCloseDate=retryExpected;
+      retry.dailyChangePct=Number.isFinite(num(retry.price))&&retryClose!==0
+        ?(num(retry.price)/retryClose-1)*100
+        :NaN;
+      retry.historyGapDetected=false;
+      retry.expectedPreviousCloseDate=retryExpected;
+      retry.fetchMode='2 års luckreparation – föregående handelsdag verifierad';
       return retry
     }
-    // Even if Yahoo's candle stream still omits the completed session,
-    // the one-day % remains correct from Yahoo meta.previous close.
-    retry.fetchMode='Luckvarning: 2-årsserie saknar föregående candle; 1 dag % använder Yahoo previous close';
+
+    // Never silently fall back to an older close. Better a dash than a false %.
+    retry.previousClose=NaN;
+    retry.previousCloseDate='';
+    retry.dailyChangePct=NaN;
+    retry.historyGapDetected=true;
+    retry.expectedPreviousCloseDate=retryExpected;
+    retry.fetchMode='Datavarning – föregående handelsdags candle saknas även efter 2 års hämtning';
     return retry
+  }
+
+  if(expectedPrev){
+    const exact=exactHistoryClose(q.priceHistory,expectedPrev);
+    if(Number.isFinite(exact)){
+      q.previousClose=exact;
+      q.previousCloseDate=expectedPrev;
+      q.dailyChangePct=Number.isFinite(num(q.price))&&exact!==0
+        ?(num(q.price)/exact-1)*100
+        :NaN;
+      q.historyGapDetected=false;
+      q.expectedPreviousCloseDate=expectedPrev
+    }
   }
   return q
 }
@@ -9779,67 +9765,11 @@ function snapshotLockFriday(snapshot){
   while(d.getDay()!==5)d.setDate(d.getDate()-1);
   return d
 }
-function createCurrentDataWeeklySnapshot(friday,automatic=true,forceRebuild=false){
-  const cutoffDate=isoDate(friday);
-  const monday=followingMonday(friday);
-  const activationDate=isoDate(monday);
-  const targetInfo=isoWeekInfo(monday);
 
-  // v20.8.2: en vecka är fryst när den väl skapats.
-  // Vanliga kursuppdateringar får aldrig skriva om samma ISO-vecka.
-  if(weeklyPortfolios.some(snapshot=>snapshot.weekKey===targetInfo.key))return false;
+/* v21.19: legacy duplicate createCurrentDataWeeklySnapshot removed.
+   It overrode the canonical five-model Friday engine and calculated the
+   core models from current scores instead of historical cutoff scores. */
 
-  const settings=loadWeeklySettings();
-  const benchmarkMarket=settings.benchmarkMarket||'SE';
-  const previousSnapshot=previousWeeklySnapshotBefore(cutoffDate,targetInfo.key);
-  const blue=topListMembersForSnapshot('blue',cutoffDate,previousSnapshot);
-  const white=topListMembersForSnapshot('white',cutoffDate,previousSnapshot);
-  const average=topListMembersForSnapshot('average',cutoffDate,previousSnapshot);
-  const green=greenProductionMembers(cutoffDate,previousSnapshot);
-  const hybrid=hybridProductionMembers(cutoffDate,previousSnapshot);
-  if(blue.length<10||white.length<10||average.length<10||green.length<10||hybrid.length<10){
-    console.warn('Nästa veckas Top 10 kunde inte låsas: för få bolag har verifierad fredagsclose',
-      {blue:blue.length,white:white.length,average:average.length,green:green.length,hybrid:hybrid.length,cutoffDate});
-    return false
-  }
-
-  let benchmarkStart=benchmarkValueOnOrBefore(benchmarkMarket,cutoffDate);
-  if(!Number.isFinite(benchmarkStart))benchmarkStart=currentBenchmarkValue(benchmarkMarket);
-  if(!Number.isFinite(benchmarkStart))return false;
-
-  const decorate=(members,model)=>members.map((member,index)=>({
-    ...member,
-    rank:index+1,
-    closeDate:cutoffDate,
-    executionDate:cutoffDate,
-    signalPrice:Number.isFinite(num(member.startPrice))?num(member.startPrice):member.signalPrice,
-    selectionModel:model,
-    selectionSource:'locked-friday-close-weekly-v2'
-  }));
-
-  const snapshot={
-    id:`${targetInfo.key}-${cutoffDate}`,
-    weekKey:targetInfo.key,year:targetInfo.year,week:targetInfo.week,
-    savedAt:nowISO(),savedDate:cutoffDate,lockDate:cutoffDate,cutoffTime:'18:00',activationDate,
-    executionDate:cutoffDate,executionStatus:'finalized',executionMode:'previous-trading-day-close',
-    preparedFrom:'locked-friday-close',
-    selectionSource:'locked-friday-close-weekly-v2',
-    weeklyLockVersion:2,
-    benchmarkMarket,benchmarkSymbol:benchmarkSymbol(benchmarkMarket),
-    benchmarkStart,benchmarkSignalStart:benchmarkStart,
-    portfolios:{
-      blue:{name:'Blå',members:decorate(blue,'blue')},
-      white:{name:'Vit',members:decorate(white,'white')},
-      average:{name:'Snitt',members:decorate(average,'average')}
-    }
-  };
-
-  weeklyPortfolios.push(snapshot);
-  weeklyPortfolios.sort((a,b)=>String(b.lockDate||'').localeCompare(String(a.lockDate||'')));
-  weeklyPersist();
-  if(!automatic)toast(`Nästa veckas Top 10 (${targetInfo.key}) låstes från fredagens close`);
-  return true
-}
 
 function ensureNextWeekPortfolioAfterFriday(){
   const settings=loadWeeklySettings();
@@ -10047,7 +9977,7 @@ function repairWrongW34V2085(){
   return false
 }
 
-// v21.18.0: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
+// v21.19.0: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
 // bevaras som historik, medan alla nya veckor skapas av den generella veckomotorn.
 
 
@@ -10313,10 +10243,73 @@ function migrateExtendedModelsToCanonicalEngine(){
   if(changed)localStorage.setItem(FIVE_MODEL_INTEGRITY_MIGRATION_KEY,JSON.stringify({at:nowISO(),repaired}));
   return changed
 }
+
+const LEGACY_WEEKLY_V2_REPAIR_KEY='momentumscore_legacy_weekly_v2_repair_v2119';
+
+function snapshotMemberIdentityList(snapshot,model){
+  return (snapshot?.portfolios?.[model]?.members||[])
+    .map(weeklyMemberKey)
+    .filter(Boolean)
+}
+function sameIdentityList(a,b){
+  if(a.length!==b.length)return false;
+  for(let i=0;i<a.length;i++)if(a[i]!==b[i])return false;
+  return true
+}
+function repairLegacyWeeklyV2Snapshots(){
+  const ordered=weeklyPortfolios.slice().sort((a,b)=>
+    String(a.executionDate||a.lockDate||'').localeCompare(String(b.executionDate||b.lockDate||''))
+  );
+  let previous=null,changed=false,repaired=0;
+
+  for(let i=0;i<ordered.length;i++){
+    const s=ordered[i];
+    const isKnownBuggy=
+      s?.selectionSource==='locked-friday-close-weekly-v2' ||
+      s?.preparedFrom==='locked-friday-close';
+
+    if(!isKnownBuggy){
+      previous=s;
+      continue
+    }
+
+    const friday=snapshotLockFriday(s);
+    if(!friday){previous=s;continue}
+
+    const rebuilt=buildCanonicalHistoricalWeeklySnapshot(friday,previous);
+    if(!rebuilt){previous=s;continue}
+
+    // Only snapshots carrying the exact legacy engine marker are replaced.
+    // No week number, ticker or historical hand-edit is special-cased.
+    const idx=weeklyPortfolios.indexOf(s);
+    if(idx>=0){
+      rebuilt.id=s.id||rebuilt.id;
+      rebuilt.savedAt=s.savedAt||rebuilt.savedAt;
+      rebuilt.repairedFrom='locked-friday-close-weekly-v2';
+      rebuilt.repairedAt=nowISO();
+      weeklyPortfolios[idx]=rebuilt;
+      ordered[i]=rebuilt;
+      previous=rebuilt;
+      changed=true;
+      repaired++
+    }
+  }
+
+  if(changed){
+    weeklyPortfolios.sort((a,b)=>String(b.lockDate||b.executionDate||'').localeCompare(String(a.lockDate||a.executionDate||'')));
+    weeklyPersist()
+  }
+  try{
+    localStorage.setItem(LEGACY_WEEKLY_V2_REPAIR_KEY,JSON.stringify({at:nowISO(),repaired}))
+  }catch(_){}
+  return repaired
+}
+
 function ensureWeeklyPortfolioSnapshot(){
+  const repairedLegacy=repairLegacyWeeklyV2Snapshots()>0;
   const backfilled=backfillMissingWeeklyPortfolios()>0;
   const migrated=migrateExtendedModelsToCanonicalEngine();
-  return backfilled||migrated
+  return repairedLegacy||backfilled||migrated
 }
 function weeklySnapshotLabel(s){return `${s.weekKey} · ${dateFmt(s.savedAt)}`}
 let extendedWeeklyRepairRunning=false;
@@ -10527,7 +10520,7 @@ async function repairAllDailyPriceHistoryV212(statusEl=null,force=false){
 
       try{
         const oldHistory=Array.isArray(r.priceHistory)?r.priceHistory:[];
-        const q=await fetchYahooHistory(symbol,oldHistory,{range:'2y',repair:true});
+        const q=await fetchYahooHistory(symbol,oldHistory,{range:'2y',repair:true,market:r.market||'SE'});
         const added=countAddedDates(oldHistory,q.priceHistory);
 
         if(added>0){
@@ -10629,22 +10622,21 @@ async function updateAllPrices(silent=false){
       if(dashBtn){dashBtn.textContent='⏳ Uppdaterar... '+Math.round(((i+1)/rows.length)*100)+' %';}
       if(!symbol){failed.push((r.company||r.ticker||'Okänt')+': Yahoo-symbol saknas');continue}
       try{
-        const q=await fetchYahooHistory(symbol,r.priceHistory||[]);
+        const q=await fetchYahooHistory(symbol,r.priceHistory||[],{market:r.market||'SE'});
         const savedAt=nowISO();
         const updatedBase={
           ...r,yahooSymbol:symbol,price:q.price.toFixed(2),ma200Level:q.ma200Level.toFixed(4),
           ma200:q.ma200.toFixed(2),ma1w:q.ma1w.toFixed(2),ma1m:q.ma1m.toFixed(2),ma3m:q.ma3m.toFixed(2),
           rsi14:Number.isFinite(q.rsi14)?q.rsi14.toFixed(2):r.rsi14,
-          priceHistory:q.priceHistory,previousClose:Number.isFinite(q.previousClose)?q.previousClose.toFixed(4):r.previousClose,
-          dailyChangePct:Number.isFinite(q.dailyChangePct)?q.dailyChangePct.toFixed(4):r.dailyChangePct,
-          previousCloseDate:q.previousCloseDate||r.previousCloseDate||'',
-          previousCloseForMarketDate:q.previousCloseForMarketDate||q.currentMarketDate||'',
+          priceHistory:q.priceHistory,
+          previousClose:Number.isFinite(q.previousClose)?q.previousClose.toFixed(4):'',
+          dailyChangePct:Number.isFinite(q.dailyChangePct)?q.dailyChangePct.toFixed(4):'',
+          previousCloseDate:q.previousCloseDate||'',
           currentMarketDate:q.currentMarketDate||'',
+          expectedPreviousCloseDate:q.expectedPreviousCloseDate||q.previousCloseDate||'',
           historyGapDetected:!!q.historyGapDetected,
-          historyPreviousClose:Number.isFinite(q.historyPreviousClose)?q.historyPreviousClose.toFixed(4):'',
-          historyPreviousDate:q.historyPreviousDate||'',
-          metaPreviousClose:Number.isFinite(q.metaPreviousClose)?q.metaPreviousClose.toFixed(4):'',
-          technicalSource:'Yahoo Finance – '+q.fetchMode,technicalSourceDate:q.currentMarketDate||savedAt,
+          technicalSource:'Yahoo Finance – '+q.fetchMode,
+          technicalSourceDate:q.currentMarketDate||savedAt,
           marketUpdatedAt:savedAt,updatedAt:r.updatedAt||savedAt
         };
         const scoreAfter=calc(updatedBase),whiteAfter=whiteCalc(updatedBase);
@@ -10695,8 +10687,7 @@ async function updateAllPrices(silent=false){
       weeklyError=weeklyError||renderPortfolioError?.message||String(renderPortfolioError);
       console.error('Veckoportföljvisningen misslyckades',renderPortfolioError);
     }
-    const gapRows=rows.filter(r=>r.historyGapDetected);
-    status.innerHTML='<b>'+ok+' bolag uppdaterades och sparades.</b><br>1 dag % använder Yahoo previous close bundet till aktuell handelsdag. Saknad föregående candle triggar automatisk 2-årsreparation.'+(gapRows.length?'<br>⚠️ '+gapRows.length+' bolag saknar fortfarande föregående candle i Yahoo-serien; deras 1 dag % är ändå baserad på Yahoo previous close: '+gapRows.map(r=>r.ticker||r.company).join(', '):'')+(!localBackupCreated?'<br>⚠️ Lokal backup hoppades över eftersom webbläsarens lagringsutrymme är fullt. Säkerhetskopian i arbetsminnet användes under körningen.':'')+(failed.length?'<br>Misslyckade kurshämtningar: '+failed.join(' · '):'')+(weeklyError?'<br>⚠️ Kurserna är sparade, men veckoportföljmotorn gav fel: '+weeklyError:'');
+    status.innerHTML='<b>'+ok+' bolag uppdaterades och sparades.</b><br>Bolag med full grundhistorik sparade alla nya handelsdagar från Yahoo. Övriga hämtade två års grundhistorik.'+(!localBackupCreated?'<br>⚠️ Lokal backup hoppades över eftersom webbläsarens lagringsutrymme är fullt. Säkerhetskopian i arbetsminnet användes under körningen.':'')+(failed.length?'<br>Misslyckade kurshämtningar: '+failed.join(' · '):'')+(weeklyError?'<br>⚠️ Kurserna är sparade, men veckoportföljmotorn gav fel: '+weeklyError:'');
     if(!silent&&failed.length===rows.length)alert('Ingen kurs kunde hämtas. Kontrollera internetanslutning och Yahoo-symboler.');
   }catch(e){
     if(!marketDataCommitted){
@@ -11072,7 +11063,7 @@ try{
     console.info(`Vit 2.1 aktiverad: 10/30/30/30. ${scorePoints} sparade Vit-poäng räknades om.`)
   }else if(weightChanged){persist()}
 }catch(error){console.error('Vit 2.1 viktmigrering misslyckades',error)}
-// v21.18.0: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
+// v21.19.0: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
 // via den generella motorn, aldrig skriva om W31/W32/... som redan finns.
 try{
   const weekendCreated=backfillMissingWeeklyPortfolios();
