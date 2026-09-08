@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.15.1 – Grön dagsändring + korrekt 1 dag %</h1>
+<h1>MomentumScore v21.16.0 – Grön dagsändring + korrekt 1 dag %</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -2461,13 +2461,42 @@ function listRows(){
 
 
 
+let previousDayScoreCache=new Map();
+let greenRankCacheByDate=new Map();
+
+function modelCacheKey(r){
+  const ticker=String(r?.ticker||'');
+  const day=String(r?.marketUpdatedAt||r?.technicalSourceDate||r?.marketSourceDate||r?.priceDate||'').slice(0,10);
+  const price=Number.isFinite(num(r?.price))?num(r.price):'';
+  const histLen=Array.isArray(r?.priceHistory)?r.priceHistory.length:0;
+  return `${ticker}|${day}|${price}|${histLen}`
+}
+function invalidateModelDayCaches(){
+  previousDayScoreCache.clear();
+  greenRankCacheByDate.clear();
+  currentGreenScoreCache={stamp:'',map:new Map()}
+}
+function greenRankMapForDate(date){
+  const key=String(date||'').slice(0,10);
+  if(!key)return new Map();
+  if(greenRankCacheByDate.has(key))return greenRankCacheByDate.get(key);
+  const map=new Map(greenProductionRank(key).map(x=>[
+    String(x.row?.ticker||''),x.greenScore*100
+  ]));
+  greenRankCacheByDate.set(key,map);
+  return map
+}
+
 function previousTradingDayRecalculatedScores(r){
+  const cacheKey=modelCacheKey(r);
+  if(previousDayScoreCache.has(cacheKey))return previousDayScoreCache.get(cacheKey);
+
   const prices=(Array.isArray(r?.priceHistory)?r.priceHistory:[])
     .filter(p=>p&&p.date&&Number.isFinite(num(p.close)))
     .slice()
     .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
 
-  if(prices.length<2)return null;
+  if(prices.length<2){previousDayScoreCache.set(cacheKey,null);return null;}
 
   // Senaste sparade datapunkt kan vara dagens intradag/meta-pris.
   // Jämförelsen ska göras mot handelsdagen omedelbart före den.
@@ -2479,10 +2508,10 @@ function previousTradingDayRecalculatedScores(r){
       break
     }
   }
-  if(previousIndex<0)return null;
+  if(previousIndex<0){previousDayScoreCache.set(cacheKey,null);return null;}
 
   const previousPrices=prices.slice(0,previousIndex+1);
-  if(previousPrices.length<263)return null;
+  if(previousPrices.length<263){previousDayScoreCache.set(cacheKey,null);return null;}
 
   try{
     const technical=technicalFromPriceHistory(previousPrices);
@@ -2510,12 +2539,15 @@ function previousTradingDayRecalculatedScores(r){
       ?(blue.total+white.total)/2
       :NaN;
 
-    return{
+    const result={
       date:String(previousPrices[previousPrices.length-1].date).slice(0,10),
       blue,white,average
-    }
+    };
+    previousDayScoreCache.set(cacheKey,result);
+    return result
   }catch(error){
     console.warn('Föregående handelsdags poäng kunde inte räknas om',r?.ticker,error);
+    previousDayScoreCache.set(cacheKey,null);
     return null
   }
 }
@@ -2541,9 +2573,9 @@ function dailyScoreDeltas(r,blue,white,average){
   if(!prev)return{blue:NaN,white:NaN,average:NaN,green:NaN};
   let green=NaN;
   try{
+    const ticker=String(r?.ticker||'');
     const nowGreen=greenScoreForRow(r);
-    const prevMap=new Map(greenProductionRank(prev.date).map(x=>[String(x.row?.ticker||''),x.greenScore*100]));
-    const prevGreen=prevMap.get(String(r?.ticker||''));
+    const prevGreen=greenRankMapForDate(prev.date).get(ticker);
     if(Number.isFinite(nowGreen)&&Number.isFinite(prevGreen))green=nowGreen-prevGreen
   }catch(error){console.warn('Grön dagsdelta kunde inte räknas',r?.ticker,error)}
   return{
@@ -2571,6 +2603,13 @@ function dashboardSortModel(sort,fallbackModel){
   if(sort==='scoreGreen'||sort==='deltaGreen')return 'green';
   if(sort==='scoreAverage'||sort==='deltaAverage')return 'average';
   return fallbackModel
+}
+function dayCacheStats(){
+  return{
+    previousScores:previousDayScoreCache.size,
+    greenDates:greenRankCacheByDate.size,
+    currentGreen:currentGreenScoreCache.map?.size||0
+  }
 }
 function renderDashboard(){
   const table=document.getElementById('dashboardTable');if(!table)return;
@@ -3338,7 +3377,7 @@ function buildRollingPortfolio(model,asOfDate=''){
       lastUpdateDate=startDate;
       benchmarkStart=num(snapshot.benchmarkStart);
 
-      // v21.15.1: även de tio första köpen är riktiga affärer och betalar
+      // v21.16.0: även de tio första köpen är riktiga affärer och betalar
       // samma courtage som alla senare köp. Inga specialregler vid start.
       const budgetPerStock=ROLLING_START_CAPITAL/wanted.size;
       let usedCash=0;
@@ -7957,7 +7996,7 @@ function runFiveYearWhiteBacktest(){
   const frozenWeights=normalizedWhiteWeights({distanceMa200:10,ma50Spread:30,ma200Slope1m:30,trendStability5d:30});
   for(let s=0;s<signals.length-1;s++){
     const signal=signals[s];
-    // v21.15.1: samma regel som levande portföljen.
+    // v21.16.0: samma regel som levande portföljen.
     // Fredagens stängningsdata bestämmer urvalet och samma fredags stängningskurs
     // är köp-/säljkursen för portföljen som benämns nästa vecka.
     const executionDate=signal.date;
@@ -8114,7 +8153,7 @@ function runFiveYearWhiteBacktest(){
   };
   fiveYearBacktestResult=result;
   renderFiveYearBacktest(result);
-  // v21.15.1: det vanliga 10-årstestet ska vara KLART här.
+  // v21.16.0: det vanliga 10-årstestet ska vara KLART här.
   // De mycket tunga robusthets-/känslighetstesterna körs separat så att
   // webbläsaren inte ser ut att fastna på slutet efter 100 % hämtning.
   fiveYearDiagnosticsResult=null;
@@ -9352,7 +9391,7 @@ function currentGreenScores(){
   const cutoff=(greenProductionIndexSeries().at(-1)?.date)||'';
   const stamp=cutoff+'|'+rows.length;
   if(currentGreenScoreCache.stamp===stamp)return currentGreenScoreCache.map;
-  const map=new Map(greenProductionRank(cutoff).map(x=>[String(x.row?.ticker||''),x.greenScore*100]));
+  const map=greenRankMapForDate(cutoff);
   currentGreenScoreCache={stamp,map};return map
 }
 function greenScoreForRow(row){return currentGreenScores().get(String(row?.ticker||''))??NaN}
@@ -9902,7 +9941,7 @@ function repairWrongW34V2085(){
   return false
 }
 
-// v21.15.1: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
+// v21.16.0: Ingen Blå-specifik reparationsmotor. Historiska låsta snapshots
 // bevaras som historik, medan alla nya veckor skapas av den generella veckomotorn.
 
 
@@ -10918,7 +10957,7 @@ try{
     console.info(`Vit 2.1 aktiverad: 10/30/30/30. ${scorePoints} sparade Vit-poäng räknades om.`)
   }else if(weightChanged){persist()}
 }catch(error){console.error('Vit 2.1 viktmigrering misslyckades',error)}
-// v21.15.1: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
+// v21.16.0: befintliga låsta veckor är immutabla. Startup får endast fylla en SAKNAD vecka
 // via den generella motorn, aldrig skriva om W31/W32/... som redan finns.
 try{
   const weekendCreated=backfillMissingWeeklyPortfolios();
