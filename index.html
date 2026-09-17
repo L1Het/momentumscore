@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v20.6.1</title>
+<title>MomentumScore v21.27.0</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.26.0 – daily + intraday föregående close + en veckomotor</h1>
+<h1>MomentumScore v21.27.0 – Hybrid speglar Vit + Grön regimindikator</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -487,6 +487,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
         </select></div>
       </div>
     </div>
+    <div id="hybridRegimeStatus" class="card"></div>
     <div id="devPortfolioSummary" class="summary"></div>
     <div class="card tablewrap"><table id="devPortfolioTable"></table></div>
     <div id="devPortfolioDetail" class="card hidden">
@@ -3685,7 +3686,32 @@ function rollingPortfolioRows(){
 function portfolioModelName(model){
   return model==='blue'?'🔵 Blå':model==='white'?'⚪ Vit':model==='green'?'🟢 Grön':model==='hybrid'?'⚪🟢 Hybrid':'🟣 Snitt'
 }
+function renderHybridRegimeStatus(){
+  const el=document.getElementById('hybridRegimeStatus');
+  if(!el)return;
+  const index=greenProductionIndexSeries();
+  const latest=index.length?String(index[index.length-1]?.date||'').slice(0,10):todayISO();
+  const p=greenProductionProbability(latest);
+  const threshold=GREEN_V02.threshold;
+  if(!Number.isFinite(p)){
+    el.innerHTML='<h3 style="margin-top:0">⚪🟢 Hybrid – regim</h3><div class="note">Grön sannolikhet kan inte beräknas ännu. Indexhistorik saknas.</div>';
+    return
+  }
+  const on=p>=threshold;
+  const gap=(threshold-p)*100;
+  const ratio=Math.max(0,Math.min(100,100*p/threshold));
+  el.innerHTML=`<h3 style="margin-top:0">⚪🟢 Hybrid – regim</h3>
+    <div class="summary">
+      <div class="metric"><small>Aktuellt läge</small><b class="${on?'good':'white-score'}">${on?'🟢 GRÖN':'⚪ VIT'}</b></div>
+      <div class="metric"><small>pGreen</small><b>${(p*100).toFixed(2)} %</b></div>
+      <div class="metric"><small>Tröskel för Grön</small><b>${(threshold*100).toFixed(2)} %</b></div>
+      <div class="metric"><small>${on?'Över tröskeln':'Kvar till Grön'}</small><b class="${on?'good':'warn'}">${Math.abs(gap).toFixed(2)} p.e.</b></div>
+    </div>
+    <div class="autolab-progress" title="pGreen relativt inkopplingströskeln"><div style="width:${ratio.toFixed(1)}%"></div></div>
+    <p class="note" style="margin-bottom:0">Beräknad på senaste tillgängliga OMXSPI-data (${dateFmt(latest)}). Hybrid ska spegla Vit exakt när pGreen är under ${(threshold*100).toFixed(2)} %. När tröskeln nås växlar Hybrid till Gröns fristående Top10.</p>`;
+}
 function renderDevelopmentPortfolios(){
+  renderHybridRegimeStatus();
   const table=document.getElementById('devPortfolioTable');
   if(!table)return;
   const frozen=developmentPortfolioRows();
@@ -9472,14 +9498,11 @@ function hybridProductionMembers(cutoffDate,previousSnapshot=null){
         selectionModel:'hybrid',selectionSource:'hybrid-v01-green-v03'}
     })
   }
-  // Hybrid owns its own hysteresis state. The actual White ranking is always
-  // reconstructed from data available at cutoffDate, so historical rebuilds
-  // can never leak today's score into an older week.
-  const proxyPrev=previousSnapshot?.portfolios?.hybrid
-    ?{...previousSnapshot,portfolios:{...previousSnapshot.portfolios,white:previousSnapshot.portfolios.hybrid}}
-    :previousSnapshot;
+  // Produktionsinvariant: när Grön-regimen är AV ska Hybrid vara exakt samma
+  // Vit-portfölj som den kanoniska Vit 2.1-portföljen. Hybrid får alltså inte
+  // bära ett eget Top10/Top20-hysteresistate i Vit-läge.
   const greenMap=new Map(greenProductionRank(cutoffDate).map(x=>[String(x.row?.ticker||''),x.greenScore*100]));
-  return historicalWeeklyMembers('white',cutoffDate,proxyPrev).map((m,i)=>({...m,rank:i+1,
+  return historicalWeeklyMembers('white',cutoffDate,previousSnapshot).map((m,i)=>({...m,rank:i+1,
     selectionModel:'hybrid',selectionSource:'hybrid-v01-green-v03',hybridMode:'white',
     greenProbability:p,greenScore:greenMap.get(String(m.ticker||''))??NaN}))
 }
