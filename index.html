@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v21.27.0</title>
+<title>MomentumScore v21.27.1</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.27.0 – Hybrid speglar Vit + Grön regimindikator</h1>
+<h1>MomentumScore v21.27.1 – Hybrid speglar Vit exakt när Grön är av</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -3360,6 +3360,33 @@ function rollingSnapshotsForModel(model,asOfDate=''){
 function buildRollingPortfolio(model,asOfDate=''){
   const snaps=rollingSnapshotsForModel(model,asOfDate);
   if(!snaps.length)return null;
+
+  // v21.27.1: Så länge Hybrid aldrig har varit i Grön-regim är den ekonomiskt
+  // exakt samma strategi som Vit. Återanvänd därför Vits kanoniska rullande
+  // bokföring i stället för att låta en separat Hybrid-state driva isär
+  // courtage, köpdatum, antal aktier eller avkastning.
+  if(model==='hybrid'){
+    const pureWhiteHistory=snaps.every(snapshot=>{
+      const hybrid=snapshot?.portfolios?.hybrid?.members||[];
+      const white=snapshot?.portfolios?.white?.members||[];
+      if(hybrid.length!==10||white.length!==10)return false;
+      const greenOn=hybrid.some(member=>String(member?.hybridMode||'').toLowerCase()==='green');
+      if(greenOn)return false;
+      return hybrid.every((member,index)=>{
+        const w=white[index];
+        return weeklyMemberKey(member)===weeklyMemberKey(w) &&
+          Math.abs(num(member.startPrice)-num(w.startPrice))<=1e-8
+      })
+    });
+    if(pureWhiteHistory){
+      const whitePortfolio=buildRollingPortfolio('white',asOfDate);
+      if(whitePortfolio)return{
+        ...whitePortfolio,
+        model:'hybrid',
+        transactions:(whitePortfolio.transactions||[]).map(tx=>({...tx,id:String(tx.id||'').replace(/^white-/,'hybrid-')}))
+      }
+    }
+  }
 
   let cash=ROLLING_START_CAPITAL;
   let fees=0,buyCount=0,sellCount=0,turnoverValue=0;
@@ -10158,7 +10185,7 @@ function createWeeklySnapshot(overwrite=false,automatic=false){
 }
 
 
-const FIVE_MODEL_INTEGRITY_MIGRATION_KEY='momentumscore_five_model_integrity_v2112';
+const FIVE_MODEL_INTEGRITY_MIGRATION_KEY='momentumscore_five_model_integrity_v21271';
 
 function exactHistoricalCloseForMember(member,cutoffDate){
   const idx=findStockIndex(member),row=idx>=0?rows[idx]:null;
@@ -10186,9 +10213,17 @@ function migrateExtendedModelsToCanonicalEngine(){
     const cutoff=String(snapshot.executionDate||snapshot.lockDate||snapshot.savedDate||'').slice(0,10);
     if(!cutoff){previous=snapshot;continue}
     const green=greenProductionMembers(cutoff,previous);
+    const pGreen=greenProductionProbability(cutoff);
+    const greenOn=Number.isFinite(pGreen)&&pGreen>=GREEN_V02.threshold;
     const hybrid=hybridProductionMembers(cutoff,previous);
     const expectedGreen=green.length===10?decorateGreenMembers(green,cutoff):[];
-    const expectedHybrid=hybrid.length===10?decorateHybridMembers(hybrid,cutoff):[];
+    // v21.27.1: I Vit-regim är den redan låsta Vit-portföljen sanningskällan.
+    // Hybrid kopieras från den, så historik, ordning och fredagskurser blir identiska.
+    const lockedWhite=snapshot?.portfolios?.white?.members||[];
+    const expectedHybrid=!greenOn&&lockedWhite.length===10
+      ?decorateHybridMembers(lockedWhite.map((m,i)=>({...m,rank:i+1,hybridMode:'white',greenProbability:pGreen,
+          selectionModel:'hybrid',selectionSource:'hybrid-v01-green-v03'})),cutoff)
+      :(hybrid.length===10?decorateHybridMembers(hybrid,cutoff):[]);
     const greenOK=expectedGreen.length===10&&extendedPortfolioMatchesInvariant(snapshot,'green',expectedGreen);
     const hybridOK=expectedHybrid.length===10&&extendedPortfolioMatchesInvariant(snapshot,'hybrid',expectedHybrid);
 
