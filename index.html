@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v21.27.1</title>
+<title>MomentumScore v21.27.2</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.27.1 – Hybrid speglar Vit exakt när Grön är av</h1>
+<h1>MomentumScore v21.27.2 – Hybrid speglar Vit exakt när Grön är av</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -3361,22 +3361,17 @@ function buildRollingPortfolio(model,asOfDate=''){
   const snaps=rollingSnapshotsForModel(model,asOfDate);
   if(!snaps.length)return null;
 
-  // v21.27.1: Så länge Hybrid aldrig har varit i Grön-regim är den ekonomiskt
-  // exakt samma strategi som Vit. Återanvänd därför Vits kanoniska rullande
-  // bokföring i stället för att låta en separat Hybrid-state driva isär
-  // courtage, köpdatum, antal aktier eller avkastning.
+  // v21.27.2: Hybrid har ingen egen urvalsmotor. Den är en ren regimväxel:
+  // Grön AV = exakt Vit, Grön PÅ = exakt Grön. Om Grön aldrig har varit aktiv
+  // fram till värderingsdatumet måste Hybrid därför också ekonomiskt vara exakt
+  // Vit. Kontrollera endast regimen här – inte äldre Hybrid-startpriser/ordning,
+  // eftersom just sådana gamla Hybrid-fält inte får hindra den kanoniska speglingen.
   if(model==='hybrid'){
     const pureWhiteHistory=snaps.every(snapshot=>{
       const hybrid=snapshot?.portfolios?.hybrid?.members||[];
       const white=snapshot?.portfolios?.white?.members||[];
       if(hybrid.length!==10||white.length!==10)return false;
-      const greenOn=hybrid.some(member=>String(member?.hybridMode||'').toLowerCase()==='green');
-      if(greenOn)return false;
-      return hybrid.every((member,index)=>{
-        const w=white[index];
-        return weeklyMemberKey(member)===weeklyMemberKey(w) &&
-          Math.abs(num(member.startPrice)-num(w.startPrice))<=1e-8
-      })
+      return !hybrid.some(member=>String(member?.hybridMode||'').toLowerCase()==='green');
     });
     if(pureWhiteHistory){
       const whitePortfolio=buildRollingPortfolio('white',asOfDate);
