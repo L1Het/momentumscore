@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v21.27.7</title>
+<title>MomentumScore v21.27.8</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.27.7 – Hybrid speglar Vit exakt när Grön är av</h1>
+<h1>MomentumScore v21.27.8 – Hybrid speglar Vit exakt när Grön är av</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -8153,7 +8153,7 @@ function runFiveYearWhiteBacktest(){
         lastWeekRelativeReturn:NaN,replacements:[...incomingForPostSale],
         lastWeekIndex:NaN,lastWeekStock:NaN,signalIndex:s});
     }
-    // v21.27.7: en observation per innehav och vecka, utan att påverka handelsbesluten.
+    // v21.27.8: en observation per innehav och vecka, utan att påverka handelsbesluten.
     // Även sålda innehav loggas på säljveckan med aktuella poäng och rankning.
     const observationTickers=new Set([...Object.keys(state.positions),...outgoingForHistory]);
     for(const ticker of observationTickers){
@@ -8765,7 +8765,7 @@ function exportWhiteHoldingScoreHistoryCsv(){
     'pointsDistanceMa200','pointsMa50Spread','pointsMa200Slope1m','pointsTrendStability5d','relativeReturn','exitReason'];
   const q=v=>`"${String(v??'').replaceAll('"','""')}"`;
   const csv='\ufeff'+[cols.join(';'),...rows.map(r=>cols.map(c=>q(r[c])).join(';'))].join('\n');
-  downloadTextFile(csv,'MomentumScore_v21_27_7_Vit_poang_per_innehav_vecka.csv','text/csv;charset=utf-8');
+  downloadTextFile(csv,'MomentumScore_v21_27_8_Vit_poang_per_innehav_vecka.csv','text/csv;charset=utf-8');
 }
 function exportWhitePostSaleCsv(){
   const rows=fiveYearBacktestResult?.postSaleRows||[];
@@ -8776,21 +8776,22 @@ function exportWhitePostSaleCsv(){
     'replacementCount','completeReplacementData','scoreAtSale'];
   const q=v=>`"${String(v??'').replaceAll('"','""')}"`;
   const csv='\ufeff'+[cols.join(';'),...rows.map(r=>cols.map(c=>q(r[c])).join(';'))].join('\n');
-  downloadTextFile(csv,'MomentumScore_v21_27_7_Vit_efter_forsaljning.csv','text/csv;charset=utf-8');
+  downloadTextFile(csv,'MomentumScore_v21_27_8_Vit_efter_forsaljning.csv','text/csv;charset=utf-8');
 }
 
 function exportWhiteWorstQuartileTestCsv(){
  const r=window.whiteWorstQuartileExperiment;
  if(!r?.selected?.length||!r?.curves?.length)return alert('Kör TEST: sämsta kvartilen +1 vecka först.');
  const q=v=>`"${String(v??'').replaceAll('"','""')}"`;
- const cols=['recordType','date','ticker','company','buyDate','sellDate','excessGross','excessNet','weeksHeld','ordinaryValue','testValue','differenceKr','selectedTrades','closedTrades','forcedExtraWeeks','measurableExtraWeeks','extraWeeksBeatIndex','averageExtraWeekExcess','missingPriceObservations','skippedBuys'];
+ const cols=['recordType','date','ticker','company','buyDate','sellDate','excessGross','excessNet','weeksHeld','ordinaryValue','testValue','differenceKr','selectedTrades','closedTrades','forcedExtraWeeks','measurableExtraWeeks','extraWeeksBeatIndex','averageExtraWeekExcess','missingPriceObservations','skippedBuys','capacityBlocked','holdings','cash','event','amount'];
  const baseline=new Map(r.baseline.map(p=>[p.date,p.value]));
  const rows=[];
  for(const t of r.selected)rows.push({recordType:'selected_trade',ticker:t.ticker,company:t.company,buyDate:t.buyDate,sellDate:t.sellDate,excessGross:t.excessGross,excessNet:t.excessNet,weeksHeld:t.weeksHeld});
- for(const p of r.curves){const ordinary=baseline.get(p.date);rows.push({recordType:'equity_curve',date:p.date,ordinaryValue:ordinary,testValue:p.value,differenceKr:Number.isFinite(ordinary)?p.value-ordinary:''});}
- rows.push({recordType:'summary',selectedTrades:r.selected.length,closedTrades:r.closedCount,forcedExtraWeeks:r.forced,measurableExtraWeeks:r.extraValid,extraWeeksBeatIndex:r.extraWins,averageExtraWeekExcess:r.extraValid?r.extraSum/r.extraValid:'',missingPriceObservations:r.missing,skippedBuys:r.skippedBuys});
+ for(const p of r.curves){const ordinary=baseline.get(p.date);rows.push({recordType:'equity_curve',date:p.date,ordinaryValue:ordinary,testValue:p.value,differenceKr:Number.isFinite(ordinary)?p.value-ordinary:'',holdings:p.holdings,cash:p.cash});}
+ rows.push({recordType:'summary',selectedTrades:r.selected.length,closedTrades:r.closedCount,forcedExtraWeeks:r.forced,measurableExtraWeeks:r.extraValid,extraWeeksBeatIndex:r.extraWins,averageExtraWeekExcess:r.extraValid?r.extraSum/r.extraValid:'',missingPriceObservations:r.missing,skippedBuys:r.skippedBuys,capacityBlocked:r.capacityBlocked});
+ for(const d of r.decisions||[])rows.push({recordType:'decision',...d});
  const csv='\ufeff'+[cols.join(';'),...rows.map(row=>cols.map(c=>q(row[c])).join(';'))].join('\n');
- downloadTextFile(csv,'MomentumScore_v21_27_7_Vit_samsta_kvartilen_plus_1_vecka.csv','text/csv;charset=utf-8');
+ downloadTextFile(csv,'MomentumScore_v21_27_8_Vit_samsta_kvartilen_plus_1_vecka.csv','text/csv;charset=utf-8');
 }
 
 // Fristående efterhands-experiment. Vit och dess ordinarie handelslogik ändras inte.
@@ -8800,14 +8801,13 @@ function runWhiteWorstQuartileTest(){
  if(!base?.tradeLedger?.length||!base?.points?.length){alert('Kör det ordinarie 10-årstestet först.');return;}
  const closed=base.tradeLedger.filter(t=>t.status==='closed'&&Number.isFinite(t.excessGross)&&t.sellDate&&t.buyDate);
  if(closed.length<4){out.textContent='För få avslutade affärer.';return;}
- // Exakt nedersta kvartilen av hela facit, inklusive senare affärer. Ingen signal i realtid.
+ // Avsiktligt efterhandsurval: samma ursprungliga affärer och facit som tidigare.
  const ordered=[...closed].sort((a,b)=>a.excessGross-b.excessGross||String(a.buyDate).localeCompare(String(b.buyDate))||String(a.ticker).localeCompare(String(b.ticker)));
  const count=Math.floor(ordered.length/4),selected=ordered.slice(0,count);
  const id=t=>[t.ticker,t.buyDate,t.sellDate].join('|');
  const delayed=new Set(selected.map(id));
  const signalDates=base.points.map(p=>p.date);
  const nextDate=new Map(signalDates.map((d,i)=>[d,signalDates[i+1]||null]));
- const start=signalDates[0],end=signalDates[signalDates.length-1];
  const buyByDate=new Map(),sellByDate=new Map(),forcedByDate=new Map();
  const add=(map,date,t)=>{if(!map.has(date))map.set(date,[]);map.get(date).push(t)};
  for(const t of base.tradeLedger){
@@ -8818,39 +8818,61 @@ function runWhiteWorstQuartileTest(){
   }
  }
  const fee=FIVE_YEAR_FEE_RATE;
- const state={cash:100000,positions:new Map(),fees:0,missing:0,skippedBuys:0};
+ const state={cash:100000,positions:new Map(),fees:0,missing:0,skippedBuys:0,capacityBlocked:0};
  const key=t=>t.ticker+'|'+t.buyDate;
- const price=(ticker,date)=>{const series=fiveYearBacktestData.stockMap[ticker]?.series||[];return fiveYearPriceOnOrBefore(series,date)};
- const curves=[];let extraIndex=0,extraWins=0,extraSum=0,extraValid=0,forced=0;
+ const price=(ticker,date)=>fiveYearPriceOnOrBefore(fiveYearBacktestData.stockMap[ticker]?.series||[],date);
+ const curves=[],decisions=[];let extraWins=0,extraSum=0,extraValid=0,forced=0;
  for(const date of signalDates){
-  // Först ordinarie försäljningar och förfallna extraveckor; sedan ordinarie köp.
+  // Avsluta ordinarie affärer när de finns i experimentet; behåll utvald kvartil exakt en vecka extra.
   for(const t of [...(forcedByDate.get(date)||[]),...(sellByDate.get(date)||[])]){
    const k=key(t),pos=state.positions.get(k);if(!pos)continue;
    const px=price(t.ticker,date);if(!(px>0)){state.missing++;continue;}
    const gross=pos.shares*px,sellFee=gross*fee;
    state.cash+=gross-sellFee;state.fees+=sellFee;state.positions.delete(k);
+   decisions.push({date,event:'sell',ticker:t.ticker,buyDate:t.buyDate,amount:gross,positions:state.positions.size});
    if(delayed.has(id(t))&&date!==t.sellDate){
     forced++;const old=price(t.ticker,t.sellDate),ix0=fiveYearPriceOnOrBefore(fiveYearBacktestData.index,t.sellDate),ix1=fiveYearPriceOnOrBefore(fiveYearBacktestData.index,date);
     if(old>0&&ix0>0&&ix1>0){const excess=100*(px/old-ix1/ix0);extraSum+=excess;extraValid++;if(excess>0)extraWins++;}
    }
   }
+  // Max tio aktier: förlängda innehav tar en plats. Baslinjens nya kandidater tas i ordning.
   const buys=buyByDate.get(date)||[];
-  // Baslinjens faktiska köp behålls som köpschema. Bundet kapital kan därför ge mindre nya positioner.
-  const available=buys.filter(t=>!state.positions.has(key(t))&&price(t.ticker,date)>0);
-  if(available.length&&state.cash>0){const alloc=state.cash/available.length;
-   for(const t of available){const px=price(t.ticker,date),gross=alloc/(1+fee),buyFee=gross*fee;
-    state.positions.set(key(t),{ticker:t.ticker,shares:gross/px});state.cash-=gross+buyFee;state.fees+=buyFee;
+  for(const t of buys){
+   if(state.positions.has(key(t)))continue;
+   if([...state.positions.values()].some(p=>p.ticker===t.ticker))continue;
+   if(state.positions.size>=10){state.capacityBlocked++;decisions.push({date,event:'blocked_capacity',ticker:t.ticker,buyDate:t.buyDate,positions:state.positions.size});continue;}
+   const px=price(t.ticker,date);if(!(px>0)){state.missing++;continue;}
+   // Finansiera ledig plats ur befintligt portföljvärde, inte enbart ur kontanter.
+   const slots=10-state.positions.size;
+   let equity=state.cash;
+   for(const pos of state.positions.values()){const p=price(pos.ticker,date);if(p>0)equity+=pos.shares*p;}
+   const desired=equity/10;
+   let need=Math.max(0,desired-state.cash);
+   if(need>0){
+    const holdings=[...state.positions.values()].filter(pos=>price(pos.ticker,date)>0);
+    const grossTotal=holdings.reduce((sum,pos)=>sum+pos.shares*price(pos.ticker,date),0);
+    // Proportionell minskning med säljcourtage; inga hela aktier krävs.
+    const grossToSell=Math.min(grossTotal,need/(1-fee));
+    if(grossTotal>0&&grossToSell>0){
+     const ratio=grossToSell/grossTotal;
+     for(const pos of holdings){const gross=pos.shares*price(pos.ticker,date)*ratio;pos.shares*=1-ratio;const sellFee=gross*fee;state.cash+=gross-sellFee;state.fees+=sellFee;}
+     decisions.push({date,event:'fund_by_fractional_sales',ticker:t.ticker,amount:grossToSell,positions:state.positions.size});
+    }
    }
-  }else if(available.length)state.skippedBuys+=available.length;
+   const alloc=Math.min(state.cash,desired);
+   if(alloc<=0){state.skippedBuys++;continue;}
+   const gross=alloc/(1+fee),buyFee=gross*fee;
+   state.positions.set(key(t),{ticker:t.ticker,shares:gross/px});state.cash-=gross+buyFee;state.fees+=buyFee;
+   decisions.push({date,event:'buy',ticker:t.ticker,buyDate:t.buyDate,amount:gross,positions:state.positions.size});
+  }
   let value=state.cash;
   for(const pos of state.positions.values()){const px=price(pos.ticker,date);if(px>0)value+=pos.shares*px;else state.missing++;}
-  curves.push({date,value});
+  curves.push({date,value,holdings:state.positions.size,cash:state.cash});
  }
  const final=curves[curves.length-1]?.value,baseline=base.points[base.points.length-1]?.value;
  const diff=final-baseline,ret=100*(final/100000-1),baseRet=100*(baseline/100000-1);
- const summary=`<b>Fristående facittest – sämsta kvartilen + exakt en vecka</b><br>Avslutade affärer: ${closed.length} · utvalda (25 % avrundat nedåt): ${count} · extraveckor som hann avslutas: ${forced}.<br>Extraveckan mot OMXSPI, genomsnitt: ${extraValid?(extraSum/extraValid).toFixed(3)+' procentenheter':'saknas'} · slog index: ${extraValid?(100*extraWins/extraValid).toFixed(1)+' %':'saknas'} (${extraValid} mätbara).<br>Vit ordinarie slutvärde: ${baseline.toFixed(0)} kr (${baseRet.toFixed(2)} %) · testets slutvärde: ${final.toFixed(0)} kr (${ret.toFixed(2)} %) · skillnad: ${diff.toFixed(0)} kr.<br><small>Efterhandsurval från hela 10-årsperioden, inte en möjlig realtidsstrategi. Testet spelar upp Vits ordinarie köpdatum och försäljningar, men fördröjer de utvalda försäljningarna; bundet kapital fördelas inte till nya köp förrän det frigörs. Det är en kassaflödesmodell med oförändrat köpschema, inte en ny rankningsbaserad omoptimering. ${state.skippedBuys} köp saknade ledigt kapital; ${state.missing} prisobservationer saknades vid värdering/försäljning. Positioner som inte hann säljas före sista testdatum värderas då.</small>`;
- out.innerHTML=summary;
- window.whiteWorstQuartileExperiment={selected,curves,baseline:base.points,finalValue:final,missing:state.missing,skippedBuys:state.skippedBuys,closedCount:closed.length,forced,extraValid,extraWins,extraSum};
+ out.innerHTML=`<b>Fristående facittest – sämsta kvartilen + exakt en vecka · max 10 innehav</b><br>Avslutade affärer: ${closed.length} · utvalda: ${count} · genomförda extraveckor: ${forced}.<br>Extraveckan mot OMXSPI, genomsnitt: ${extraValid?(extraSum/extraValid).toFixed(3)+' procentenheter':'saknas'} · slog index: ${extraValid?(100*extraWins/extraValid).toFixed(1)+' %':'saknas'} (${extraValid} mätbara).<br>Vit ordinarie slutvärde: ${baseline.toFixed(0)} kr (${baseRet.toFixed(2)} %) · testets slutvärde: ${final.toFixed(0)} kr (${ret.toFixed(2)} %) · skillnad: ${diff.toFixed(0)} kr.<br><small>Avsiktligt faciturval. Högst tio samtidiga aktier; förlängda innehav blockerar nya köp när portföljen är full. Lediga platser finansieras med proportionell försäljning av bråkdelar av befintliga innehav inklusive courtage. Blockerade köp på grund av tiogränsen: ${state.capacityBlocked}. Köp utan finansiering: ${state.skippedBuys}. Saknade prisobservationer: ${state.missing}. Experimentet utgår från ordinarie Vits affärskandidater; efterföljande urval görs inte om från hela historiska topplistan.</small>`;
+ window.whiteWorstQuartileExperiment={selected,curves,decisions,baseline:base.points,finalValue:final,missing:state.missing,skippedBuys:state.skippedBuys,capacityBlocked:state.capacityBlocked,closedCount:closed.length,forced,extraValid,extraWins,extraSum};
  const exportBtn=document.getElementById('exportWhiteWorstQuartileTest');if(exportBtn)exportBtn.disabled=false;
 }
 
