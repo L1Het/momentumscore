@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v21.27.8</title>
+<title>MomentumScore v21.27.9</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.27.8 – Hybrid speglar Vit exakt när Grön är av</h1>
+<h1>MomentumScore v21.27.9 – Hybrid speglar Vit exakt när Grön är av</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -749,7 +749,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
     <div class="rowcard" style="margin-top:18px">
       <h3>Vit 2.1 – vilka aktier fungerar?</h3>
       <p class="note">Analysen bygger på backtestets faktiska köp och försäljningar: fredagens executionDate och stängningskurs, courtage på både köp och sälj samt OMXSPI på exakt samma köp- och säljdatum. Öppna positioner redovisas separat och räknas inte i träffprocenten.</p>
-      <div id="whiteHoldingAnalysisSummary" class="summary"></div><div class="actions" style="margin:8px 0 12px"><button type="button" class="secondary" id="exportWhiteTradeLedger">Exportera affärer CSV</button> <button type="button" class="secondary" id="exportWhiteHoldingScoreHistory">Exportera poäng per innehav och vecka CSV</button> <button type="button" class="secondary" id="exportWhitePostSale">Testa för tidig försäljning – exportera CSV</button> <button type="button" class="secondary" id="runWhiteWorstQuartileTest">TEST: sämsta kvartilen +1 vecka</button> <button type="button" class="secondary" id="exportWhiteWorstQuartileTest" disabled>Exportera kvartilstest CSV</button><div id="whiteWorstQuartileTestResult" class="summary"></div></div>
+      <div id="whiteHoldingAnalysisSummary" class="summary"></div><div class="actions" style="margin:8px 0 12px"><button type="button" class="secondary" id="exportWhitePriceHistory">Exportera 10-årskurser CSV</button> <button type="button" class="secondary" id="exportWhiteTradeLedger">Exportera affärer CSV</button> <button type="button" class="secondary" id="exportWhiteHoldingScoreHistory">Exportera poäng per innehav och vecka CSV</button> <button type="button" class="secondary" id="exportWhitePostSale">Testa för tidig försäljning – exportera CSV</button> <button type="button" class="secondary" id="runWhiteWorstQuartileTest">TEST: sämsta kvartilen +1 vecka</button> <button type="button" class="secondary" id="exportWhiteWorstQuartileTest" disabled>Exportera kvartilstest CSV</button><div id="whiteWorstQuartileTestResult" class="summary"></div></div>
       <div class="tablewrap"><table id="whiteHoldingAnalysisCompany"></table></div>
       <div class="tablewrap" style="margin-top:14px"><table id="whiteHoldingAnalysisDuration"></table></div>
       <div class="tablewrap" style="margin-top:14px"><table id="whiteHoldingAnalysisRegime"></table></div>
@@ -7063,6 +7063,23 @@ function rsiClass(v){
 }
 
 
+function exportWhitePriceHistoryCsv(){
+  const data=fiveYearBacktestData;
+  if(!data?.index?.length||!data?.stocks?.length){alert('Kör 10-årstestet och hämta kurshistoriken först.');return;}
+  const rows=['typ;ticker;bolag;yahooSymbol;datum;stangningskurs'];
+  const cell=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const add=(type,ticker,company,symbol,series)=>{
+    for(const p of series||[])rows.push([type,ticker,company,symbol,p.date,p.close].map(cell).join(';'));
+  };
+  add('index','OMXSPI','OMXSPI','^OMXSPI',data.index);
+  for(const item of data.stocks)add('aktie',item.ticker,item.company,item.symbol,item.series);
+  const blob=new Blob(['\uFEFF'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='MomentumScore_v21_27_9_10arskurser_'+new Date().toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+const whitePriceExportButton=document.getElementById('exportWhitePriceHistory');
+if(whitePriceExportButton)whitePriceExportButton.addEventListener('click',exportWhitePriceHistoryCsv);
 let fiveYearBacktestData=null;
 let fiveYearBacktestResult=null;
 let fiveYearDiagnosticsResult=null;
