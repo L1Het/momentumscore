@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v21.27.9</title>
+<title>MomentumScore v21.27.10</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.27.9 – Hybrid speglar Vit exakt när Grön är av</h1>
+<h1>MomentumScore v21.27.10 – Hybrid speglar Vit exakt när Grön är av</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -7075,7 +7075,7 @@ function exportWhitePriceHistoryCsv(){
   for(const item of data.stocks)add('aktie',item.ticker,item.company,item.symbol,item.series);
   const blob=new Blob(['\uFEFF'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});
   const url=URL.createObjectURL(blob),a=document.createElement('a');
-  a.href=url;a.download='MomentumScore_v21_27_9_10arskurser_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.href=url;a.download='MomentumScore_v21_27_10_10arskurser_'+new Date().toISOString().slice(0,10)+'.csv';
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
 const whitePriceExportButton=document.getElementById('exportWhitePriceHistory');
@@ -8042,7 +8042,10 @@ function exportGreenV02Csv(){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='MomentumScore_Gron_v0_2_'+new Date().toISOString().slice(0,10)+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)
 }
 
-function runFiveYearWhiteBacktest(){
+function runFiveYearWhiteBacktest(options={}){
+  const delayedTradeIds=options.delayedTradeIds||new Set(), lockedUntil=new Map(), delayedEvents=[];
+  const tradeId=(ticker,buyDate,sellDate)=>[ticker,buyDate,sellDate].join('|');
+  const replay=!!options.silent;
   if(!fiveYearBacktestData?.index?.length||!fiveYearBacktestData?.stocks?.length){
     alert('Hämta 10-årshistoriken först.');
     return null
@@ -8064,11 +8067,30 @@ function runFiveYearWhiteBacktest(){
     const ranked=fiveYearTopN(signal.date,Object.keys(state.positions),20,frozenWeights);
     if(ranked.length<5)continue;
     const rankMapAll=new Map(ranked.map((x,i)=>[x.ticker,i+1]));
+    // Afterhandsurval: reservera en av tio platser om exakt samma ursprungsaffär
+    // fortfarande ägs på sitt ursprungliga säljdatum.
+    const forcedExit=new Set([...lockedUntil].filter(([ticker,until])=>until===executionDate).map(([ticker])=>ticker));
+    const newlyLocked=new Set(),nextExecutionDate=signals[s+1]?.date;
+    if(started&&nextExecutionDate){
+      for(const [ticker,pos] of Object.entries(state.positions)){
+        if(forcedExit.has(ticker)||lockedUntil.has(ticker))continue;
+        if(delayedTradeIds.has(tradeId(ticker,pos.buyDate,executionDate))){
+          newlyLocked.add(ticker);lockedUntil.set(ticker,nextExecutionDate);
+          delayedEvents.push({ticker,buyDate:pos.buyDate,originalSellDate:executionDate,extraSellDate:nextExecutionDate,status:'reserved'});
+        }
+      }
+    }
     let target=[];
     if(started){
       const rankMap=new Map(ranked.map((x,i)=>[x.ticker,i+1]));
-      // Fryst regel: befintligt innehav behålls så länge det ligger inom Top 20.
+      // Förlängda positioner reserverar plats före den normala rangordningen.
+      for(const ticker of newlyLocked){
+        const item=fiveYearBacktestData.stockMap[ticker];
+        if(item&&target.length<10)target.push(item);
+      }
+      // Resten följer oförändrat Vits Top 20-regel.
       for(const ticker of Object.keys(state.positions)){
+        if(forcedExit.has(ticker)||newlyLocked.has(ticker))continue;
         if(rankMap.has(ticker)&&rankMap.get(ticker)<=20){
           const item=ranked.find(x=>x.ticker===ticker);
           if(item&&target.length<10)target.push(item);
@@ -8078,7 +8100,7 @@ function runFiveYearWhiteBacktest(){
     // Fyll lediga platser med högst rankade kandidater. Nytt innehav kommer från rankingen uppifrån.
     for(const item of ranked){
       if(target.length>=10)break;
-      if(!target.some(x=>x.ticker===item.ticker))target.push(item);
+      if(!forcedExit.has(item.ticker)&&!target.some(x=>x.ticker===item.ticker))target.push(item);
     }
     if(target.length<5)continue;
     const targetTickers=target.map(x=>x.ticker);
@@ -8114,6 +8136,11 @@ function runFiveYearWhiteBacktest(){
         const pos=state.positions[ticker];
         const price=item?fiveYearPriceOnOrAfter(item.series,executionDate):NaN;
         if(!Number.isFinite(price))continue;
+        if(forcedExit.has(ticker)){
+          const event=delayedEvents.findLast(e=>e.ticker===ticker&&e.buyDate===pos.buyDate&&e.extraSellDate===executionDate&&e.status==='reserved');
+          if(event)event.status='completed';
+        }
+        lockedUntil.delete(ticker);
         const gross=pos.shares*price,fee=gross*FIVE_YEAR_FEE_RATE,net=gross-fee;
         const exitIndex=fiveYearPriceOnOrAfter(fiveYearBacktestData.index,executionDate);
         const grossReturn=Number.isFinite(pos.buyPrice)&&pos.buyPrice>0?(price/pos.buyPrice-1)*100:NaN;
@@ -8291,6 +8318,8 @@ function runFiveYearWhiteBacktest(){
     universe:fiveYearBacktestData.stocks.length,
     failures:fiveYearBacktestData.failures||[]
   };
+  result.delayedEvents=delayedEvents;
+  if(replay)return result;
   fiveYearBacktestResult=result;
   renderFiveYearBacktest(result);
   // v21.26.0: det vanliga 10-årstestet ska vara KLART här.
@@ -8800,96 +8829,61 @@ function exportWhiteWorstQuartileTestCsv(){
  const r=window.whiteWorstQuartileExperiment;
  if(!r?.selected?.length||!r?.curves?.length)return alert('Kör TEST: sämsta kvartilen +1 vecka först.');
  const q=v=>`"${String(v??'').replaceAll('"','""')}"`;
- const cols=['recordType','date','ticker','company','buyDate','sellDate','excessGross','excessNet','weeksHeld','ordinaryValue','testValue','differenceKr','selectedTrades','closedTrades','forcedExtraWeeks','measurableExtraWeeks','extraWeeksBeatIndex','averageExtraWeekExcess','missingPriceObservations','skippedBuys','capacityBlocked','holdings','cash','event','amount'];
- const baseline=new Map(r.baseline.map(p=>[p.date,p.value]));
+ const cols=['recordType','date','ticker','company','buyDate','sellDate','excessGross','excessNet','weeksHeld','ordinaryValue','aaValue','testValue','differenceKr','holdings','selectedTrades','closedTrades','forcedExtraWeeks','measurableExtraWeeks','extraWeeksBeatIndex','averageExtraWeekExcess','aaMaxDifferenceKr','aaMismatchWeeks','originalBuysMissingInTest','event','extraSellDate','status'];
  const rows=[];
  for(const t of r.selected)rows.push({recordType:'selected_trade',ticker:t.ticker,company:t.company,buyDate:t.buyDate,sellDate:t.sellDate,excessGross:t.excessGross,excessNet:t.excessNet,weeksHeld:t.weeksHeld});
- for(const p of r.curves){const ordinary=baseline.get(p.date);rows.push({recordType:'equity_curve',date:p.date,ordinaryValue:ordinary,testValue:p.value,differenceKr:Number.isFinite(ordinary)?p.value-ordinary:'',holdings:p.holdings,cash:p.cash});}
- rows.push({recordType:'summary',selectedTrades:r.selected.length,closedTrades:r.closedCount,forcedExtraWeeks:r.forced,measurableExtraWeeks:r.extraValid,extraWeeksBeatIndex:r.extraWins,averageExtraWeekExcess:r.extraValid?r.extraSum/r.extraValid:'',missingPriceObservations:r.missing,skippedBuys:r.skippedBuys,capacityBlocked:r.capacityBlocked});
- for(const d of r.decisions||[])rows.push({recordType:'decision',...d});
- const csv='\ufeff'+[cols.join(';'),...rows.map(row=>cols.map(c=>q(row[c])).join(';'))].join('\n');
- downloadTextFile(csv,'MomentumScore_v21_27_8_Vit_samsta_kvartilen_plus_1_vecka.csv','text/csv;charset=utf-8');
+ for(const p of r.curves)rows.push({recordType:'equity_curve',date:p.date,ordinaryValue:p.ordinaryValue,aaValue:p.aaValue,testValue:p.value,differenceKr:p.value-p.ordinaryValue,holdings:p.holdings});
+ rows.push({recordType:'summary',selectedTrades:r.selected.length,closedTrades:r.closedCount,forcedExtraWeeks:r.forced,measurableExtraWeeks:r.extraValid,extraWeeksBeatIndex:r.extraWins,averageExtraWeekExcess:r.extraValid?r.extraSum/r.extraValid:'',aaMaxDifferenceKr:r.aaMaxDiff,aaMismatchWeeks:r.aaMismatchWeeks,originalBuysMissingInTest:r.originalBuysMissingInTest});
+ for(const e of r.events)rows.push({recordType:'extension',ticker:e.ticker,buyDate:e.buyDate,sellDate:e.originalSellDate,extraSellDate:e.extraSellDate,status:e.status,event:e.status});
+ downloadTextFile('\ufeff'+[cols.join(';'),...rows.map(row=>cols.map(c=>q(row[c])).join(';'))].join('\n'),'MomentumScore_v21_27_10_Vit_samsta_kvartilen_plus_1_vecka.csv','text/csv;charset=utf-8');
 }
 
-// Fristående efterhands-experiment. Vit och dess ordinarie handelslogik ändras inte.
+// Avsiktligt faciturval. A/A och experimentet återanvänder exakt ordinarie Vits
+// motor för rangordning, Top 20, max 10, köp, sälj, allokering och courtage.
 function runWhiteWorstQuartileTest(){
  const out=document.getElementById('whiteWorstQuartileTestResult');
  const base=fiveYearBacktestResult;
  if(!base?.tradeLedger?.length||!base?.points?.length){alert('Kör det ordinarie 10-årstestet först.');return;}
  const closed=base.tradeLedger.filter(t=>t.status==='closed'&&Number.isFinite(t.excessGross)&&t.sellDate&&t.buyDate);
  if(closed.length<4){out.textContent='För få avslutade affärer.';return;}
- // Avsiktligt efterhandsurval: samma ursprungliga affärer och facit som tidigare.
- const ordered=[...closed].sort((a,b)=>a.excessGross-b.excessGross||String(a.buyDate).localeCompare(String(b.buyDate))||String(a.ticker).localeCompare(String(b.ticker)));
- const count=Math.floor(ordered.length/4),selected=ordered.slice(0,count);
- const id=t=>[t.ticker,t.buyDate,t.sellDate].join('|');
- const delayed=new Set(selected.map(id));
- const signalDates=base.points.map(p=>p.date);
- const nextDate=new Map(signalDates.map((d,i)=>[d,signalDates[i+1]||null]));
- const buyByDate=new Map(),sellByDate=new Map(),forcedByDate=new Map();
- const add=(map,date,t)=>{if(!map.has(date))map.set(date,[]);map.get(date).push(t)};
- for(const t of base.tradeLedger){
-  if(t.buyDate)add(buyByDate,t.buyDate,t);
-  if(t.status==='closed'&&t.sellDate){
-   if(delayed.has(id(t))){const d=nextDate.get(t.sellDate);if(d)add(forcedByDate,d,t);else add(sellByDate,t.sellDate,t)}
-   else add(sellByDate,t.sellDate,t);
-  }
+ const selected=[...closed].sort((a,b)=>a.excessGross-b.excessGross||String(a.buyDate).localeCompare(String(b.buyDate))||String(a.ticker).localeCompare(String(b.ticker))).slice(0,Math.floor(closed.length/4));
+ const delayedIds=new Set(selected.map(t=>[t.ticker,t.buyDate,t.sellDate].join('|')));
+ out.textContent='Kontrollerar ordinarie Vit utan förlängningar… Det kan ta en stund.';
+ const control=runFiveYearWhiteBacktest({silent:true});
+ if(!control?.points?.length||control.points.length!==base.points.length){out.textContent='A/A-kontrollen misslyckades: olika antal veckor. Experimentet stoppat.';return;}
+ let aaMaxDiff=0,aaMismatchWeeks=0;
+ for(let i=0;i<base.points.length;i++){
+  const a=base.points[i],b=control.points[i],diff=Math.abs(a.value-b.value);
+  if(a.date!==b.date||!Number.isFinite(diff)){out.textContent='A/A-kontrollen misslyckades: olika datum eller ogiltigt värde. Experimentet stoppat.';return;}
+  aaMaxDiff=Math.max(aaMaxDiff,diff);
+  if(diff>0.01)aaMismatchWeeks++;
  }
- const fee=FIVE_YEAR_FEE_RATE;
- const state={cash:100000,positions:new Map(),fees:0,missing:0,skippedBuys:0,capacityBlocked:0};
- const key=t=>t.ticker+'|'+t.buyDate;
- const price=(ticker,date)=>fiveYearPriceOnOrBefore(fiveYearBacktestData.stockMap[ticker]?.series||[],date);
- const curves=[],decisions=[];let extraWins=0,extraSum=0,extraValid=0,forced=0;
- for(const date of signalDates){
-  // Avsluta ordinarie affärer när de finns i experimentet; behåll utvald kvartil exakt en vecka extra.
-  for(const t of [...(forcedByDate.get(date)||[]),...(sellByDate.get(date)||[])]){
-   const k=key(t),pos=state.positions.get(k);if(!pos)continue;
-   const px=price(t.ticker,date);if(!(px>0)){state.missing++;continue;}
-   const gross=pos.shares*px,sellFee=gross*fee;
-   state.cash+=gross-sellFee;state.fees+=sellFee;state.positions.delete(k);
-   decisions.push({date,event:'sell',ticker:t.ticker,buyDate:t.buyDate,amount:gross,positions:state.positions.size});
-   if(delayed.has(id(t))&&date!==t.sellDate){
-    forced++;const old=price(t.ticker,t.sellDate),ix0=fiveYearPriceOnOrBefore(fiveYearBacktestData.index,t.sellDate),ix1=fiveYearPriceOnOrBefore(fiveYearBacktestData.index,date);
-    if(old>0&&ix0>0&&ix1>0){const excess=100*(px/old-ix1/ix0);extraSum+=excess;extraValid++;if(excess>0)extraWins++;}
-   }
-  }
-  // Max tio aktier: förlängda innehav tar en plats. Baslinjens nya kandidater tas i ordning.
-  const buys=buyByDate.get(date)||[];
-  for(const t of buys){
-   if(state.positions.has(key(t)))continue;
-   if([...state.positions.values()].some(p=>p.ticker===t.ticker))continue;
-   if(state.positions.size>=10){state.capacityBlocked++;decisions.push({date,event:'blocked_capacity',ticker:t.ticker,buyDate:t.buyDate,positions:state.positions.size});continue;}
-   const px=price(t.ticker,date);if(!(px>0)){state.missing++;continue;}
-   // Finansiera ledig plats ur befintligt portföljvärde, inte enbart ur kontanter.
-   const slots=10-state.positions.size;
-   let equity=state.cash;
-   for(const pos of state.positions.values()){const p=price(pos.ticker,date);if(p>0)equity+=pos.shares*p;}
-   const desired=equity/10;
-   let need=Math.max(0,desired-state.cash);
-   if(need>0){
-    const holdings=[...state.positions.values()].filter(pos=>price(pos.ticker,date)>0);
-    const grossTotal=holdings.reduce((sum,pos)=>sum+pos.shares*price(pos.ticker,date),0);
-    // Proportionell minskning med säljcourtage; inga hela aktier krävs.
-    const grossToSell=Math.min(grossTotal,need/(1-fee));
-    if(grossTotal>0&&grossToSell>0){
-     const ratio=grossToSell/grossTotal;
-     for(const pos of holdings){const gross=pos.shares*price(pos.ticker,date)*ratio;pos.shares*=1-ratio;const sellFee=gross*fee;state.cash+=gross-sellFee;state.fees+=sellFee;}
-     decisions.push({date,event:'fund_by_fractional_sales',ticker:t.ticker,amount:grossToSell,positions:state.positions.size});
-    }
-   }
-   const alloc=Math.min(state.cash,desired);
-   if(alloc<=0){state.skippedBuys++;continue;}
-   const gross=alloc/(1+fee),buyFee=gross*fee;
-   state.positions.set(key(t),{ticker:t.ticker,shares:gross/px});state.cash-=gross+buyFee;state.fees+=buyFee;
-   decisions.push({date,event:'buy',ticker:t.ticker,buyDate:t.buyDate,amount:gross,positions:state.positions.size});
-  }
-  let value=state.cash;
-  for(const pos of state.positions.values()){const px=price(pos.ticker,date);if(px>0)value+=pos.shares*px;else state.missing++;}
-  curves.push({date,value,holdings:state.positions.size,cash:state.cash});
+ if(control.tradeLedger.length!==base.tradeLedger.length){out.textContent='A/A-kontrollen misslyckades: olika antal affärer. Experimentet stoppat.';return;}
+ if(aaMismatchWeeks){out.textContent=`A/A-kontrollen misslyckades (${aaMismatchWeeks} avvikande veckor, störst ${aaMaxDiff.toFixed(2)} kr). Experimentet stoppat.`;return;}
+ out.textContent='A/A-kontrollen godkänd. Räknar om samtliga framtida topplistor och affärer…';
+ const tested=runFiveYearWhiteBacktest({silent:true,delayedTradeIds:delayedIds});
+ if(!tested?.points?.length||tested.points.length!==base.points.length){out.textContent='Experimentet saknar veckor. Inget resultat redovisas.';return;}
+ const baseMap=new Map(base.points.map(p=>[p.date,p.value])),aaMap=new Map(control.points.map(p=>[p.date,p.value]));
+ const curves=tested.points.map(p=>({date:p.date,value:p.value,ordinaryValue:baseMap.get(p.date),aaValue:aaMap.get(p.date),holdings:p.top10?.length??0}));
+ if(curves.some(p=>!Number.isFinite(p.ordinaryValue)||!Number.isFinite(p.value)||p.holdings>10)){
+  out.textContent='Experimentet har ogiltiga veckovärden eller fler än tio innehav. Inget resultat redovisas.';return;
  }
- const final=curves[curves.length-1]?.value,baseline=base.points[base.points.length-1]?.value;
- const diff=final-baseline,ret=100*(final/100000-1),baseRet=100*(baseline/100000-1);
- out.innerHTML=`<b>Fristående facittest – sämsta kvartilen + exakt en vecka · max 10 innehav</b><br>Avslutade affärer: ${closed.length} · utvalda: ${count} · genomförda extraveckor: ${forced}.<br>Extraveckan mot OMXSPI, genomsnitt: ${extraValid?(extraSum/extraValid).toFixed(3)+' procentenheter':'saknas'} · slog index: ${extraValid?(100*extraWins/extraValid).toFixed(1)+' %':'saknas'} (${extraValid} mätbara).<br>Vit ordinarie slutvärde: ${baseline.toFixed(0)} kr (${baseRet.toFixed(2)} %) · testets slutvärde: ${final.toFixed(0)} kr (${ret.toFixed(2)} %) · skillnad: ${diff.toFixed(0)} kr.<br><small>Avsiktligt faciturval. Högst tio samtidiga aktier; förlängda innehav blockerar nya köp när portföljen är full. Lediga platser finansieras med proportionell försäljning av bråkdelar av befintliga innehav inklusive courtage. Blockerade köp på grund av tiogränsen: ${state.capacityBlocked}. Köp utan finansiering: ${state.skippedBuys}. Saknade prisobservationer: ${state.missing}. Experimentet utgår från ordinarie Vits affärskandidater; efterföljande urval görs inte om från hela historiska topplistan.</small>`;
- window.whiteWorstQuartileExperiment={selected,curves,decisions,baseline:base.points,finalValue:final,missing:state.missing,skippedBuys:state.skippedBuys,capacityBlocked:state.capacityBlocked,closedCount:closed.length,forced,extraValid,extraWins,extraSum};
+ // Samma facitkvartil mäts alltid, även affärer som inte kunde förlängas i nya portföljen.
+ const dates=base.points.map(p=>p.date),nextDate=new Map(dates.map((d,i)=>[d,dates[i+1]||null]));
+ let extraSum=0,extraWins=0,extraValid=0;
+ for(const t of selected){
+  const end=nextDate.get(t.sellDate);if(!end)continue;
+  const stock=fiveYearBacktestData.stockMap[t.ticker]?.series||[];
+  const old=fiveYearPriceOnOrBefore(stock,t.sellDate),later=fiveYearPriceOnOrBefore(stock,end);
+  const i0=fiveYearPriceOnOrBefore(fiveYearBacktestData.index,t.sellDate),i1=fiveYearPriceOnOrBefore(fiveYearBacktestData.index,end);
+  if(old>0&&later>0&&i0>0&&i1>0){const excess=100*(later/old-i1/i0);extraSum+=excess;extraValid++;if(excess>0)extraWins++;}
+ }
+ const events=tested.delayedEvents||[],forced=events.filter(e=>e.status==='completed').length;
+ const baseline=base.points.at(-1).value,final=tested.points.at(-1).value;
+ const origBuys=new Set(base.tradeLedger.map(t=>[t.ticker,t.buyDate].join('|'))),testBuys=new Set(tested.tradeLedger.map(t=>[t.ticker,t.buyDate].join('|')));
+ const originalBuysMissingInTest=[...origBuys].filter(k=>!testBuys.has(k)).length;
+ out.innerHTML=`<b>Kontrollerad facitsimulering – sämsta kvartilen +1 vecka, max 10 aktier</b><br>A/A-kontroll: GODKÄND · ${control.points.length} veckor · största skillnad ${aaMaxDiff.toFixed(6)} kr.<br>Ursprungligt faciturval: ${selected.length} av ${closed.length} affärer. Mätbar extravecka mot OMXSPI för ${extraValid}: ${extraValid?(extraSum/extraValid).toFixed(3):'–'} procentenheter i snitt; ${extraWins} slog index.<br>Extraveckor genomförda i omräknad portfölj: ${forced}.<br>Ordinarie Vit: ${baseline.toFixed(0)} kr · Omräknad Vit: ${final.toFixed(0)} kr · skillnad: ${(final-baseline).toFixed(0)} kr.<br><small>Ordinarie Vit ändras inte. Alla efterföljande veckors Top 20-rankning beräknas om utifrån testportföljens innehav. Högst tio aktier; en förlängning reserverar en plats, och positionen säljs nästa vecka. Vits ursprungliga köp/sälj samt kassaallokering och courtage gäller även testet. ${originalBuysMissingInTest} ursprungliga köp saknas i det nya utfallet (kan bero på förlängning eller ändrad rangordning). Faciturvalet är en efterhandsanalys, inte en förhandsregel.</small>`;
+ window.whiteWorstQuartileExperiment={selected,curves,events,baseline:base.points,finalValue:final,closedCount:closed.length,forced,extraValid,extraWins,extraSum,aaMaxDiff,aaMismatchWeeks,originalBuysMissingInTest};
  const exportBtn=document.getElementById('exportWhiteWorstQuartileTest');if(exportBtn)exportBtn.disabled=false;
 }
 
