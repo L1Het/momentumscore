@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v21.27.2</title>
+<title>MomentumScore v21.27.3</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.27.2 – Hybrid speglar Vit exakt när Grön är av</h1>
+<h1>MomentumScore v21.27.3 – Hybrid speglar Vit exakt när Grön är av</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -8667,7 +8667,7 @@ function exportWhiteTradeLedgerCsv(){
       t.distanceMa200,t.ma50Spread,t.ma200Slope1m,t.trendStability5d
     ].map(q).join(';'))
   }
-  downloadText('MomentumScore_v20_7_5_trade_ledger.csv','\ufeff'+lines.join('\n'),'text/csv;charset=utf-8')
+  downloadTextFile('\ufeff'+lines.join('\n'),'MomentumScore_v21_27_3_trade_ledger.csv','text/csv;charset=utf-8')
 }
 
 function renderWhiteHoldingAnalysis(r){
