@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v21.27.4</title>
+<title>MomentumScore v21.27.5</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.27.4 – Hybrid speglar Vit exakt när Grön är av</h1>
+<h1>MomentumScore v21.27.5 – Hybrid speglar Vit exakt när Grön är av</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -749,7 +749,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
     <div class="rowcard" style="margin-top:18px">
       <h3>Vit 2.1 – vilka aktier fungerar?</h3>
       <p class="note">Analysen bygger på backtestets faktiska köp och försäljningar: fredagens executionDate och stängningskurs, courtage på både köp och sälj samt OMXSPI på exakt samma köp- och säljdatum. Öppna positioner redovisas separat och räknas inte i träffprocenten.</p>
-      <div id="whiteHoldingAnalysisSummary" class="summary"></div><div class="actions" style="margin:8px 0 12px"><button type="button" class="secondary" id="exportWhiteTradeLedger">Exportera affärer CSV</button> <button type="button" class="secondary" id="exportWhiteHoldingScoreHistory">Exportera poäng per innehav och vecka CSV</button></div>
+      <div id="whiteHoldingAnalysisSummary" class="summary"></div><div class="actions" style="margin:8px 0 12px"><button type="button" class="secondary" id="exportWhiteTradeLedger">Exportera affärer CSV</button> <button type="button" class="secondary" id="exportWhiteHoldingScoreHistory">Exportera poäng per innehav och vecka CSV</button> <button type="button" class="secondary" id="exportWhitePostSale">Testa för tidig försäljning – exportera CSV</button></div>
       <div class="tablewrap"><table id="whiteHoldingAnalysisCompany"></table></div>
       <div class="tablewrap" style="margin-top:14px"><table id="whiteHoldingAnalysisDuration"></table></div>
       <div class="tablewrap" style="margin-top:14px"><table id="whiteHoldingAnalysisRegime"></table></div>
@@ -7884,6 +7884,7 @@ async function greenStressRunModel(kind,signals,cache,opts={}){
     const targetTickers=target.map(x=>x.ticker), before={trades:state.trades,fees:state.fees};
     const px=(item,d)=>fiveYearPriceOnOrBefore(item.series,d);
     const outgoingForHistory=[];
+    const incomingForPostSale=[];
     const soldPositionsForHistory={};
     if(!started){
       const usable=target.filter(x=>Number.isFinite(px(x,date))),per=state.cash/Math.max(1,usable.length);
@@ -8033,7 +8034,7 @@ function runFiveYearWhiteBacktest(){
   const signals=fiveYearWeeklySignals(fiveYearBacktestData.index).filter(x=>!testStart||String(x.date)>=testStart);
   if(signals.length<20)return alert('För få veckor för testet.');
   const state={cash:100000,positions:{},fees:0,trades:0,turnover:0};
-  const points=[],weeks=[],tradeLedger=[],holdingScoreHistory=[];
+  const points=[],weeks=[],tradeLedger=[],holdingScoreHistory=[],postSaleObservations=[];
   let benchmarkStart=NaN,started=false,previousTarget=[];
   const frozenWeights=normalizedWhiteWeights({distanceMa200:10,ma50Spread:30,ma200Slope1m:30,trendStability5d:30});
   for(let s=0;s<signals.length-1;s++){
@@ -8065,6 +8066,7 @@ function runFiveYearWhiteBacktest(){
     if(target.length<5)continue;
     const targetTickers=target.map(x=>x.ticker);
     const outgoingForHistory=[];
+    const incomingForPostSale=[];
     const soldPositionsForHistory={};
     if(!started){
       const usable=target.filter(x=>Number.isFinite(fiveYearPriceOnOrAfter(x.series,executionDate)));
@@ -8136,11 +8138,22 @@ function runFiveYearWhiteBacktest(){
             buyTechnical:item.technical?{...item.technical}:null,
             entryIndex
           };
-          state.cash-=gross+fee;state.fees+=fee;state.turnover+=gross;state.trades++
+          state.cash-=gross+fee;state.fees+=fee;state.turnover+=gross;state.trades++;incomingForPostSale.push(item.ticker)
         }
       }
     }
-    // v21.27.4: en observation per innehav och vecka, utan att påverka handelsbesluten.
+    // Diagnostik: frys faktiskt köpta ersättare vid samma ombalansering. Ingen handel ändras.
+    for(const ticker of outgoingForHistory){
+      const sold=tradeLedger[tradeLedger.length-1]; // rätt affär söks via ticker och datum nedan
+      const trade=tradeLedger.findLast(x=>x.status==='closed'&&x.ticker===ticker&&x.sellDate===executionDate);
+      if(!trade)continue;
+      postSaleObservations.push({ticker,company:trade.company,buyDate:trade.buyDate,sellDate:executionDate,
+        sellPrice:trade.sellPrice,exitScore:trade.exitScore,buyScore:trade.buyScore,
+        exitStabilityPoints:NaN,previousStabilityPoints:NaN,
+        lastWeekRelativeReturn:NaN,replacements:[...incomingForPostSale],
+        lastWeekIndex:NaN,lastWeekStock:NaN,signalIndex:s});
+    }
+    // v21.27.5: en observation per innehav och vecka, utan att påverka handelsbesluten.
     // Även sålda innehav loggas på säljveckan med aktuella poäng och rankning.
     const observationTickers=new Set([...Object.keys(state.positions),...outgoingForHistory]);
     for(const ticker of observationTickers){
@@ -8161,6 +8174,16 @@ function runFiveYearWhiteBacktest(){
         pointsDistanceMa200:scored?.parts?.distanceMa200,pointsMa50Spread:scored?.parts?.ma50Spread,
         pointsMa200Slope1m:scored?.parts?.ma200Slope1m,pointsTrendStability5d:scored?.parts?.trendStability5d,
         relativeReturn:rel,exitReason:soldPositionsForHistory[ticker]?(rankMapAll.has(ticker)?'outside_top20_or_target':'not_ranked') :''});
+    }
+    for(const o of postSaleObservations){
+      if(o.sellDate!==executionDate)continue;
+      const rows=holdingScoreHistory.filter(x=>x.ticker===o.ticker&&x.buyDate===o.buyDate);
+      const last=rows[rows.length-1],prev=rows[rows.length-2];
+      o.exitStabilityPoints=last?.pointsTrendStability5d??NaN;
+      o.previousStabilityPoints=prev?.pointsTrendStability5d??NaN;
+      o.lastWeekRelativeReturn=Number.isFinite(last?.relativeReturn)&&Number.isFinite(prev?.relativeReturn)?last.relativeReturn-prev.relativeReturn:NaN;
+      o.lastWeekStock=prev?fiveYearPriceOnOrBefore(fiveYearBacktestData.stockMap[o.ticker]?.series||[],prev.date):NaN;
+      o.lastWeekIndex=prev?fiveYearPriceOnOrBefore(fiveYearBacktestData.index,prev.date):NaN;
     }
     previousTarget=targetTickers;
     const value=fiveYearPortfolioValue(state,executionDate);
@@ -8207,6 +8230,39 @@ function runFiveYearWhiteBacktest(){
     })
   }
 
+  // Framtida kurser läses endast EFTER att den ursprungliga handelsloopen avslutats.
+  // Samma fredagsdatum för såld aktie, OMXSPI och de faktiskt nyköpta aktierna.
+  const postSaleRows=[];
+  for(const o of postSaleObservations){
+    for(const horizon of [1,2,4,8]){
+      const next=signals[o.signalIndex+horizon];
+      if(!next||next.date>last.date)continue;
+      const soldSeries=fiveYearBacktestData.stockMap[o.ticker]?.series||[];
+      const index0=fiveYearPriceOnOrBefore(fiveYearBacktestData.index,o.sellDate);
+      const index1=fiveYearPriceOnOrBefore(fiveYearBacktestData.index,next.date);
+      const sold1=fiveYearPriceOnOrBefore(soldSeries,next.date);
+      const indexPct=Number.isFinite(index0)&&index0>0&&Number.isFinite(index1)?100*(index1/index0-1):NaN;
+      const soldPct=Number.isFinite(o.sellPrice)&&o.sellPrice>0&&Number.isFinite(sold1)?100*(sold1/o.sellPrice-1):NaN;
+      const replacementReturns=o.replacements.map(t=>{
+        const series=fiveYearBacktestData.stockMap[t]?.series||[];
+        const p0=fiveYearPriceOnOrBefore(series,o.sellDate),p1=fiveYearPriceOnOrBefore(series,next.date);
+        return Number.isFinite(p0)&&p0>0&&Number.isFinite(p1)?100*(p1/p0-1):NaN;
+      });
+      const complete=o.replacements.length>0&&replacementReturns.every(Number.isFinite);
+      const basketPct=complete?replacementReturns.reduce((a,b)=>a+b,0)/replacementReturns.length:NaN;
+      const lastWeekSold=Number.isFinite(o.lastWeekStock)&&o.lastWeekStock>0?100*(o.sellPrice/o.lastWeekStock-1):NaN;
+      const lastWeekIndex=Number.isFinite(o.lastWeekIndex)&&o.lastWeekIndex>0&&Number.isFinite(index0)?100*(index0/o.lastWeekIndex-1):NaN;
+      postSaleRows.push({ticker:o.ticker,company:o.company,buyDate:o.buyDate,sellDate:o.sellDate,
+        horizonWeeks:horizon,endDate:next.date,stabilityPointsChange:o.exitStabilityPoints-o.previousStabilityPoints,
+        lastWeekStockReturn:lastWeekSold,lastWeekIndexReturn:lastWeekIndex,
+        lastWeekExcess:Number.isFinite(lastWeekSold)&&Number.isFinite(lastWeekIndex)?lastWeekSold-lastWeekIndex:NaN,
+        soldReturn:soldPct,indexReturn:indexPct,replacementReturn:basketPct,
+        soldExcessIndex:Number.isFinite(soldPct)&&Number.isFinite(indexPct)?soldPct-indexPct:NaN,
+        soldMinusReplacement:Number.isFinite(soldPct)&&Number.isFinite(basketPct)?soldPct-basketPct:NaN,
+        replacementTickers:o.replacements.join('|'),replacementCount:o.replacements.length,
+        completeReplacementData:complete,scoreAtSale:o.exitScore});
+    }
+  }
   const result={
     generatedAt:nowISO(),startDate:first.date,endDate:last.date,years,weekCount:weeks.length,
     totalReturn,benchmarkReturn,excess:Number.isFinite(benchmarkReturn)?totalReturn-benchmarkReturn:NaN,
@@ -8214,7 +8270,7 @@ function runFiveYearWhiteBacktest(){
     maxDrawdown:fiveYearMaxDrawdown(points),volatility:fiveYearVolatility(points),
     beatWeeks:validWeeks.length?validWeeks.filter(w=>w.excess>0).length/validWeeks.length*100:NaN,
     trades:state.trades,fees:state.fees,turnover:state.turnover/100000*100,
-    finalValue:last.value,points,weeks,tradeLedger,holdingScoreHistory,
+    finalValue:last.value,points,weeks,tradeLedger,holdingScoreHistory,postSaleRows,
     universe:fiveYearBacktestData.stocks.length,
     failures:fiveYearBacktestData.failures||[]
   };
@@ -8316,6 +8372,7 @@ function fiveYearRunVariant(options={}){
     }
     const targetTickers=target.map(x=>x.ticker);
     const outgoingForHistory=[];
+    const incomingForPostSale=[];
     const soldPositionsForHistory={};
     if(!started){
       const usable=target.filter(x=>Number.isFinite(fiveYearPriceOnOrAfter(x.series,executionDate)));
@@ -8708,7 +8765,18 @@ function exportWhiteHoldingScoreHistoryCsv(){
     'pointsDistanceMa200','pointsMa50Spread','pointsMa200Slope1m','pointsTrendStability5d','relativeReturn','exitReason'];
   const q=v=>`"${String(v??'').replaceAll('"','""')}"`;
   const csv='\ufeff'+[cols.join(';'),...rows.map(r=>cols.map(c=>q(r[c])).join(';'))].join('\n');
-  downloadTextFile(csv,'MomentumScore_v21_27_4_Vit_poang_per_innehav_vecka.csv','text/csv;charset=utf-8');
+  downloadTextFile(csv,'MomentumScore_v21_27_5_Vit_poang_per_innehav_vecka.csv','text/csv;charset=utf-8');
+}
+function exportWhitePostSaleCsv(){
+  const rows=fiveYearBacktestResult?.postSaleRows||[];
+  if(!rows.length)return alert('Kör 10-årstestet först.');
+  const cols=['ticker','company','buyDate','sellDate','horizonWeeks','endDate','stabilityPointsChange',
+    'lastWeekStockReturn','lastWeekIndexReturn','lastWeekExcess','soldReturn','indexReturn',
+    'replacementReturn','soldExcessIndex','soldMinusReplacement','replacementTickers',
+    'replacementCount','completeReplacementData','scoreAtSale'];
+  const q=v=>`"${String(v??'').replaceAll('"','""')}"`;
+  const csv='\ufeff'+[cols.join(';'),...rows.map(r=>cols.map(c=>q(r[c])).join(';'))].join('\n');
+  downloadTextFile(csv,'MomentumScore_v21_27_5_Vit_efter_forsaljning.csv','text/csv;charset=utf-8');
 }
 function renderWhiteHoldingAnalysis(r){
   const s=document.getElementById('whiteHoldingAnalysisSummary'),
@@ -8720,6 +8788,8 @@ function renderWhiteHoldingAnalysis(r){
   if(exportBtn)exportBtn.onclick=exportWhiteTradeLedgerCsv;
   const scoreBtn=document.getElementById('exportWhiteHoldingScoreHistory');
   if(scoreBtn)scoreBtn.onclick=exportWhiteHoldingScoreHistoryCsv;
+  const postBtn=document.getElementById('exportWhitePostSale');
+  if(postBtn)postBtn.onclick=exportWhitePostSaleCsv;
 
   const closed=(r?.tradeLedger||[]).filter(x=>x.status==='closed'&&Number.isFinite(x.excessNet));
   const open=(r?.tradeLedger||[]).filter(x=>x.status==='open');
