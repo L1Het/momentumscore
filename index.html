@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v21.27.5</title>
+<title>MomentumScore v21.27.6</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.27.5 – Hybrid speglar Vit exakt när Grön är av</h1>
+<h1>MomentumScore v21.27.6 – Hybrid speglar Vit exakt när Grön är av</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -749,7 +749,7 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
     <div class="rowcard" style="margin-top:18px">
       <h3>Vit 2.1 – vilka aktier fungerar?</h3>
       <p class="note">Analysen bygger på backtestets faktiska köp och försäljningar: fredagens executionDate och stängningskurs, courtage på både köp och sälj samt OMXSPI på exakt samma köp- och säljdatum. Öppna positioner redovisas separat och räknas inte i träffprocenten.</p>
-      <div id="whiteHoldingAnalysisSummary" class="summary"></div><div class="actions" style="margin:8px 0 12px"><button type="button" class="secondary" id="exportWhiteTradeLedger">Exportera affärer CSV</button> <button type="button" class="secondary" id="exportWhiteHoldingScoreHistory">Exportera poäng per innehav och vecka CSV</button> <button type="button" class="secondary" id="exportWhitePostSale">Testa för tidig försäljning – exportera CSV</button></div>
+      <div id="whiteHoldingAnalysisSummary" class="summary"></div><div class="actions" style="margin:8px 0 12px"><button type="button" class="secondary" id="exportWhiteTradeLedger">Exportera affärer CSV</button> <button type="button" class="secondary" id="exportWhiteHoldingScoreHistory">Exportera poäng per innehav och vecka CSV</button> <button type="button" class="secondary" id="exportWhitePostSale">Testa för tidig försäljning – exportera CSV</button> <button type="button" class="secondary" id="runWhiteWorstQuartileTest">TEST: sämsta kvartilen +1 vecka</button><div id="whiteWorstQuartileTestResult" class="summary"></div></div>
       <div class="tablewrap"><table id="whiteHoldingAnalysisCompany"></table></div>
       <div class="tablewrap" style="margin-top:14px"><table id="whiteHoldingAnalysisDuration"></table></div>
       <div class="tablewrap" style="margin-top:14px"><table id="whiteHoldingAnalysisRegime"></table></div>
@@ -8153,7 +8153,7 @@ function runFiveYearWhiteBacktest(){
         lastWeekRelativeReturn:NaN,replacements:[...incomingForPostSale],
         lastWeekIndex:NaN,lastWeekStock:NaN,signalIndex:s});
     }
-    // v21.27.5: en observation per innehav och vecka, utan att påverka handelsbesluten.
+    // v21.27.6: en observation per innehav och vecka, utan att påverka handelsbesluten.
     // Även sålda innehav loggas på säljveckan med aktuella poäng och rankning.
     const observationTickers=new Set([...Object.keys(state.positions),...outgoingForHistory]);
     for(const ticker of observationTickers){
@@ -8765,7 +8765,7 @@ function exportWhiteHoldingScoreHistoryCsv(){
     'pointsDistanceMa200','pointsMa50Spread','pointsMa200Slope1m','pointsTrendStability5d','relativeReturn','exitReason'];
   const q=v=>`"${String(v??'').replaceAll('"','""')}"`;
   const csv='\ufeff'+[cols.join(';'),...rows.map(r=>cols.map(c=>q(r[c])).join(';'))].join('\n');
-  downloadTextFile(csv,'MomentumScore_v21_27_5_Vit_poang_per_innehav_vecka.csv','text/csv;charset=utf-8');
+  downloadTextFile(csv,'MomentumScore_v21_27_6_Vit_poang_per_innehav_vecka.csv','text/csv;charset=utf-8');
 }
 function exportWhitePostSaleCsv(){
   const rows=fiveYearBacktestResult?.postSaleRows||[];
@@ -8776,8 +8776,69 @@ function exportWhitePostSaleCsv(){
     'replacementCount','completeReplacementData','scoreAtSale'];
   const q=v=>`"${String(v??'').replaceAll('"','""')}"`;
   const csv='\ufeff'+[cols.join(';'),...rows.map(r=>cols.map(c=>q(r[c])).join(';'))].join('\n');
-  downloadTextFile(csv,'MomentumScore_v21_27_5_Vit_efter_forsaljning.csv','text/csv;charset=utf-8');
+  downloadTextFile(csv,'MomentumScore_v21_27_6_Vit_efter_forsaljning.csv','text/csv;charset=utf-8');
 }
+
+// Fristående efterhands-experiment. Vit och dess ordinarie handelslogik ändras inte.
+function runWhiteWorstQuartileTest(){
+ const out=document.getElementById('whiteWorstQuartileTestResult');
+ const base=fiveYearBacktestResult;
+ if(!base?.tradeLedger?.length||!base?.points?.length){alert('Kör det ordinarie 10-årstestet först.');return;}
+ const closed=base.tradeLedger.filter(t=>t.status==='closed'&&Number.isFinite(t.excessGross)&&t.sellDate&&t.buyDate);
+ if(closed.length<4){out.textContent='För få avslutade affärer.';return;}
+ // Exakt nedersta kvartilen av hela facit, inklusive senare affärer. Ingen signal i realtid.
+ const ordered=[...closed].sort((a,b)=>a.excessGross-b.excessGross||String(a.buyDate).localeCompare(String(b.buyDate))||String(a.ticker).localeCompare(String(b.ticker)));
+ const count=Math.floor(ordered.length/4),selected=ordered.slice(0,count);
+ const id=t=>[t.ticker,t.buyDate,t.sellDate].join('|');
+ const delayed=new Set(selected.map(id));
+ const signalDates=base.points.map(p=>p.date);
+ const nextDate=new Map(signalDates.map((d,i)=>[d,signalDates[i+1]||null]));
+ const start=signalDates[0],end=signalDates[signalDates.length-1];
+ const buyByDate=new Map(),sellByDate=new Map(),forcedByDate=new Map();
+ const add=(map,date,t)=>{if(!map.has(date))map.set(date,[]);map.get(date).push(t)};
+ for(const t of base.tradeLedger){
+  if(t.buyDate)add(buyByDate,t.buyDate,t);
+  if(t.status==='closed'&&t.sellDate){
+   if(delayed.has(id(t))){const d=nextDate.get(t.sellDate);if(d)add(forcedByDate,d,t);else add(sellByDate,t.sellDate,t)}
+   else add(sellByDate,t.sellDate,t);
+  }
+ }
+ const fee=FIVE_YEAR_FEE_RATE;
+ const state={cash:100000,positions:new Map(),fees:0,missing:0,skippedBuys:0};
+ const key=t=>t.ticker+'|'+t.buyDate;
+ const price=(ticker,date)=>{const series=fiveYearBacktestData.stockMap[ticker]?.series||[];return fiveYearPriceOnOrBefore(series,date)};
+ const curves=[];let extraIndex=0,extraWins=0,extraSum=0,extraValid=0,forced=0;
+ for(const date of signalDates){
+  // Först ordinarie försäljningar och förfallna extraveckor; sedan ordinarie köp.
+  for(const t of [...(forcedByDate.get(date)||[]),...(sellByDate.get(date)||[])]){
+   const k=key(t),pos=state.positions.get(k);if(!pos)continue;
+   const px=price(t.ticker,date);if(!(px>0)){state.missing++;continue;}
+   const gross=pos.shares*px,sellFee=gross*fee;
+   state.cash+=gross-sellFee;state.fees+=sellFee;state.positions.delete(k);
+   if(delayed.has(id(t))&&date!==t.sellDate){
+    forced++;const old=price(t.ticker,t.sellDate),ix0=fiveYearPriceOnOrBefore(fiveYearBacktestData.index,t.sellDate),ix1=fiveYearPriceOnOrBefore(fiveYearBacktestData.index,date);
+    if(old>0&&ix0>0&&ix1>0){const excess=100*(px/old-ix1/ix0);extraSum+=excess;extraValid++;if(excess>0)extraWins++;}
+   }
+  }
+  const buys=buyByDate.get(date)||[];
+  // Baslinjens faktiska köp behålls som köpschema. Bundet kapital kan därför ge mindre nya positioner.
+  const available=buys.filter(t=>!state.positions.has(key(t))&&price(t.ticker,date)>0);
+  if(available.length&&state.cash>0){const alloc=state.cash/available.length;
+   for(const t of available){const px=price(t.ticker,date),gross=alloc/(1+fee),buyFee=gross*fee;
+    state.positions.set(key(t),{ticker:t.ticker,shares:gross/px});state.cash-=gross+buyFee;state.fees+=buyFee;
+   }
+  }else if(available.length)state.skippedBuys+=available.length;
+  let value=state.cash;
+  for(const pos of state.positions.values()){const px=price(pos.ticker,date);if(px>0)value+=pos.shares*px;else state.missing++;}
+  curves.push({date,value});
+ }
+ const final=curves[curves.length-1]?.value,baseline=base.points[base.points.length-1]?.value;
+ const diff=final-baseline,ret=100*(final/100000-1),baseRet=100*(baseline/100000-1);
+ const summary=`<b>Fristående facittest – sämsta kvartilen + exakt en vecka</b><br>Avslutade affärer: ${closed.length} · utvalda (25 % avrundat nedåt): ${count} · extraveckor som hann avslutas: ${forced}.<br>Extraveckan mot OMXSPI, genomsnitt: ${extraValid?(extraSum/extraValid).toFixed(3)+' procentenheter':'saknas'} · slog index: ${extraValid?(100*extraWins/extraValid).toFixed(1)+' %':'saknas'} (${extraValid} mätbara).<br>Vit ordinarie slutvärde: ${baseline.toFixed(0)} kr (${baseRet.toFixed(2)} %) · testets slutvärde: ${final.toFixed(0)} kr (${ret.toFixed(2)} %) · skillnad: ${diff.toFixed(0)} kr.<br><small>Efterhandsurval från hela 10-årsperioden, inte en möjlig realtidsstrategi. Testet spelar upp Vits ordinarie köpdatum och försäljningar, men fördröjer de utvalda försäljningarna; bundet kapital fördelas inte till nya köp förrän det frigörs. Det är en kassaflödesmodell med oförändrat köpschema, inte en ny rankningsbaserad omoptimering. ${state.skippedBuys} köp saknade ledigt kapital; ${state.missing} prisobservationer saknades vid värdering/försäljning. Positioner som inte hann säljas före sista testdatum värderas då.</small>`;
+ out.innerHTML=summary;
+ window.whiteWorstQuartileExperiment={selected,curves,baseline:base.points,finalValue:final,missing:state.missing,skippedBuys:state.skippedBuys};
+}
+
 function renderWhiteHoldingAnalysis(r){
   const s=document.getElementById('whiteHoldingAnalysisSummary'),
         c=document.getElementById('whiteHoldingAnalysisCompany'),
@@ -8790,6 +8851,8 @@ function renderWhiteHoldingAnalysis(r){
   if(scoreBtn)scoreBtn.onclick=exportWhiteHoldingScoreHistoryCsv;
   const postBtn=document.getElementById('exportWhitePostSale');
   if(postBtn)postBtn.onclick=exportWhitePostSaleCsv;
+  const quartileBtn=document.getElementById('runWhiteWorstQuartileTest');
+  if(quartileBtn)quartileBtn.onclick=runWhiteWorstQuartileTest;
 
   const closed=(r?.tradeLedger||[]).filter(x=>x.status==='closed'&&Number.isFinite(x.excessNet));
   const open=(r?.tradeLedger||[]).filter(x=>x.status==='open');
