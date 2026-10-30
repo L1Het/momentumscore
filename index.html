@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v21.27.13</title>
+<title>MomentumScore v21.27.14</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -292,7 +292,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.27.13 – Hybrid speglar Vit exakt när Grön är av</h1>
+<h1>MomentumScore v21.27.14 – Hybrid speglar Vit exakt när Grön är av</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -1393,6 +1393,19 @@ De fyra faktorerna och vikterna 10/30/30/30 är låsta. Endast platåernas grän
     <div class="actions"><button type="button" id="settingsHistoryFetch">Hämta saknade kursdagar</button></div>
     <div class="settings-history-progress"><div id="settingsHistoryProgress"></div></div>
     <div id="settingsHistoryStatus" class="note settings-history-status" aria-live="polite">Ingen hämtning pågår. Befintliga veckoportföljer ändras inte.</div>
+  </div>
+  <div class="card" id="settingsWeeklyRepairCard">
+    <h2>Reparera gamla veckoportföljer</h2>
+    <p class="note">Kontrollerar veckorna kronologiskt från första fredagsstängningen. Varje urval, köppris, teknisk poäng och OMXSPI-bas räknas fram från data som var kända just den fredagen. Ändrade Top10/Top20-innehav förs vidare till alla efterföljande veckor. Inget skrivs över vid granskning.</p>
+    <div class="actions">
+      <button type="button" id="settingsWeeklyRepairPreview">Granska och förhandsberäkna alla veckor</button>
+      <button type="button" class="secondary" id="settingsWeeklyRepairExport" disabled>Exportera jämförelse (JSON)</button>
+      <button type="button" class="secondary" id="settingsWeeklyRepairApply" disabled>Godkänn och ersätt historiken</button>
+    </div>
+    <div class="settings-history-progress"><div id="settingsWeeklyRepairProgress"></div></div>
+    <div id="settingsWeeklyRepairStatus" class="note settings-history-status" style="white-space:pre-wrap" aria-live="polite">Hämta saknade kursdagar ovan, granska sedan veckorna. Originalhistoriken ändras inte utan ditt godkännande.</div>
+    <div id="settingsWeeklyRepairSummary" class="note" style="white-space:pre-wrap"></div>
+    <p class="note"><b>Säkerhet:</b> Vid godkännande laddas en komplett JSON-säkerhetskopia ned innan något ersätts. Reparationen ändrar endast låsta veckoportföljer; aktier, manuellt inmatade fundamenta och individuella affärer lämnas orörda. De nya historiska affärerna är en rekonstruerad simulering, inte verkligt genomförda affärer.</p>
   </div>
 </div>
 </section>
@@ -11412,7 +11425,7 @@ function auditLockedWeeklyPortfoliosV212712(){
           missing:readiness.missing,short:readiness.short},
         status:indexMismatch||priceMismatches.length||missingHistoricalPrices.length||!readiness.ready?'kontrollera':'godkänd'}
     });
-  return {engine:'MomentumScore v21.27.13',createdAt:nowISO(),readOnly:true,
+  return {engine:'MomentumScore v21.27.14',createdAt:nowISO(),readOnly:true,
     note:'Endast avvikelsekontroll; historiska val/affärer har inte ändrats.',
     totalWeeks:weeks.length,flaggedWeeks:weeks.filter(w=>w.status!=='godkänd').length,weeks}
 }
@@ -11618,6 +11631,239 @@ async function fetchFirstWeekHistoryV212713(){
 document.getElementById('settingsGeneralTab').onclick=()=>setSettingsHistoryTabV212713('general');
 document.getElementById('settingsHistoryTab').onclick=()=>setSettingsHistoryTabV212713('history');
 document.getElementById('settingsHistoryFetch').onclick=fetchFirstWeekHistoryV212713;
+
+// v21.27.14: explicit all-weeks reconstruction. This operation NEVER runs at
+// startup. A complete preview and a downloadable full backup precede commit.
+let weeklyRepairPreviewV212714=null;
+let weeklyRepairBusyV212714=false;
+function weeklyRepairStatusV212714(message){
+  const e=document.getElementById('settingsWeeklyRepairStatus');if(e)e.textContent=message;
+}
+function weeklyRepairProgressV212714(fraction){
+  const e=document.getElementById('settingsWeeklyRepairProgress');
+  if(e)e.style.width=(100*Math.max(0,Math.min(1,fraction))).toFixed(1)+'%';
+}
+function weeklyRepairFingerprintV212714(){
+  // Include the data/parameters which can change a historical signal; never
+  // allow an old preview to be applied after a market refresh or manual input.
+  const parts=[weeklyPortfolios,benchmarkHistories,
+    rows.map(r=>[r.ticker,r.createdAt,r.history,r.priceHistory,r.pe,r.peBase,r.peBasePrice,r.companyType]),
+    loadWhitePlateaus(),loadWeeklySettings()];
+  let hash=2166136261;
+  const txt=JSON.stringify(parts);
+  for(let i=0;i<txt.length;i++)hash=Math.imul(hash^txt.charCodeAt(i),16777619)>>>0;
+  return txt.length+':'+hash.toString(16);
+}
+function historicalRowAsOfV212714(row,cutoffDate){
+  const cutoff=fridayCutoffMoment(dateAtLocalNoon(cutoffDate)).getTime();
+  const created=new Date(row.createdAt||'').getTime();
+  if(Number.isFinite(created)&&created>cutoff)return{row:null,reason:'Tillkom senare'};
+  const entries=(Array.isArray(row.history)?row.history:[])
+    .filter(h=>{
+      if(!h?.raw||h.foreignOwnerMismatch===true)return false;
+      const when=new Date(h.savedAt||'').getTime();
+      if(!Number.isFinite(when)||when>cutoff)return false;
+      const rawTicker=canonicalTicker(h.raw.ticker||'');
+      return !rawTicker||rawTicker===canonicalTicker(row.ticker||'');
+    }).sort((a,b)=>String(a.savedAt).localeCompare(String(b.savedAt)));
+  if(!entries.length)return{row:null,reason:'Inga daterade fundamenta'};
+  const latest=entries[entries.length-1];
+  const raw=latest.raw;
+  const investment=(raw.companyType||row.companyType)==='investment';
+  const req=['eps1','eps2','eps3','eps4','eps3y','pe','pe3','pe5','roe','debt','fcf',
+    ...(investment?['ekYoy','ek3y']:['rev1','rev2','rev3','rev4','rev3y'])];
+  const missing=req.filter(k=>!Number.isFinite(num(raw[k])));
+  if(missing.length)return{row:null,reason:'Historiska fundamenta saknas: '+missing.join(', ')};
+  const earlierHistory=entries.map(h=>({...h}));
+  // P/E must be anchored at its last MANUAL input price, not the most
+  // recent automatic price update (which can be days or weeks later).
+  const peInference=historicalPeInputBase({pe:raw.pe,history:earlierHistory});
+  const prior=(row.priceHistory||[]).filter(p=>String(p.date).slice(0,10)<=String(latest.savedAt).slice(0,10));
+  const fallbackBase=prior.length?num(prior[prior.length-1].close):NaN;
+  const basePrice=Number.isFinite(peInference.price)&&peInference.price>0?peInference.price:fallbackBase;
+  const historicalRow={...row,...raw,
+    ticker:row.ticker,company:row.company,market:row.market,yahooSymbol:row.yahooSymbol,
+    companyType:row.companyType||raw.companyType||'regular',
+    // The complete closing-price series stays accessible for cutoff computations.
+    priceHistory:row.priceHistory,history:earlierHistory,marketHistory:(row.marketHistory||[])
+      .filter(h=>new Date(h.savedAt||'').getTime()<=cutoff),
+    peBase:String(raw.pe),peBasePrice:Number.isFinite(basePrice)&&basePrice>0?String(basePrice):'',
+    peBaseDate:peInference.date||latest.savedAt,
+    fundamentalUpdatedAt:latest.savedAt
+  };
+  const eligiblePrices=priceHistoryOnOrBefore(historicalRow,cutoffDate);
+  if(eligiblePrices.length>=WEEKLY_MIN_TECHNICAL_DAYS){
+    try{Object.assign(historicalRow,technicalFromPriceHistory(eligiblePrices));}
+    catch(error){return{row:null,reason:'Teknisk historik: '+error.message};}
+  }
+  return{row:historicalRow,reason:'',fundamentalDate:latest.savedAt};
+}
+function weeklyRepairHistoricalFridaysV212714(){
+  const ordered=weeklyPortfolios.slice().sort((a,b)=>String(a.weekKey||'').localeCompare(String(b.weekKey||'')));
+  if(!ordered.length)throw new Error('Inga låsta veckor finns att reparera.');
+  const seen=new Set(),fridays=[];
+  for(const snapshot of ordered){
+    const key=String(snapshot.weekKey||'');
+    if(!/^\d{4}-W\d{2}$/.test(key))throw new Error('Ogiltig veckonyckel: '+key);
+    if(seen.has(key))throw new Error('Dubblett av låst vecka: '+key+'. Rätta dubbletten innan reparation.');
+    seen.add(key);
+    const monday=isoMondayFromWeekKey(key);
+    const friday=addIsoDays(monday,-3);
+    if(!/\d{4}-\d{2}-\d{2}/.test(friday))throw new Error('Fredagsdatum saknas för '+key);
+    fridays.push({key,friday,original:snapshot});
+  }
+  for(let i=1;i<fridays.length;i++){
+    if(addIsoDays(fridays[i-1].friday,7)!==fridays[i].friday){
+      throw new Error('Veckokedjan har ett glapp före '+fridays[i].key+'. Reparera/komplettera saknad vecka först.');
+    }
+  }
+  return fridays;
+}
+function weeklyRepairDifferenceV212714(original,repaired){
+  const date=String(repaired.executionDate).slice(0,10);
+  let changedModels=0,wrongPrices=0;
+  const changes={};
+  for(const model of WEEKLY_MODELS){
+    const before=original.portfolios?.[model]?.members||[];
+    const after=repaired.portfolios?.[model]?.members||[];
+    const prev=new Set(before.map(weeklyMemberKey));
+    const next=new Set(after.map(weeklyMemberKey));
+    const added=[...next].filter(x=>!prev.has(x));
+    const removed=[...prev].filter(x=>!next.has(x));
+    const bad=before.filter(m=>{
+      const exact=exactStockClose(m,date),saved=num(m.startPrice);
+      return !Number.isFinite(exact)||!Number.isFinite(saved)||Math.abs(exact-saved)>1e-4;
+    }).length;
+    wrongPrices+=bad;
+    if(added.length||removed.length||before.length!==after.length)changedModels++;
+    changes[model]={added,removed,oldCount:before.length,newCount:after.length,wrongStoredPrices:bad};
+  }
+  const indexFrom=benchmarkValueExact(repaired.benchmarkMarket||'SE',date);
+  const originalIndex=num(original.benchmarkStart);
+  return{weekKey:repaired.weekKey,friday:date,changedModels,wrongPrices,
+    originalIndex,correctIndex:indexFrom,indexChanged:!Number.isFinite(originalIndex)||Math.abs(originalIndex-indexFrom)>0.01,
+    changes};
+}
+async function previewWeeklyRepairV212714(){
+  if(weeklyRepairBusyV212714||historyBackfillRunningV212713)return;
+  weeklyRepairBusyV212714=true;weeklyRepairPreviewV212714=null;
+  document.getElementById('settingsWeeklyRepairApply').disabled=true;
+  document.getElementById('settingsWeeklyRepairExport').disabled=true;
+  document.getElementById('settingsWeeklyRepairPreview').disabled=true;
+  document.getElementById('settingsWeeklyRepairSummary').textContent='';
+  weeklyRepairProgressV212714(0);
+  const originalRows=rows,originalLastBlock=weeklyLastBlock;
+  try{
+    const weeks=weeklyRepairHistoricalFridaysV212714();
+    const fingerprint=weeklyRepairFingerprintV212714();
+    const repaired=[],diffs=[],absences=[];
+    let previous=null;
+    for(let i=0;i<weeks.length;i++){
+      const item=weeks[i];
+      const historical=[],excluded=[];
+      for(const row of originalRows){
+        const result=historicalRowAsOfV212714(row,item.friday);
+        if(result.row)historical.push(result.row);
+        else excluded.push({ticker:row.ticker||row.company,reason:result.reason});
+      }
+      // Only companies with point-in-time documented fundamentals belong to
+      // the Friday's investable universe; never retrofit later additions.
+      rows=historical;
+      invalidateModelDayCaches();
+      const readiness=weeklyFridayDataReadiness(item.friday,item.original.benchmarkMarket||'SE');
+      if(!readiness.ready){
+        throw new Error(item.key+': '+readiness.reason+' (aktier då: '+historical.length+').');
+      }
+      const snapshot=buildCanonicalHistoricalWeeklySnapshot(dateAtLocalNoon(item.friday),previous);
+      if(!snapshot)throw new Error(item.key+': kunde inte bygga fem kompletta portföljer. '+(weeklyLastBlock?.reason||''));
+      for(const model of WEEKLY_MODELS){
+        const members=snapshot.portfolios?.[model]?.members||[];
+        if(members.length!==10)throw new Error(item.key+': '+model+' har '+members.length+'/10 innehav.');
+        for(const member of members){
+          const exact=exactStockClose(member,item.friday);
+          if(!Number.isFinite(exact)||Math.abs(exact-num(member.startPrice))>1e-4)
+            throw new Error(item.key+': saknad/felaktig fredagskurs för '+member.ticker+' ('+model+').');
+        }
+      }
+      const diff=weeklyRepairDifferenceV212714(item.original,snapshot);
+      diffs.push(diff);repaired.push(snapshot);previous=snapshot;
+      absences.push({weekKey:item.key,excluded});
+      weeklyRepairProgressV212714((i+1)/weeks.length);
+      weeklyRepairStatusV212714('Kontrollerar och bygger '+(i+1)+'/'+weeks.length+' · '+item.key);
+      await new Promise(resolve=>setTimeout(resolve,0));
+    }
+    // Restore the original universe before computing the signature and before
+    // taking any action on the live data.
+    rows=originalRows;invalidateModelDayCaches();
+    if(weeklyRepairFingerprintV212714()!==fingerprint)throw new Error('Databasen ändrades under granskningen. Kör kontrollen på nytt.');
+    const priceDiffs=diffs.reduce((n,d)=>n+d.wrongPrices,0),indexDiffs=diffs.filter(d=>d.indexChanged).length;
+    const changedWeeks=diffs.filter(d=>d.changedModels||d.wrongPrices||d.indexChanged).length;
+    weeklyRepairPreviewV212714={fingerprint,snapshots:repaired,diffs,absences,createdAt:nowISO()};
+    document.getElementById('settingsWeeklyRepairSummary').textContent=
+      `Förhandsgranskning klar: ${weeks.length} veckor, fem modeller per vecka.\n`+
+      `Veckor med avvikelser: ${changedWeeks} · Avvikande tidigare köppriser: ${priceDiffs} · Felaktiga indexbaser: ${indexDiffs}.\n`+
+      diffs.map(d=>`${d.weekKey} (${d.friday}): ${d.changedModels} ändrade modellurval, ${d.wrongPrices} gamla felpriser, ${d.indexChanged?'fel indexbas':'rätt indexbas'}`).join('\n')+
+      `\nBolag utan daterade fundamenta exkluderas endast under berörda veckor.\n`+
+      `Alla efterföljande veckor är omräknade med föregående KORRIGERADE veckas innehav.`;
+    weeklyRepairStatusV212714('Ingen historik har ändrats. Granska resultatet och godkänn först när du vill ersätta den gamla simulerade veckokedjan.');
+    document.getElementById('settingsWeeklyRepairApply').disabled=false;
+    document.getElementById('settingsWeeklyRepairExport').disabled=false;
+  }catch(error){
+    weeklyRepairPreviewV212714=null;
+    weeklyRepairStatusV212714('Reparation SPÄRRAD: '+(error?.message||error)+'\nIngen historik ändrades.');
+  }finally{
+    rows=originalRows;weeklyLastBlock=originalLastBlock;invalidateModelDayCaches();
+    weeklyRepairBusyV212714=false;
+    document.getElementById('settingsWeeklyRepairPreview').disabled=false;
+  }
+}
+function exportWeeklyRepairPreviewV212714(){
+  if(!weeklyRepairPreviewV212714)return;
+  downloadTextFile(JSON.stringify({
+    version:'21.27.14',type:'point-in-time-weekly-reconstruction-preview',
+    createdAt:weeklyRepairPreviewV212714.createdAt,
+    differences:weeklyRepairPreviewV212714.diffs,
+    unavailableFundamentals:weeklyRepairPreviewV212714.absences,
+    replacementSnapshots:weeklyRepairPreviewV212714.snapshots
+  },null,2),`MomentumScore_veckoreparation_granskning_${todayISO()}.json`,'application/json');
+}
+function applyWeeklyRepairV212714(){
+  if(weeklyRepairBusyV212714||!weeklyRepairPreviewV212714)return;
+  if(weeklyRepairFingerprintV212714()!==weeklyRepairPreviewV212714.fingerprint){
+    weeklyRepairStatusV212714('Kurser, inställningar eller historik har ändrats efter förhandsgranskningen. Kör granskningen igen.');
+    document.getElementById('settingsWeeklyRepairApply').disabled=true;
+    return;
+  }
+  if(!confirm('Ersätta de gamla simulerade veckolåsningarna med de granskade fredagssnapshotsen? En fullständig JSON-backup laddas ned först. Rullande portföljer räknas sedan om från den nya kedjan. Fortsätt?'))return;
+  weeklyRepairBusyV212714=true;
+  const original=weeklyPortfolios;
+  const stored=localStorage.getItem(weeklyPortfolioKey);
+  try{
+    const backup={format:'MomentumScoreBackup',version:'7.6',exportedAt:nowISO(),
+      rows,benchmarkHistories,weeklyPortfolios:original,weeklySettings:loadWeeklySettings(),
+      whitePlateaus:loadWhitePlateaus(),backupReason:'before-weekly-repair-v21.27.14'};
+    downloadTextFile(JSON.stringify(backup),`Levande-aktier-FORE-reparation-${todayISO()}.json`,'application/json');
+    const repaired=weeklyRepairPreviewV212714.snapshots.slice().sort((a,b)=>String(b.weekKey).localeCompare(String(a.weekKey)));
+    localStorage.setItem(weeklyPortfolioKey,JSON.stringify(repaired));
+    weeklyPortfolios=repaired;
+    weeklyRepairPreviewV212714=null;
+    document.getElementById('settingsWeeklyRepairApply').disabled=true;
+    document.getElementById('settingsWeeklyRepairExport').disabled=true;
+    renderWeeklyPortfolios();
+    renderDevelopmentPortfolios();
+    renderDashboard();
+    weeklyRepairStatusV212714('KLART: '+repaired.length+' veckor ersatta efter nedladdad originalbackup. Blå, Vit, Snitt, Grön och Hybrid rullande använder nu den rekonstruerade kedjan. Exportera en ny JSON-säkerhetskopia.');
+    document.getElementById('settingsWeeklyRepairSummary').textContent='Reparationskedjan har tillämpats. Inga aktier, manuella bolagsvärden eller enskilda användartransaktioner ändrades.';
+  }catch(error){
+    weeklyPortfolios=original;
+    try{if(stored===null)localStorage.removeItem(weeklyPortfolioKey);else localStorage.setItem(weeklyPortfolioKey,stored)}
+    catch(rollback){console.error('Rollback av veckoportföljer misslyckades',rollback);}
+    weeklyRepairStatusV212714('Reparationen avbröts och originalet behölls: '+(error?.message||error));
+  }finally{weeklyRepairBusyV212714=false;}
+}
+document.getElementById('settingsWeeklyRepairPreview').onclick=previewWeeklyRepairV212714;
+document.getElementById('settingsWeeklyRepairExport').onclick=exportWeeklyRepairPreviewV212714;
+document.getElementById('settingsWeeklyRepairApply').onclick=applyWeeklyRepairV212714;
 
 document.getElementById('saveSettings').onclick=saveMarketSettings;
 document.getElementById('checkDatabase').onclick=renderDatabaseHealth;
