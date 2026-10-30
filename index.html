@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v21.27.14</title>
+<title>MomentumScore v21.27.15</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -292,7 +292,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.27.14 – Hybrid speglar Vit exakt när Grön är av</h1>
+<h1>MomentumScore v21.27.15 – Hybrid speglar Vit exakt när Grön är av</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -1396,7 +1396,7 @@ De fyra faktorerna och vikterna 10/30/30/30 är låsta. Endast platåernas grän
   </div>
   <div class="card" id="settingsWeeklyRepairCard">
     <h2>Reparera gamla veckoportföljer</h2>
-    <p class="note">Kontrollerar veckorna kronologiskt från första fredagsstängningen. Varje urval, köppris, teknisk poäng och OMXSPI-bas räknas fram från data som var kända just den fredagen. Ändrade Top10/Top20-innehav förs vidare till alla efterföljande veckor. Inget skrivs över vid granskning.</p>
+    <p class="note">Kontrollerar veckorna kronologiskt från första fredagsstängningen. Vit/Grön kräver historiska kurser, Blå/Snitt kräver dessutom historiska fundamenta. Om äldre ursprungliga Blå/Snitt-innehav inte går att verifiera spärras godkännande. Ändrade Top10/Top20-innehav förs vidare till alla efterföljande veckor. Inget skrivs över vid granskning.</p>
     <div class="actions">
       <button type="button" id="settingsWeeklyRepairPreview">Granska och förhandsberäkna alla veckor</button>
       <button type="button" class="secondary" id="settingsWeeklyRepairExport" disabled>Exportera jämförelse (JSON)</button>
@@ -11425,7 +11425,7 @@ function auditLockedWeeklyPortfoliosV212712(){
           missing:readiness.missing,short:readiness.short},
         status:indexMismatch||priceMismatches.length||missingHistoricalPrices.length||!readiness.ready?'kontrollera':'godkänd'}
     });
-  return {engine:'MomentumScore v21.27.14',createdAt:nowISO(),readOnly:true,
+  return {engine:'MomentumScore v21.27.15',createdAt:nowISO(),readOnly:true,
     note:'Endast avvikelsekontroll; historiska val/affärer har inte ändrats.',
     totalWeeks:weeks.length,flaggedWeeks:weeks.filter(w=>w.status!=='godkänd').length,weeks}
 }
@@ -11654,10 +11654,14 @@ function weeklyRepairFingerprintV212714(){
   for(let i=0;i<txt.length;i++)hash=Math.imul(hash^txt.charCodeAt(i),16777619)>>>0;
   return txt.length+':'+hash.toString(16);
 }
+// v21.27.15: A row belongs to the Friday's price-based universe even when
+// some dated fundamentals are missing. Blå/Snitt validate their OWN required
+// fundamentals in calc(); Vit/Grön rely on historical technical prices.
+// Reconstruct each field from the latest eligible date, never from the present.
 function historicalRowAsOfV212714(row,cutoffDate){
   const cutoff=fridayCutoffMoment(dateAtLocalNoon(cutoffDate)).getTime();
   const created=new Date(row.createdAt||'').getTime();
-  if(Number.isFinite(created)&&created>cutoff)return{row:null,reason:'Tillkom senare'};
+  if(Number.isFinite(created)&&created>cutoff)return{row:null,reason:'Tillkom senare',missing:[]};
   const entries=(Array.isArray(row.history)?row.history:[])
     .filter(h=>{
       if(!h?.raw||h.foreignOwnerMismatch===true)return false;
@@ -11666,37 +11670,58 @@ function historicalRowAsOfV212714(row,cutoffDate){
       const rawTicker=canonicalTicker(h.raw.ticker||'');
       return !rawTicker||rawTicker===canonicalTicker(row.ticker||'');
     }).sort((a,b)=>String(a.savedAt).localeCompare(String(b.savedAt)));
-  if(!entries.length)return{row:null,reason:'Inga daterade fundamenta'};
-  const latest=entries[entries.length-1];
-  const raw=latest.raw;
-  const investment=(raw.companyType||row.companyType)==='investment';
-  const req=['eps1','eps2','eps3','eps4','eps3y','pe','pe3','pe5','roe','debt','fcf',
-    ...(investment?['ekYoy','ek3y']:['rev1','rev2','rev3','rev4','rev3y'])];
-  const missing=req.filter(k=>!Number.isFinite(num(raw[k])));
-  if(missing.length)return{row:null,reason:'Historiska fundamenta saknas: '+missing.join(', ')};
   const earlierHistory=entries.map(h=>({...h}));
-  // P/E must be anchored at its last MANUAL input price, not the most
-  // recent automatic price update (which can be days or weeks later).
+  const raw={};
+  // Later patches often contain ONLY the changed field (for example an MA200
+  // screenshot). Such patches must not erase earlier dated fundamentals.
+  // Empty fields in an automatic price update also do not erase earlier data.
+  const historicalNumeric=[...new Set([...numericIds,'rev1','rev2','rev3','rev4','rev3y',
+    'ekYoy','ek3y','eps1','eps2','eps3','eps4','eps3y','pe','pe3','pe5','roe','debt','fcf'])];
+  const allFields=new Set([...historicalNumeric,'companyType','reportingFrequency']);
+  for(const entry of entries){
+    for(const key of allFields){
+      if(!Object.prototype.hasOwnProperty.call(entry.raw,key))continue;
+      const value=entry.raw[key];
+      // A missing/blank value is unknown, not a zero and not evidence that the
+      // last documented value was invalidated.
+      if(value===null||value===undefined||String(value).trim()==='')continue;
+      raw[key]=value;
+    }
+  }
+  // Never leak present-day fundamental values through the spread of row.
+  const historicalRow={...row,...Object.fromEntries(historicalNumeric.map(k=>[k,''])),...raw,
+    ticker:row.ticker,company:row.company,market:row.market,yahooSymbol:row.yahooSymbol,
+    companyType:raw.companyType||row.companyType||'regular',
+    priceHistory:row.priceHistory,history:earlierHistory,
+    marketHistory:(row.marketHistory||[]).filter(h=>{
+      const timestamp=new Date(h.savedAt||'').getTime();
+      return Number.isFinite(timestamp)&&timestamp<=cutoff;
+    }),
+    fundamentalUpdatedAt:entries.length?entries[entries.length-1].savedAt:'',
+    peBase:'',peBasePrice:'',peBaseDate:''
+  };
+  // Re-anchor historic P/E at the price documented when it was manually
+  // entered; a later price refresh is not a new P/E input.
   const peInference=historicalPeInputBase({pe:raw.pe,history:earlierHistory});
-  const prior=(row.priceHistory||[]).filter(p=>String(p.date).slice(0,10)<=String(latest.savedAt).slice(0,10));
+  const prior=(row.priceHistory||[]).filter(p=>String(p.date).slice(0,10)<=String(peInference.date||'').slice(0,10));
   const fallbackBase=prior.length?num(prior[prior.length-1].close):NaN;
   const basePrice=Number.isFinite(peInference.price)&&peInference.price>0?peInference.price:fallbackBase;
-  const historicalRow={...row,...raw,
-    ticker:row.ticker,company:row.company,market:row.market,yahooSymbol:row.yahooSymbol,
-    companyType:row.companyType||raw.companyType||'regular',
-    // The complete closing-price series stays accessible for cutoff computations.
-    priceHistory:row.priceHistory,history:earlierHistory,marketHistory:(row.marketHistory||[])
-      .filter(h=>new Date(h.savedAt||'').getTime()<=cutoff),
-    peBase:String(raw.pe),peBasePrice:Number.isFinite(basePrice)&&basePrice>0?String(basePrice):'',
-    peBaseDate:peInference.date||latest.savedAt,
-    fundamentalUpdatedAt:latest.savedAt
-  };
+  if(Number.isFinite(num(raw.pe))&&num(raw.pe)>0){
+    historicalRow.peBase=String(raw.pe);
+    historicalRow.peBasePrice=Number.isFinite(basePrice)&&basePrice>0?String(basePrice):'';
+    historicalRow.peBaseDate=peInference.date||historicalRow.fundamentalUpdatedAt;
+  }
   const eligiblePrices=priceHistoryOnOrBefore(historicalRow,cutoffDate);
   if(eligiblePrices.length>=WEEKLY_MIN_TECHNICAL_DAYS){
     try{Object.assign(historicalRow,technicalFromPriceHistory(eligiblePrices));}
-    catch(error){return{row:null,reason:'Teknisk historik: '+error.message};}
+    catch(error){return{row:null,reason:'Teknisk historik: '+error.message,missing:[]};}
   }
-  return{row:historicalRow,reason:'',fundamentalDate:latest.savedAt};
+  const investment=historicalRow.companyType==='investment';
+  const required=['eps1','eps2','eps3','eps4','eps3y','pe','pe3','pe5','roe','debt','fcf',
+    ...(investment?['ekYoy','ek3y']:['rev1','rev2','rev3','rev4','rev3y'])];
+  const missing=required.filter(k=>!Number.isFinite(num(historicalRow[k])));
+  return{row:historicalRow,reason:entries.length?'':'Inga daterade fundamenta',
+    missing,fundamentalDate:historicalRow.fundamentalUpdatedAt};
 }
 function weeklyRepairHistoricalFridaysV212714(){
   const ordered=weeklyPortfolios.slice().sort((a,b)=>String(a.weekKey||'').localeCompare(String(b.weekKey||'')));
@@ -11760,14 +11785,25 @@ async function previewWeeklyRepairV212714(){
     let previous=null;
     for(let i=0;i<weeks.length;i++){
       const item=weeks[i];
-      const historical=[],excluded=[];
+      const historical=[],excluded=[],incompleteBlue=[];
+      const originalFundamentalModels=new Set(
+        ['blue','average'].flatMap(model=>(item.original.portfolios?.[model]?.members||[]).map(weeklyMemberKey)));
+      const unverifiableOriginals=[];
       for(const row of originalRows){
         const result=historicalRowAsOfV212714(row,item.friday);
-        if(result.row)historical.push(result.row);
-        else excluded.push({ticker:row.ticker||row.company,reason:result.reason});
+        if(result.row){
+          historical.push(result.row);
+          if(result.missing.length){
+            incompleteBlue.push({ticker:row.ticker||row.company,missing:result.missing,
+              reason:result.reason||'Historiska Blå-nyckeltal saknas'});
+            if(originalFundamentalModels.has(weeklyMemberKey(row))){
+              unverifiableOriginals.push({ticker:row.ticker||row.company,missing:result.missing});
+            }
+          }
+        }else excluded.push({ticker:row.ticker||row.company,reason:result.reason});
       }
-      // Only companies with point-in-time documented fundamentals belong to
-      // the Friday's investable universe; never retrofit later additions.
+      // Price-based Vit and Grön see every company that existed on Friday.
+      // Only Blå/Snitt require Blue fundamentals, enforced separately by calc.
       rows=historical;
       invalidateModelDayCaches();
       const readiness=weeklyFridayDataReadiness(item.friday,item.original.benchmarkMarket||'SE');
@@ -11787,7 +11823,8 @@ async function previewWeeklyRepairV212714(){
       }
       const diff=weeklyRepairDifferenceV212714(item.original,snapshot);
       diffs.push(diff);repaired.push(snapshot);previous=snapshot;
-      absences.push({weekKey:item.key,excluded});
+      absences.push({weekKey:item.key,excluded,incompleteBlue,unverifiableOriginals,
+        priceBasedUniverse:historical.length,blueFundamentalUniverse:historical.length-incompleteBlue.length});
       weeklyRepairProgressV212714((i+1)/weeks.length);
       weeklyRepairStatusV212714('Kontrollerar och bygger '+(i+1)+'/'+weeks.length+' · '+item.key);
       await new Promise(resolve=>setTimeout(resolve,0));
@@ -11798,15 +11835,21 @@ async function previewWeeklyRepairV212714(){
     if(weeklyRepairFingerprintV212714()!==fingerprint)throw new Error('Databasen ändrades under granskningen. Kör kontrollen på nytt.');
     const priceDiffs=diffs.reduce((n,d)=>n+d.wrongPrices,0),indexDiffs=diffs.filter(d=>d.indexChanged).length;
     const changedWeeks=diffs.filter(d=>d.changedModels||d.wrongPrices||d.indexChanged).length;
-    weeklyRepairPreviewV212714={fingerprint,snapshots:repaired,diffs,absences,createdAt:nowISO()};
+    const uncertain=absences.filter(a=>a.unverifiableOriginals.length);
+    const uncertainCount=uncertain.reduce((n,a)=>n+a.unverifiableOriginals.length,0);
+    weeklyRepairPreviewV212714={fingerprint,snapshots:repaired,diffs,absences,
+      blocked:uncertain.length>0,createdAt:nowISO()};
     document.getElementById('settingsWeeklyRepairSummary').textContent=
       `Förhandsgranskning klar: ${weeks.length} veckor, fem modeller per vecka.\n`+
       `Veckor med avvikelser: ${changedWeeks} · Avvikande tidigare köppriser: ${priceDiffs} · Felaktiga indexbaser: ${indexDiffs}.\n`+
       diffs.map(d=>`${d.weekKey} (${d.friday}): ${d.changedModels} ändrade modellurval, ${d.wrongPrices} gamla felpriser, ${d.indexChanged?'fel indexbas':'rätt indexbas'}`).join('\n')+
-      `\nBolag utan daterade fundamenta exkluderas endast under berörda veckor.\n`+
+      `\nVit och Grön använder alla då existerande aktier med giltig kurshistorik. `+
+      `Blå/Snitt kräver daterade fundamenta för sina poäng.\n`+
+      (uncertain.length?`VARNING: ${uncertainCount} ursprungliga Blå/Snitt-innehav (över ${uncertain.length} veckor) saknar verifierbara historiska nyckeltal. Godkännande är SPÄRRAT. Exportera granskningsfilen för detaljer.\n`:'Historiska Blå/Snitt-innehav har verifierbara fundamentala underlag.\n')+
       `Alla efterföljande veckor är omräknade med föregående KORRIGERADE veckas innehav.`;
-    weeklyRepairStatusV212714('Ingen historik har ändrats. Granska resultatet och godkänn först när du vill ersätta den gamla simulerade veckokedjan.');
-    document.getElementById('settingsWeeklyRepairApply').disabled=false;
+    weeklyRepairStatusV212714(uncertain.length?
+      'REPARATIONEN ÄR INTE HELT VERIFIERBAR: gamla Blå/Snitt-innehav med saknade historiska nyckeltal. Granskningen är sparad, men godkännande spärras.':'Ingen historik har ändrats. Granska resultatet och godkänn först när du vill ersätta den gamla simulerade veckokedjan.');
+    document.getElementById('settingsWeeklyRepairApply').disabled=uncertain.length>0;
     document.getElementById('settingsWeeklyRepairExport').disabled=false;
   }catch(error){
     weeklyRepairPreviewV212714=null;
@@ -11820,15 +11863,17 @@ async function previewWeeklyRepairV212714(){
 function exportWeeklyRepairPreviewV212714(){
   if(!weeklyRepairPreviewV212714)return;
   downloadTextFile(JSON.stringify({
-    version:'21.27.14',type:'point-in-time-weekly-reconstruction-preview',
+    version:'21.27.15',type:'point-in-time-weekly-reconstruction-preview',
     createdAt:weeklyRepairPreviewV212714.createdAt,
     differences:weeklyRepairPreviewV212714.diffs,
-    unavailableFundamentals:weeklyRepairPreviewV212714.absences,
+    historicalDataCoverage:weeklyRepairPreviewV212714.absences,
+    approvalBlocked:weeklyRepairPreviewV212714.blocked,
     replacementSnapshots:weeklyRepairPreviewV212714.snapshots
   },null,2),`MomentumScore_veckoreparation_granskning_${todayISO()}.json`,'application/json');
 }
 function applyWeeklyRepairV212714(){
   if(weeklyRepairBusyV212714||!weeklyRepairPreviewV212714)return;
+  if(weeklyRepairPreviewV212714.blocked){weeklyRepairStatusV212714('Godkännande spärrat: ursprungliga Blå/Snitt-innehav saknar historiska fundamenta.');return;}
   if(weeklyRepairFingerprintV212714()!==weeklyRepairPreviewV212714.fingerprint){
     weeklyRepairStatusV212714('Kurser, inställningar eller historik har ändrats efter förhandsgranskningen. Kör granskningen igen.');
     document.getElementById('settingsWeeklyRepairApply').disabled=true;
@@ -11841,7 +11886,7 @@ function applyWeeklyRepairV212714(){
   try{
     const backup={format:'MomentumScoreBackup',version:'7.6',exportedAt:nowISO(),
       rows,benchmarkHistories,weeklyPortfolios:original,weeklySettings:loadWeeklySettings(),
-      whitePlateaus:loadWhitePlateaus(),backupReason:'before-weekly-repair-v21.27.14'};
+      whitePlateaus:loadWhitePlateaus(),backupReason:'before-weekly-repair-v21.27.15'};
     downloadTextFile(JSON.stringify(backup),`Levande-aktier-FORE-reparation-${todayISO()}.json`,'application/json');
     const repaired=weeklyRepairPreviewV212714.snapshots.slice().sort((a,b)=>String(b.weekKey).localeCompare(String(a.weekKey)));
     localStorage.setItem(weeklyPortfolioKey,JSON.stringify(repaired));
