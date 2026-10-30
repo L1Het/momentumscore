@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v21.27.12</title>
+<title>MomentumScore v21.27.13</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -245,6 +245,12 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 .score-filter-chip label{display:flex;align-items:center;gap:5px;margin:0}
 .score-filter-chip button{padding:5px 8px}
 .settings-laboratory{margin-top:24px;padding-top:18px;border-top:2px solid var(--line)}
+.settings-subtabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.settings-subtabs button{background:var(--card2);border:1px solid var(--line);color:var(--text)}
+.settings-subtabs button.active{background:var(--blue);color:#06111c}
+.settings-history-progress{height:14px;border:1px solid var(--line);border-radius:99px;background:var(--card2);overflow:hidden;margin:12px 0}
+.settings-history-progress>div{height:100%;width:0;background:var(--blue);transition:width .15s}
+.settings-history-status{white-space:pre-wrap;line-height:1.6}
 .sortable-head{cursor:pointer;user-select:none}
 .sortable-head.active-sort::after{content:' ▼';font-size:11px}
 .sortable-head.active-sort.sort-asc::after{content:' ▲'}
@@ -286,7 +292,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.27.12 – Hybrid speglar Vit exakt när Grön är av</h1>
+<h1>MomentumScore v21.27.13 – Hybrid speglar Vit exakt när Grön är av</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -625,6 +631,11 @@ De fyra faktorerna och vikterna 10/30/30/30 är låsta. Endast platåernas grän
 </div></section>
 
 <section id="settings" class="panel">
+<div class="settings-subtabs" role="group" aria-label="Delar av inställningar">
+  <button type="button" id="settingsGeneralTab" class="active" aria-pressed="true">Vanliga inställningar</button>
+  <button type="button" id="settingsHistoryTab" aria-pressed="false">Komplettera kurshistorik</button>
+</div>
+<div id="settingsGeneralPane">
 <div class="card">
 <h2>Data och säkerhetskopiering</h2>
 <div class="actions" style="margin:0;align-items:end">
@@ -662,7 +673,7 @@ De fyra faktorerna och vikterna 10/30/30/30 är låsta. Endast platåernas grän
   <div id="cleanupDatabaseStatus" class="note" style="margin-top:8px">Städningen behåller kärndata och tar bort sådant som kan återskapas. Marknadsuppdatering och veckoportföljmotor körs nu som separata transaktioner.</div>
 </div>
 <p class="note"><b>Uppdateras:</b> aktiekurs, MA200-nivå, avstånd till MA200, MA200-trend 1 vecka, 1 månad och 3 månader samt RSI 14. Trenderna räknas från verkliga dagliga stängningskurser. Aktuellt P/E beräknas automatiskt i bakgrunden från P/E-basen och kursförändringen; basvärdet och övrig rapportdata skrivs inte över. Kurs, Kurs/MA200, RSI 14 samt Blå och Vit poäng sparas i historiken vid varje lyckad uppdatering. Jämförelseindex uppdateras före aktierna. Inför varje massuppdatering används alltid en säkerhetskopia i arbetsminnet. En fullständig lokal dubbelkopia skapas inte längre eftersom den förbrukar nästan dubbelt lagringsutrymme; arbetsminnet används för rollback under uppdateringen och JSON-export är permanent backup. Versionsmigrering lägger bara till saknade fält och bevarar befintliga listor, och uppdateringen avbryts automatiskt om någon äldre historik skulle saknas. Automatisk uppdatering sker endast när sidan är öppen eller öppnas – en lokal HTML-fil kan inte arbeta i bakgrunden när den är stängd.</p>
-<p class="note">Sverige är standard. Välj Danmark, Norge, Finland eller Island när du matar in ett nordiskt bolag. Yahoo-symbolen får då rätt suffix automatiskt, exempelvis NOVO B → NOVO-B.CO, EQNR → EQNR.OL och NOKIA → NOKIA.HE. När ett bolag saknar minst 263 handelsdagar hämtar Yahoo två års grundhistorik. Därefter begär appen ett mycket litet femdagarsfönster men sparar bara den senaste tillgängliga kursen och slår ihop den med den lokala historiken. Appen lagrar de senaste 400 handelsdagarna och räknar själv MA200 och MA200-trenderna. Om Yahoos sista dagscandle är null används meta.regularMarketPrice som den senaste avslutade handelsdagens kurs och läggs till i samma serie. Om ett bolag inte kan hämtas visas det i statusrutan och övriga bolag fortsätter uppdateras.</p>
+<p class="note">Sverige är standard. Välj Danmark, Norge, Finland eller Island när du matar in ett nordiskt bolag. Yahoo-symbolen får då rätt suffix automatiskt, exempelvis NOVO B → NOVO-B.CO, EQNR → EQNR.OL och NOKIA → NOKIA.HE. När ett bolag saknar minst 263 handelsdagar hämtar Yahoo två års grundhistorik. Därefter begär appen ett mycket litet femdagarsfönster men sparar bara den senaste tillgängliga kursen och slår ihop den med den lokala historiken. Appen behåller minst 300 handelsdagar samt alla ytterligare dagar som behövs för den första sparade veckans indikatorer. Den räknar själv MA200 och MA200-trenderna. Om Yahoos sista dagscandle är null används meta.regularMarketPrice som den senaste avslutade handelsdagens kurs och läggs till i samma serie. Om ett bolag inte kan hämtas visas det i statusrutan och övriga bolag fortsätter uppdateras.</p>
 </div>
 
 <div class="card" id="whiteFiveYearBacktestCard">
@@ -1373,6 +1384,17 @@ De fyra faktorerna och vikterna 10/30/30/30 är låsta. Endast platåernas grän
     </div>
   </div>
 </div>
+</div><!-- settingsGeneralPane -->
+<div id="settingsHistoryPane" class="hidden">
+  <div class="card">
+    <h2>Komplettera kurshistorik för första veckan</h2>
+    <p class="note">Hämtar äldre dagskurser för de aktier och index som behöver fler handelsdagar, så att den första låsta veckans indikatorer kan räknas från rätt fredagsstängning. Endast nödvändig historik behålls, även efter kommande uppdateringar och exporter.</p>
+    <div id="settingsHistorySummary" class="note">Kontrollerar historiken…</div>
+    <div class="actions"><button type="button" id="settingsHistoryFetch">Hämta saknade kursdagar</button></div>
+    <div class="settings-history-progress"><div id="settingsHistoryProgress"></div></div>
+    <div id="settingsHistoryStatus" class="note settings-history-status" aria-live="polite">Ingen hämtning pågår. Befintliga veckoportföljer ändras inte.</div>
+  </div>
+</div>
 </section>
 
 </main>
@@ -1814,7 +1836,7 @@ function mergePriceHistory(existing,incoming){
     const close=num(p?.close);
     if(date&&Number.isFinite(close))map.set(date,{date,close});
   }
-  return [...map.values()].sort((a,b)=>a.date.localeCompare(b.date)).slice(-400);
+  return retainHistoryForFirstWeekV212713([...map.values()],400);
 }
 function migrateDatabase(inputRows){
   const before=cloneJson(inputRows);
@@ -1891,6 +1913,29 @@ function phaseOneIntegrity(){
 const LEAN_STORAGE_MARKER='momentumScore_lean_storage_v1';
 const LEAN_PRICE_DAYS=300;
 const LEAN_MARKET_DAYS=260;
+// v21.27.13: preserve the complete signal window for the earliest saved week.
+// Calendar trimming by a fixed 300/400-day cap would silently erase this window.
+function firstWeeklySignalDateV212713(snapshots=weeklyPortfolios){
+  const dates=(Array.isArray(snapshots)?snapshots:[])
+    .map(s=>String(s?.executionDate||s?.lockDate||s?.savedDate||'').slice(0,10))
+    .filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d));
+  return dates.length?dates.sort()[0]:'';
+}
+function retainHistoryForFirstWeekV212713(series,minimumRecent=LEAN_PRICE_DAYS,firstDateOverride=''){
+  const points=dedupeByDateKeepLast(series,p=>p?.date)
+    .filter(p=>Number.isFinite(num(p?.close))&&num(p.close)>0)
+    .map(p=>({date:String(p.date).slice(0,10),close:Number(num(p.close).toFixed(4))}));
+  const first=firstDateOverride||firstWeeklySignalDateV212713();
+  if(!first)return points.slice(-minimumRecent);
+  let lastAtOrBefore=-1;
+  for(let i=0;i<points.length;i++){
+    if(points[i].date<=first)lastAtOrBefore=i;
+    else break;
+  }
+  if(lastAtOrBefore<0)return points.slice(-minimumRecent);
+  const firstNeeded=Math.max(0,lastAtOrBefore-(WEEKLY_MIN_TECHNICAL_DAYS-1));
+  return points.slice(Math.min(Math.max(0,points.length-minimumRecent),firstNeeded));
+}
 
 function byteSize(value){
   try{return new Blob([typeof value==='string'?value:JSON.stringify(value)]).size}catch{return 0}
@@ -1936,7 +1981,7 @@ function compactMarketHistory(row){
   })
 }
 function compactPriceHistory(row){
-  return dedupeByDateKeepLast(row?.priceHistory,point=>point?.date).slice(-LEAN_PRICE_DAYS)
+  return retainHistoryForFirstWeekV212713(row?.priceHistory,LEAN_PRICE_DAYS)
 }
 function buildLeanRows(sourceRows=rows){
   return (Array.isArray(sourceRows)?sourceRows:[]).map(row=>({
@@ -9203,7 +9248,7 @@ function mergeDailyPrices(existing,incoming){
     const date=String(p?.date||'').slice(0,10),close=num(p?.close);
     if(date&&Number.isFinite(close))map.set(date,{date,close:Number(close.toFixed(4))});
   }
-  return [...map.values()].sort((a,b)=>a.date.localeCompare(b.date)).slice(-400);
+  return retainHistoryForFirstWeekV212713([...map.values()],400);
 }
 function technicalFromPriceHistory(history){
   const closes=(history||[]).map(p=>num(p.close)).filter(Number.isFinite);
@@ -9339,13 +9384,8 @@ async function fetchYahooHistory(symbol,existingHistory=[],options={}){
 
 function cloneJson(value){return JSON.parse(JSON.stringify(value))}
 function compactReconstructablePriceHistoryForStorage(list){
-  // priceHistory is Yahoo-derived and can be recreated. 263 closes are enough
-  // for MA200 plus the 3-month MA200 trend; 300 gives a safe margin.
-  return (Array.isArray(list)?list:[])
-    .filter(p=>p&&p.date&&Number.isFinite(num(p.close)))
-    .sort((a,b)=>String(a.date).localeCompare(String(b.date)))
-    .slice(-300)
-    .map(p=>({date:String(p.date).slice(0,10),close:Number(num(p.close).toFixed(4))}))
+  // Never discard history needed to rebuild the first saved Friday signal.
+  return retainHistoryForFirstWeekV212713(list,LEAN_PRICE_DAYS)
 }
 function compactReconstructableStorage(rowsToCompact){
   return rowsToCompact.map(r=>({
@@ -9456,7 +9496,7 @@ function renderWeeklyFreshnessStatus(){
   const lock=r.alreadyLocked?'Veckan är redan sparad och ändras inte automatiskt.':
     r.ready?'Veckan får låsas från verifierade fredagskurser.':
     'NY VECKA SPÄRRAD – hämta/komplettera kurshistoriken och försök igen.';
-  el.textContent=`v21.27.12 · ${r.weekKey} · Handelsdag ${r.date} · ${lock} ${r.reason}. `+
+  el.textContent=`v21.27.13 · ${r.weekKey} · Handelsdag ${r.date} · ${lock} ${r.reason}. `+
     'Gamla veckor lämnas orörda. Använd ”Granska låsta veckor” för avvikelser.';
   el.style.color=r.alreadyLocked?'':r.ready?'var(--green)':'var(--yellow)';
 }
@@ -11249,13 +11289,13 @@ function setImportStatus(text,isError=false){
   el.textContent=text;
   el.style.color=isError?'var(--red)':'var(--muted)';
 }
-async function prepareImportedRows(importedRows){
+async function prepareImportedRows(importedRows,importedWeekly=[]){
   const clean=[],skipped=[],seen=new Set();
   for(let i=0;i<importedRows.length;i++){
     const raw=importedRows[i];
     if(!raw||typeof raw!=='object')continue;
     const n=normalizeRow(raw);
-    n.priceHistory=Array.isArray(n.priceHistory)?n.priceHistory.slice(-LEAN_PRICE_DAYS):[];
+    n.priceHistory=retainHistoryForFirstWeekV212713(n.priceHistory,LEAN_PRICE_DAYS,firstWeeklySignalDateV212713(importedWeekly));
     n.marketHistory=Array.isArray(n.marketHistory)?n.marketHistory:[];
     n.history=Array.isArray(n.history)?n.history:[];
     n.transactions=Array.isArray(n.transactions)?n.transactions:[];
@@ -11298,7 +11338,7 @@ async function importSelectedFile(file){
   const imported=extractImportedRows(parsed);
   if(!imported.length)throw new Error('Filen innehåller inga bolag');
 
-  const result=await prepareImportedRows(imported);
+  const result=await prepareImportedRows(imported,importedWeekly);
   if(!result.clean.length)throw new Error('Filen innehåller inga giltiga bolag');
 
   setImportStatus(`Sparar ${result.clean.length} bolag i webbläsaren…`);
@@ -11372,7 +11412,7 @@ function auditLockedWeeklyPortfoliosV212712(){
           missing:readiness.missing,short:readiness.short},
         status:indexMismatch||priceMismatches.length||missingHistoricalPrices.length||!readiness.ready?'kontrollera':'godkänd'}
     });
-  return {engine:'MomentumScore v21.27.12',createdAt:nowISO(),readOnly:true,
+  return {engine:'MomentumScore v21.27.13',createdAt:nowISO(),readOnly:true,
     note:'Endast avvikelsekontroll; historiska val/affärer har inte ändrats.',
     totalWeeks:weeks.length,flaggedWeeks:weeks.filter(w=>w.status!=='godkänd').length,weeks}
 }
@@ -11446,10 +11486,143 @@ document.getElementById('exportGreenResearchLab').onclick=exportGreenResearchCsv
 document.getElementById('rerunFiveYearBacktest').onclick=runFiveYearWhiteBacktest;
 document.getElementById('runFiveYearDiagnosticsBtn').onclick=runFiveYearDiagnosticsManually;
 document.getElementById('exportFiveYearBacktest').onclick=exportFiveYearBacktestCsv;
+// v21.27.13 – optional historical backfill, WITHOUT modifying weekly snapshots.
+let historyBackfillRunningV212713=false;
+function setSettingsHistoryTabV212713(name){
+  const historical=name==='history';
+  document.getElementById('settingsGeneralPane').classList.toggle('hidden',historical);
+  document.getElementById('settingsHistoryPane').classList.toggle('hidden',!historical);
+  for(const [id,active] of [['settingsGeneralTab',!historical],['settingsHistoryTab',historical]]){
+    const el=document.getElementById(id);
+    el.classList.toggle('active',active);
+    el.setAttribute('aria-pressed',String(active));
+  }
+  if(historical)renderFirstWeekHistoryStatusV212713();
+}
+function historyFirstWeekCoverageV212713(){
+  const first=firstWeeklySignalDateV212713();
+  if(!first)return{first:'',missing:[],short:[],ready:false,reason:'Inga sparade veckoportföljer – första fredagen kan inte fastställas.'};
+  const missing=[],short=[];
+  const marketCodes=[...new Set(['SE',loadWeeklySettings().benchmarkMarket||'SE'])];
+  const instruments=[
+    ...marketCodes.map(m=>({type:'index',id:m,label:benchmarkSymbol(m),symbol:benchmarkSymbol(m),history:benchmarkHistories[m]||[]})),
+    ...rows.map((r,i)=>({type:'stock',id:i,label:r.company||r.ticker||String(i+1),symbol:String(r.yahooSymbol||inferYahooSymbol(r.ticker,r.market)).trim(),history:r.priceHistory||[]}))
+  ];
+  const incomplete=[];
+  for(const item of instruments){
+    const points=(Array.isArray(item.history)?item.history:[])
+      .filter(p=>String(p?.date||'').slice(0,10)<=first&&Number.isFinite(num(p?.close))&&num(p.close)>0);
+    const hasFriday=points.some(p=>String(p.date).slice(0,10)===first);
+    if(points.length<WEEKLY_MIN_TECHNICAL_DAYS)short.push(item.label);
+    if(!hasFriday)missing.push(item.label);
+    if(!hasFriday||points.length<WEEKLY_MIN_TECHNICAL_DAYS)incomplete.push({...item,count:points.length,hasFriday});
+  }
+  return{first,ready:incomplete.length===0,incomplete,short,missing,total:instruments.length};
+}
+function renderFirstWeekHistoryStatusV212713(){
+  const c=historyFirstWeekCoverageV212713();
+  const el=document.getElementById('settingsHistorySummary');
+  if(!el)return c;
+  el.textContent=!c.first?c.reason:
+    `Första portföljens fredag: ${c.first} · Behövs: ${WEEKLY_MIN_TECHNICAL_DAYS} handelsdagar fram till den fredagen. `+
+    `Verifierade: ${c.total-c.incomplete.length}/${c.total} aktier/index. `+
+    (c.ready?'All nödvändig kurshistorik finns sparad.':`${c.incomplete.length} behöver kompletteras.`);
+  if(!historyBackfillRunningV212713){
+    const button=document.getElementById('settingsHistoryFetch');
+    button.disabled=!c.first||c.ready;
+  }
+  return c;
+}
+function historyBackfillRangeV212713(first){
+  const months=(Date.now()-new Date(first+'T12:00:00Z').getTime())/(86400000*30.44);
+  return months<=10?'2y':months<=44?'5y':'10y';
+}
+async function fetchFirstWeekHistoryV212713(){
+  if(historyBackfillRunningV212713)return;
+  const coverage=historyFirstWeekCoverageV212713();
+  const status=document.getElementById('settingsHistoryStatus');
+  const progress=document.getElementById('settingsHistoryProgress');
+  const button=document.getElementById('settingsHistoryFetch');
+  if(!coverage.first){status.textContent=coverage.reason;return;}
+  if(coverage.ready){status.textContent='All historik finns redan sparad.';return;}
+  historyBackfillRunningV212713=true;
+  button.disabled=true;progress.style.width='0%';
+  const originalRows=rows,originalBenchmarks=benchmarkHistories;
+  const newRows=rows.slice(),newBenchmarks={...benchmarkHistories};
+  const failures=[];
+  let completed=0,added=0;
+  const range=historyBackfillRangeV212713(coverage.first);
+  // Only request instruments that are deficient, not all ten years for everyone.
+  // Work in small concurrent batches, commit only if every required series passed.
+  const queue=coverage.incomplete.slice();
+  let next=0;
+  const process=async()=>{
+    while(next<queue.length){
+      const item=queue[next++];
+      try{
+        if(!item.symbol)throw new Error('Yahoo-symbol saknas');
+        const old=item.history;
+        const q=await fetchYahooHistory(item.symbol,old,{range,market:item.type==='stock'?rows[item.id].market:'SE'});
+        const series=retainHistoryForFirstWeekV212713(q.priceHistory,400);
+        const available=series.filter(p=>p.date<=coverage.first);
+        const hasFirst=available.some(p=>p.date===coverage.first);
+        if(available.length<WEEKLY_MIN_TECHNICAL_DAYS||!hasFirst){
+          throw new Error(`${available.length} historiska dagar; ${hasFirst?'':`fredagsstängning ${coverage.first} saknas`}`);
+        }
+        const oldDates=new Set(old.map(p=>String(p?.date||'').slice(0,10)));
+        added+=series.filter(p=>!oldDates.has(p.date)).length;
+        if(item.type==='index')newBenchmarks[item.id]=series;
+        else newRows[item.id]={...rows[item.id],priceHistory:series};
+      }catch(error){failures.push(`${item.label}: ${error?.message||error}`);}
+      completed++;
+      progress.style.width=(100*completed/queue.length).toFixed(1)+'%';
+      status.textContent=`Hämtar äldre kurser: ${completed}/${queue.length} · Senast: ${item.label}`+
+        (failures.length?`\nMisslyckade hämtningar: ${failures.length}`:'');
+      // Allow the UI to repaint while Yahoo requests complete.
+      await new Promise(resolve=>setTimeout(resolve,0));
+    }
+  };
+  try{
+    await Promise.all(Array.from({length:Math.min(4,queue.length)},()=>process()));
+    if(failures.length){
+      status.textContent=`Hämtningen är inte komplett (${failures.length} fel). Ingen data har ersatts.\n`+failures.slice(0,12).join('\n');
+      return;
+    }
+    // No fundamental data, trades or locked weekly snapshots may change.
+    validateNoDataLoss(originalRows,newRows);
+    const oldDb=localStorage.getItem(storageKey),oldBench=localStorage.getItem(benchmarkKey);
+    try{
+      localStorage.setItem(storageKey,JSON.stringify(newRows));
+      localStorage.setItem(benchmarkKey,JSON.stringify(newBenchmarks));
+    }catch(error){
+      try{
+        if(oldDb===null)localStorage.removeItem(storageKey);
+        else localStorage.setItem(storageKey,oldDb);
+        if(oldBench===null)localStorage.removeItem(benchmarkKey);
+        else localStorage.setItem(benchmarkKey,oldBench);
+      }catch(rollbackError){console.error('Återställning efter lagringsfel',rollbackError);}
+      throw error;
+    }
+    rows=newRows;benchmarkHistories=newBenchmarks;
+    status.textContent=`Klart: ${queue.length} aktier/index kompletterade, ${added} nya kursdagar sparade. `+
+      `Första fredagen ${coverage.first} kan nu beräknas från rätt kurser. Befintliga veckoportföljer ändrades inte.`;
+    try{render();renderDatabaseHealth();renderWeeklyFreshnessStatus()}catch(renderError){console.warn('Kurser sparade, visning misslyckades',renderError)}
+  }catch(error){
+    rows=originalRows;benchmarkHistories=originalBenchmarks;
+    status.textContent='Hämtningen avbröts utan ändring av portföljhistoriken: '+(error?.message||error);
+  }finally{
+    historyBackfillRunningV212713=false;
+    renderFirstWeekHistoryStatusV212713();
+  }
+}
+document.getElementById('settingsGeneralTab').onclick=()=>setSettingsHistoryTabV212713('general');
+document.getElementById('settingsHistoryTab').onclick=()=>setSettingsHistoryTabV212713('history');
+document.getElementById('settingsHistoryFetch').onclick=fetchFirstWeekHistoryV212713;
+
 document.getElementById('saveSettings').onclick=saveMarketSettings;
 document.getElementById('checkDatabase').onclick=renderDatabaseHealth;
 document.getElementById('cleanupDatabase').onclick=()=>{
-  if(!confirm('Städa databasen? Kursdata begränsas till 300 handelsdagar, dubbletter tas bort och återskapningsbar analyscache rensas. Fundamentala uppdateringar och transaktioner behålls.'))return;
+  if(!confirm('Städa databasen? Dubbletter och återskapningsbar analyscache rensas. Kursdagar som behövs för första veckans beräkning behålls, liksom fundamentala uppgifter och transaktioner.'))return;
   try{applyLeanStorageCleanup();render();renderDatabaseHealth()}catch(error){alert('Städningen misslyckades: '+(error?.message||'okänt fel'))}
 };
 document.getElementById('updatePrices').onclick=()=>updateAllPrices(false);
