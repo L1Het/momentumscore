@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v21.27.15</title>
+<title>MomentumScore v21.27.16</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -292,7 +292,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.27.15 – Hybrid speglar Vit exakt när Grön är av</h1>
+<h1>MomentumScore v21.27.16 – Hybrid speglar Vit exakt när Grön är av</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -1416,7 +1416,24 @@ De fyra faktorerna och vikterna 10/30/30/30 är låsta. Endast platåernas grän
 <div id="detailModal" class="modal"><div class="modalbox">
 <div class="actions" style="justify-content:space-between"><h2 id="detailTitle">Detaljvy</h2><button class="secondary" id="closeDetail">Stäng</button></div>
 <div id="detailCurrent"></div>
-<div class="card"><h3>Verktyg</h3><div class="actions"><button class="secondary" id="detailEdit">Redigera siffror</button><button class="secondary" id="detailNewQuarter">Nytt kvartal</button><button class="secondary" id="detailPeUpdate">Uppdatera aktiekurs → P/E</button></div>
+<div class="card"><h3>Verktyg</h3><div class="actions"><button class="secondary" id="detailEdit">Redigera siffror</button><button class="secondary" id="detailNewQuarter">Nytt kvartal</button><button class="secondary" id="detailPeUpdate">Uppdatera aktiekurs → P/E</button><button class="secondary" id="detailCorrectHistory" type="button">Rätta historiska siffror</button></div>
+<div id="historicalCorrectionTool" class="hidden" style="margin-top:15px;border-top:1px solid var(--line);padding-top:14px">
+  <h3 style="margin-top:0">Rätta tidigare inmatade nyckeltal</h3>
+  <p class="note">Välj en tidigare inmatning och vilket nyckeltal som ska korrigeras. Det ursprungliga datumet ändras inte. Den gamla siffran sparas oförändrad i historiken, och rättningen används vid nästa historiska vecko-reparation. Dagens nyckeltal ändras inte.</p>
+  <div class="grid">
+    <div><label for="historyCorrectionEntry">Tidigare inmatning</label><select id="historyCorrectionEntry"></select></div>
+    <div><label for="historyCorrectionField">Nyckeltal</label><select id="historyCorrectionField"></select></div>
+    <div><label for="historyCorrectionOriginal">Ursprungligt värde</label><input id="historyCorrectionOriginal" disabled></div>
+    <div><label for="historyCorrectionValue">Korrigerat värde</label><input id="historyCorrectionValue" inputmode="decimal" placeholder="Ange rätt historiskt värde"></div>
+  </div>
+  <div class="actions" style="margin-top:10px;align-items:center">
+    <button id="historyCorrectionSave" type="button">Spara historisk rättning</button>
+    <button id="historyCorrectionCancel" type="button" class="secondary">Stäng rättning</button>
+    <label class="note" style="display:flex;align-items:center;gap:6px"><input id="historyCorrectionShowAuto" type="checkbox" style="width:auto"> Visa även automatiska poster</label>
+  </div>
+  <div class="note" id="historyCorrectionStatus" role="status" style="white-space:pre-wrap;margin-top:9px"></div>
+  <div style="margin-top:12px"><b>Registrerade historiska rättningar</b><div id="historyCorrectionLog" style="margin-top:8px"></div></div>
+</div>
 <div id="peTool" class="hidden" style="margin-top:12px"><div class="grid"><div><label>Gammal kurs</label><input id="oldPrice" disabled></div><div><label>Ny kurs</label><input id="newPrice" inputmode="decimal"></div><div><label>Nytt P/E</label><input id="newPe" disabled></div></div><div class="actions"><button id="savePeUpdate">Spara kursuppdatering</button><button class="secondary" id="cancelPeUpdate">Avbryt</button></div></div></div>
 <div class="card"><h3>Affär</h3><div class="grid"><div><label>Typ</label><select id="txType"><option>Köp</option><option>Öka</option><option>Minska</option><option>Sälj</option><option>Utdelning</option></select></div><div><label>Datum</label><input id="txDate" type="date"></div><div><label>Antal</label><input id="txQty" inputmode="decimal"></div><div><label>Pris per aktie</label><input id="txPrice" inputmode="decimal"></div><div><label>Courtage</label><input id="txFee" inputmode="decimal"></div><div><label>Utdelning totalt</label><input id="txDividend" inputmode="decimal"></div></div><h3>Orsaker</h3><div id="reasonChecks"></div><div class="actions"><button id="saveTx">Spara affär</button></div></div>
 <div class="card"><h3>Nuvarande innehav</h3><div id="holdingSummary" class="summary"></div></div>
@@ -1835,7 +1852,7 @@ n.history=n.history.map(entry=>({
   raw:entry?.raw&&typeof entry.raw==='object'?entry.raw:{},
   foreignOwnerMismatch:!historyEntryBelongsToRow(entry,n)
 }));
-n.historyRepairRemoved=n.history.filter(entry=>entry.foreignOwnerMismatch).length;n.transactions=Array.isArray(n.transactions)?n.transactions:[];n.marketHistory=Array.isArray(n.marketHistory)?n.marketHistory:[];n.priceHistory=Array.isArray(n.priceHistory)?n.priceHistory:[];if(!('ma200Level'in n))n.ma200Level='';if(!('technicalSource'in n))n.technicalSource='Manuell';if(!('rsi14'in n))n.rsi14='';
+n.historyRepairRemoved=n.history.filter(entry=>entry.foreignOwnerMismatch).length;n.historicalCorrections=Array.isArray(n.historicalCorrections)?n.historicalCorrections:[];n.transactions=Array.isArray(n.transactions)?n.transactions:[];n.marketHistory=Array.isArray(n.marketHistory)?n.marketHistory:[];n.priceHistory=Array.isArray(n.priceHistory)?n.priceHistory:[];if(!('ma200Level'in n))n.ma200Level='';if(!('technicalSource'in n))n.technicalSource='Manuell';if(!('rsi14'in n))n.rsi14='';
 const inferredPeBase=historicalPeInputBase(n);
 if(!('peBase'in n)||!Number.isFinite(num(n.peBase)))n.peBase=Number.isFinite(inferredPeBase.pe)?String(inferredPeBase.pe):(n.pe??'');
 if(!('peBasePrice'in n)||!Number.isFinite(num(n.peBasePrice)))n.peBasePrice=Number.isFinite(inferredPeBase.price)?String(inferredPeBase.price):'';
@@ -1970,7 +1987,8 @@ function isRecreatableHistoryEntry(entry){
 function compactFundamentalHistory(row){
   const source=Array.isArray(row?.history)?row.history:[];
   return source
-    .filter(entry=>!isRecreatableHistoryEntry(entry))
+    .filter(entry=>!isRecreatableHistoryEntry(entry) || (Array.isArray(row?.historicalCorrections) &&
+      row.historicalCorrections.some(c=>String(c.targetSavedAt||'')===String(entry?.savedAt||'') && String(c.targetKind||'')===String(entry?.kind||''))))
     .map(entry=>{
       const compact={...entry};
 
@@ -7104,7 +7122,7 @@ function openDetail(i){
   detailIndex=i;
   const r=normalizeRow(rows[i]),c=calc(r),w=whiteCalc(r),h=holdings(r),g=growthLabel(r);
 document.getElementById('detailTitle').textContent=`${r.ticker||''} ${r.company||''}`.trim();const losses=[['Trend',30-c.trend],['Tillväxt',15-c.rev],['Vinst',20-c.eps],['P/E',20-c.peScore],['ROE',5-c.roe],['Skuld',5-c.debt],['FCF',5-c.fcf]].filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
-document.getElementById('detailCurrent').innerHTML=`<div class="summary"><div class="metric"><small>Blå</small><b>${scoreLinkHtml(i,c.total,'blue',true,true)}</b></div><div class="metric"><small>Vit</small><b>${scoreLinkHtml(i,w.total,'white',w.dataReady,true)}</b></div><div class="metric"><small>Grön</small><b>${scoreLinkHtml(i,greenScoreForRow(r),'green',Number.isFinite(greenScoreForRow(r)),true)}</b></div><div class="metric"><small>Snitt</small><b>${scoreLinkHtml(i,averageScoreFromResults(c,w),'average',w.dataReady,true)}</b></div><div class="metric"><small>Status snitt</small><b class="${scoreStatusClass(averageScoreFromResults(c,w),w.dataReady)}">${scoreRating(averageScoreFromResults(c,w),w.dataReady)}</b></div><div class="metric"><small>Börs</small><b style="font-size:15px">${marketLabel(r.market||'SE')}</b></div><div class="metric"><small>Marknadsdata</small><b class="${ageClass(r.marketUpdatedAt||r.technicalSourceDate)}" style="font-size:15px">${ageText(r.marketUpdatedAt||r.technicalSourceDate)}</b></div><div class="metric"><small>Rapportdata</small><b class="${ageClass(r.fundamentalUpdatedAt||r.updatedAt)}" style="font-size:15px">${ageText(r.fundamentalUpdatedAt||r.updatedAt)}</b></div><div class="metric"><small>Inlagd</small><b style="font-size:15px">${dateFmt(r.createdAt)}</b></div></div><div class="status ${c.qualified?'ok':'no'}"><b>🔵 Blå:</b> ${c.qualified?'Alla grundregler är uppfyllda':'Ej kvalificerad: '+c.warning}</div><div class="status ${w.dataReady?'ok':'no'}"><b>⚪ Vit:</b> ${w.dataReady?w.rating:'Underlag saknas'}</div>${detailScoreHistoryHtml(r)}${stockDataAuditHtml(r,c,w)}<div class="card"><h3>Nuvarande poäng</h3><div class="summary">${[['Trend',c.trend+'/30'],[g+' momentum',c.revMomentum+'/10'],[g+' historik',c.revHistory+'/5'],[g+' totalt',c.rev+'/15'],['Vinst momentum',c.epsMomentum+'/15'],['Vinst historik',c.epsHistory+'/5'],['Vinst totalt',c.eps+'/20'],['P/E',c.peScore+'/20'],['ROE',c.roe+'/5'],['Skuld',c.debt+'/5'],['FCF',c.fcf+'/5']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('')}</div><h3>Vit platåmodell</h3><div class="summary"><div class="metric"><small>Total Vit</small><b class="${scoreStatusClass(w.total,w.dataReady)}">${whiteScoreText(w.total)} / 100</b></div>${whitePartsHtml(w)}</div><h3>Poäng som saknas till 100</h3><div class="score-loss">${losses.length?losses.map(([a,b])=>`<div class="loss-item"><small>${a}</small><b>−${b} p</b></div>`).join(''):'<div class="note">Full poäng i samtliga kategorier.</div>'}</div><h3>Historikberäkning</h3><div class="summary"><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt Y-Y':'Median omsättning Q1–Q4'}</small><b>${fmt(c.revMedian)} %</b></div><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt 3 år':'Omsättningstillväxt 3 år'}</small><b>${fmt(num(r.companyType==='investment'?r.ek3y:r.rev3y))} %</b></div><div class="metric"><small>Historikpoäng ${g.toLowerCase()}</small><b>${c.revHistory}/5</b></div><div class="metric"><small>Median vinst Q1–Q4</small><b>${fmt(c.epsMedian)} %</b></div><div class="metric"><small>Vinsttillväxt 3 år</small><b>${fmt(num(r.eps3y))} %</b></div><div class="metric"><small>Historikpoäng vinst</small><b>${c.epsHistory}/5</b></div></div></div>`;document.getElementById('oldPrice').value=r.price||'';document.getElementById('newPrice').value='';document.getElementById('newPe').value='';document.getElementById('peTool').classList.add('hidden');document.getElementById('txDate').value=todayISO();reasonUI();document.getElementById('holdingSummary').innerHTML=[['Antal',fmt(h.shares)],['GAV',fmt(h.avg)],['Realiserat',fmt(h.realized)],['Utdelningar',fmt(h.dividends)],['Courtage',fmt(h.fees)],['Status',h.shares>0?'Ägs':'Ägs inte']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');const safeHistory=normalizeHistoryEntries(r);
+document.getElementById('detailCurrent').innerHTML=`<div class="summary"><div class="metric"><small>Blå</small><b>${scoreLinkHtml(i,c.total,'blue',true,true)}</b></div><div class="metric"><small>Vit</small><b>${scoreLinkHtml(i,w.total,'white',w.dataReady,true)}</b></div><div class="metric"><small>Grön</small><b>${scoreLinkHtml(i,greenScoreForRow(r),'green',Number.isFinite(greenScoreForRow(r)),true)}</b></div><div class="metric"><small>Snitt</small><b>${scoreLinkHtml(i,averageScoreFromResults(c,w),'average',w.dataReady,true)}</b></div><div class="metric"><small>Status snitt</small><b class="${scoreStatusClass(averageScoreFromResults(c,w),w.dataReady)}">${scoreRating(averageScoreFromResults(c,w),w.dataReady)}</b></div><div class="metric"><small>Börs</small><b style="font-size:15px">${marketLabel(r.market||'SE')}</b></div><div class="metric"><small>Marknadsdata</small><b class="${ageClass(r.marketUpdatedAt||r.technicalSourceDate)}" style="font-size:15px">${ageText(r.marketUpdatedAt||r.technicalSourceDate)}</b></div><div class="metric"><small>Rapportdata</small><b class="${ageClass(r.fundamentalUpdatedAt||r.updatedAt)}" style="font-size:15px">${ageText(r.fundamentalUpdatedAt||r.updatedAt)}</b></div><div class="metric"><small>Inlagd</small><b style="font-size:15px">${dateFmt(r.createdAt)}</b></div></div><div class="status ${c.qualified?'ok':'no'}"><b>🔵 Blå:</b> ${c.qualified?'Alla grundregler är uppfyllda':'Ej kvalificerad: '+c.warning}</div><div class="status ${w.dataReady?'ok':'no'}"><b>⚪ Vit:</b> ${w.dataReady?w.rating:'Underlag saknas'}</div>${detailScoreHistoryHtml(r)}${stockDataAuditHtml(r,c,w)}<div class="card"><h3>Nuvarande poäng</h3><div class="summary">${[['Trend',c.trend+'/30'],[g+' momentum',c.revMomentum+'/10'],[g+' historik',c.revHistory+'/5'],[g+' totalt',c.rev+'/15'],['Vinst momentum',c.epsMomentum+'/15'],['Vinst historik',c.epsHistory+'/5'],['Vinst totalt',c.eps+'/20'],['P/E',c.peScore+'/20'],['ROE',c.roe+'/5'],['Skuld',c.debt+'/5'],['FCF',c.fcf+'/5']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('')}</div><h3>Vit platåmodell</h3><div class="summary"><div class="metric"><small>Total Vit</small><b class="${scoreStatusClass(w.total,w.dataReady)}">${whiteScoreText(w.total)} / 100</b></div>${whitePartsHtml(w)}</div><h3>Poäng som saknas till 100</h3><div class="score-loss">${losses.length?losses.map(([a,b])=>`<div class="loss-item"><small>${a}</small><b>−${b} p</b></div>`).join(''):'<div class="note">Full poäng i samtliga kategorier.</div>'}</div><h3>Historikberäkning</h3><div class="summary"><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt Y-Y':'Median omsättning Q1–Q4'}</small><b>${fmt(c.revMedian)} %</b></div><div class="metric"><small>${r.companyType==='investment'?'EK Tillväxt 3 år':'Omsättningstillväxt 3 år'}</small><b>${fmt(num(r.companyType==='investment'?r.ek3y:r.rev3y))} %</b></div><div class="metric"><small>Historikpoäng ${g.toLowerCase()}</small><b>${c.revHistory}/5</b></div><div class="metric"><small>Median vinst Q1–Q4</small><b>${fmt(c.epsMedian)} %</b></div><div class="metric"><small>Vinsttillväxt 3 år</small><b>${fmt(num(r.eps3y))} %</b></div><div class="metric"><small>Historikpoäng vinst</small><b>${c.epsHistory}/5</b></div></div></div>`;document.getElementById('oldPrice').value=r.price||'';document.getElementById('newPrice').value='';document.getElementById('newPe').value='';document.getElementById('peTool').classList.add('hidden');document.getElementById('historicalCorrectionTool').classList.add('hidden');document.getElementById('txDate').value=todayISO();reasonUI();document.getElementById('holdingSummary').innerHTML=[['Antal',fmt(h.shares)],['GAV',fmt(h.avg)],['Realiserat',fmt(h.realized)],['Utdelningar',fmt(h.dividends)],['Courtage',fmt(h.fees)],['Status',h.shares>0?'Ägs':'Ägs inte']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');const safeHistory=normalizeHistoryEntries(r);
 document.getElementById('historyList').innerHTML=safeHistory.slice().reverse().map(x=>{
   const score=safeHistoricalScore(x,r);
   const raw=safeHistoricalRaw(x);
@@ -11255,7 +11273,7 @@ document.getElementById('developmentDirection').onchange=renderDevelopment;
 document.getElementById('developmentPeriod').onchange=()=>{developmentActiveSort=document.getElementById('developmentPeriod').value;renderDevelopment()};
 document.getElementById('developmentAnalysisModel').onchange=renderDevelopment;
 document.querySelectorAll('.dev-analysis-choice').forEach(b=>b.onclick=()=>setDevelopmentAnalysisMode(b.dataset.devAnalysis));
-document.getElementById('closeDetail').onclick=()=>document.getElementById('detailModal').classList.remove('open');document.getElementById('detailEdit').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex)};document.getElementById('detailNewQuarter').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex);quarter()};document.getElementById('detailPeUpdate').onclick=()=>document.getElementById('peTool').classList.remove('hidden');document.getElementById('cancelPeUpdate').onclick=()=>document.getElementById('peTool').classList.add('hidden');document.getElementById('newPrice').oninput=pePreview;document.getElementById('savePeUpdate').onclick=savePe;document.getElementById('txType').onchange=reasonUI;document.getElementById('saveTx').onclick=saveTx;document.getElementById('wipe').onclick=()=>{if(confirm('Radera allt?')){rows=[];persist();render()}};async function exportBackup(){
+document.getElementById('closeDetail').onclick=()=>document.getElementById('detailModal').classList.remove('open');document.getElementById('detailEdit').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex)};document.getElementById('detailNewQuarter').onclick=()=>{document.getElementById('detailModal').classList.remove('open');editRow(detailIndex);quarter()};document.getElementById('detailPeUpdate').onclick=()=>document.getElementById('peTool').classList.remove('hidden');document.getElementById('detailCorrectHistory').onclick=toggleHistoricalCorrectionV212716;document.getElementById('historyCorrectionCancel').onclick=()=>document.getElementById('historicalCorrectionTool').classList.add('hidden');document.getElementById('historyCorrectionEntry').onchange=refreshHistoricalCorrectionFieldOptionsV212716;document.getElementById('historyCorrectionField').onchange=refreshHistoricalCorrectionFieldV212716;document.getElementById('historyCorrectionShowAuto').onchange=refreshHistoricalCorrectionEntriesV212716;document.getElementById('historyCorrectionSave').onclick=saveHistoricalCorrectionV212716;document.getElementById('cancelPeUpdate').onclick=()=>document.getElementById('peTool').classList.add('hidden');document.getElementById('newPrice').oninput=pePreview;document.getElementById('savePeUpdate').onclick=savePe;document.getElementById('txType').onchange=reasonUI;document.getElementById('saveTx').onclick=saveTx;document.getElementById('wipe').onclick=()=>{if(confirm('Radera allt?')){rows=[];persist();render()}};async function exportBackup(){
   const suggested='Levande-aktier-'+new Date().toISOString().slice(0,10)+'.json';
   const content=JSON.stringify({
     format:'MomentumScoreBackup',
@@ -11425,7 +11443,7 @@ function auditLockedWeeklyPortfoliosV212712(){
           missing:readiness.missing,short:readiness.short},
         status:indexMismatch||priceMismatches.length||missingHistoricalPrices.length||!readiness.ready?'kontrollera':'godkänd'}
     });
-  return {engine:'MomentumScore v21.27.15',createdAt:nowISO(),readOnly:true,
+  return {engine:'MomentumScore v21.27.16',createdAt:nowISO(),readOnly:true,
     note:'Endast avvikelsekontroll; historiska val/affärer har inte ändrats.',
     totalWeeks:weeks.length,flaggedWeeks:weeks.filter(w=>w.status!=='godkänd').length,weeks}
 }
@@ -11632,6 +11650,198 @@ document.getElementById('settingsGeneralTab').onclick=()=>setSettingsHistoryTabV
 document.getElementById('settingsHistoryTab').onclick=()=>setSettingsHistoryTabV212713('history');
 document.getElementById('settingsHistoryFetch').onclick=fetchFirstWeekHistoryV212713;
 
+// v21.27.16 – audit-preserving, dated corrections to individual fundamental
+// fields. Original history entries are NEVER overwritten by this feature.
+const historicalCorrectionFieldsV212716=[
+  ['rev1','Omsättning Q1'],['rev2','Omsättning Q2'],['rev3','Omsättning Q3'],['rev4','Omsättning Q4'],
+  ['rev3y','Omsättningstillväxt 3 år'],['ekYoy','EK-tillväxt Y-Y'],['ek3y','EK-tillväxt 3 år'],
+  ['eps1','Vinst Q1'],['eps2','Vinst Q2'],['eps3','Vinst Q3'],['eps4','Vinst Q4'],
+  ['eps3y','Vinsttillväxt 3 år'],['pe','P/E'],['pe3','P/E snitt 3 år'],['pe5','P/E snitt 5 år'],
+  ['roe','ROE'],['debt','Skuldsättning'],['fcf','FCF']
+];
+const historicalCorrectionNamesV212716=Object.fromEntries(historicalCorrectionFieldsV212716);
+const historicalCorrectionKeysV212716=new Set(historicalCorrectionFieldsV212716.map(([key])=>key));
+function correctionTargetKeyV212716(c){
+  return [String(c.targetSavedAt||''),String(c.targetKind||''),String(c.field||'')].join('\u0001');
+}
+function activeHistoricalCorrectionsV212716(row){
+  const all=Array.isArray(row?.historicalCorrections)?row.historicalCorrections:[];
+  const latest=new Map();
+  for(const c of all){
+    if(!c||!historicalCorrectionKeysV212716.has(c.field)||!c.targetSavedAt)continue;
+    latest.set(correctionTargetKeyV212716(c),c);
+  }
+  return [...latest.values()].filter(c=>!c.reverted);
+}
+function correctedHistoricalEntriesV212716(row,source){
+  const entries=(Array.isArray(source)?source:[]).map(e=>({...e,raw:{...(e?.raw||{})}}));
+  const corrections=activeHistoricalCorrectionsV212716(row)
+    .sort((a,b)=>String(a.targetSavedAt).localeCompare(String(b.targetSavedAt)));
+  for(const fix of corrections){
+    const at=entries.findIndex(e=>String(e.savedAt)===String(fix.targetSavedAt)&&String(e.kind)===String(fix.targetKind));
+    if(at<0)continue;
+    const original=String(fix.originalValue??'').trim();
+    const replacement=String(fix.correctedValue??'').trim();
+    if(!Number.isFinite(num(replacement)))continue;
+    let matching=true;
+    for(let i=at;i<entries.length&&matching;i++){
+      const entry=entries[i];
+      const value=entry.raw[fix.field];
+      const text=String(value??'').trim();
+      // A genuine subsequent different value begins a new fundamental period.
+      // Empty/omitted fields and automatic copies of the original mistake do
+      // not cancel the correction.
+      if(text&&text!==original&&text!==replacement){matching=false;break;}
+      if(i===at||text===original)entry.raw[fix.field]=replacement;
+    }
+  }
+  return entries;
+}
+function historicalCorrectionBackupV212716(reason){
+  const backup={format:'MomentumScoreBackup',version:'7.6',exportedAt:nowISO(),
+    backupReason:reason,rows,benchmarkHistories,weeklyPortfolios,
+    weeklySettings:loadWeeklySettings(),whitePlateaus:loadWhitePlateaus()};
+  downloadTextFile(JSON.stringify(backup),`Levande-aktier-FORE-historisk-rattning-${todayISO()}.json`,'application/json');
+}
+function historicalCorrectionEditorEntriesV212716(row){
+  const showAuto=document.getElementById('historyCorrectionShowAuto').checked;
+  const history=(Array.isArray(row?.history)?row.history:[])
+    .filter(entry=>historyEntryBelongsToRow(entry,row)&&entry?.raw&&entry.savedAt);
+  const candidates=showAuto?history:history.filter(entry=>!isRecreatableHistoryEntry(entry));
+  return candidates.slice().sort((a,b)=>String(a.savedAt).localeCompare(String(b.savedAt)));
+}
+function correctionSelectedEntryV212716(){
+  const i=Number(document.getElementById('historyCorrectionEntry').value);
+  const row=rows[detailIndex];
+  const candidates=historicalCorrectionEditorEntriesV212716(row);
+  return Number.isInteger(i)&&i>=0&&i<candidates.length?candidates[i]:null;
+}
+function currentHistoricalCorrectionV212716(row,entry,field){
+  return activeHistoricalCorrectionsV212716(row).find(c=>String(c.targetSavedAt)===String(entry.savedAt)&&
+    String(c.targetKind)===String(entry.kind)&&c.field===field)||null;
+}
+function refreshHistoricalCorrectionFieldV212716(){
+  const entry=correctionSelectedEntryV212716(),field=document.getElementById('historyCorrectionField').value;
+  const original=entry?.raw?.[field];
+  document.getElementById('historyCorrectionOriginal').value=original===undefined?'(saknas)':String(original);
+  const fix=entry&&currentHistoricalCorrectionV212716(rows[detailIndex],entry,field);
+  document.getElementById('historyCorrectionValue').value=fix?fix.correctedValue:'';
+  document.getElementById('historyCorrectionStatus').textContent=fix
+    ?'Tidigare rättning finns: '+String(fix.correctedValue)+' (ursprung '+String(fix.originalValue??'(saknas)')+'). Du kan ändra rättningen igen.'
+    :'Fyll i det värde som faktiskt var känt vid den valda inmatningen. Ingen senare rapportdata får användas för denna dag.';
+}
+function refreshHistoricalCorrectionEntriesV212716(){
+  const row=rows[detailIndex],select=document.getElementById('historyCorrectionEntry');
+  const prev=select.selectedOptions[0]?.dataset?.key||'';
+  select.replaceChildren();
+  const candidates=historicalCorrectionEditorEntriesV212716(row);
+  let defaultIndex=Math.max(0,candidates.findIndex(entry=>historicalCorrectionFieldsV212716.some(([field])=>{
+    const value=entry?.raw?.[field];return value!==undefined&&String(value).trim()!==''&&!Number.isFinite(num(value));
+  })));
+  candidates.forEach((entry,i)=>{
+    const opt=document.createElement('option');opt.value=String(i);
+    const date=String(entry.savedAt||'').replace('T',' ').slice(0,19);
+    const invalid=historicalCorrectionFieldsV212716.filter(([field])=>{
+      const value=entry.raw[field];return value!==undefined&&String(value).trim()!==''&&!Number.isFinite(num(value));
+    }).length;
+    opt.textContent=date+' · '+String(entry.kind||'Historik')+(invalid?' · '+invalid+' ogiltiga tal':'');
+    opt.dataset.key=String(entry.savedAt)+'|'+String(entry.kind);
+    select.appendChild(opt);
+    if(prev&&opt.dataset.key===prev)defaultIndex=i;
+  });
+  select.value=String(defaultIndex);
+  refreshHistoricalCorrectionFieldOptionsV212716();
+  refreshHistoricalCorrectionLogV212716();
+}
+function refreshHistoricalCorrectionFieldOptionsV212716(){
+  const entry=correctionSelectedEntryV212716(),sel=document.getElementById('historyCorrectionField');
+  const previous=sel.value;
+  sel.replaceChildren();
+  let firstBad='';
+  for(const [key,label] of historicalCorrectionFieldsV212716){
+    const val=entry?.raw?.[key];
+    if(!firstBad&&val!==undefined&&String(val).trim()!==''&&!Number.isFinite(num(val)))firstBad=key;
+    const opt=document.createElement('option');opt.value=key;
+    opt.textContent=label+(val===undefined||String(val).trim()===''?' (saknas)':' · '+String(val));
+    sel.appendChild(opt);
+  }
+  sel.value=previous||firstBad||'pe';
+  refreshHistoricalCorrectionFieldV212716();
+}
+function refreshHistoricalCorrectionLogV212716(){
+  const container=document.getElementById('historyCorrectionLog');
+  container.replaceChildren();
+  const row=rows[detailIndex];
+  const active=activeHistoricalCorrectionsV212716(row)
+    .slice().sort((a,b)=>String(a.targetSavedAt).localeCompare(String(b.targetSavedAt)));
+  if(!active.length){container.textContent='Inga historiska rättningar för detta bolag.';return;}
+  active.forEach(c=>{
+    const item=document.createElement('div');item.className='rowcard';
+    const span=document.createElement('span');
+    span.textContent=String(c.targetSavedAt).replace('T',' ').slice(0,16)+' · '+(historicalCorrectionNamesV212716[c.field]||c.field)+' · '+String(c.originalValue??'(saknas)')+' → '+String(c.correctedValue)+' ';
+    const undo=document.createElement('button');undo.className='secondary';undo.type='button';undo.textContent='Ångra rättning';
+    undo.onclick=()=>revertHistoricalCorrectionV212716(c);
+    item.append(span,undo);container.appendChild(item);
+  });
+}
+function invalidateWeeklyPreviewAfterHistoricalCorrectionV212716(){
+  weeklyRepairPreviewV212714=null;
+  document.getElementById('settingsWeeklyRepairApply').disabled=true;
+  document.getElementById('settingsWeeklyRepairExport').disabled=true;
+  weeklyRepairStatusV212714('Historiska nyckeltal har rättats. Gör en NY förhandsgranskning innan någon veckoreparation kan godkännas.');
+  invalidateModelDayCaches();
+}
+function saveHistoricalCorrectionV212716(){
+  const row=rows[detailIndex],entry=correctionSelectedEntryV212716();
+  const field=document.getElementById('historyCorrectionField').value;
+  const replacement=document.getElementById('historyCorrectionValue').value.trim();
+  if(!entry||!historicalCorrectionKeysV212716.has(field))return alert('Välj en historisk inmatning och ett nyckeltal.');
+  if(!/^[+-]?(?:\d+(?:[.,]\d+)?|[.,]\d+)$/.test(replacement)||!Number.isFinite(num(replacement)))
+    return alert('Ange ett giltigt tal, t.ex. -3,3 eller 37,4.');
+  const original=entry.raw[field]===undefined?'':String(entry.raw[field]);
+  if(original!==''&&Number.isFinite(num(original))&&num(original)===num(replacement))
+    return alert('Det korrigerade värdet är samma som originalvärdet.');
+  const existing=currentHistoricalCorrectionV212716(row,entry,field);
+  const message=`Rätta ${row.ticker} · ${historicalCorrectionNamesV212716[field]}\nInmatningsdatum: ${entry.savedAt}\nUrsprung: ${original||'(saknas)'}\nNytt värde: ${replacement}\n\nRättningen används från den gamla tidpunkten i historiska beräkningar, men dagens siffror ändras inte. En säkerhetskopia hämtas först. Fortsätt?`;
+  if(!confirm(message))return;
+  try{
+    historicalCorrectionBackupV212716('before-historical-fundamental-correction-v21.27.16');
+    const fix={targetSavedAt:entry.savedAt,targetKind:entry.kind,field,
+      originalValue:original,correctedValue:replacement,correctedAt:nowISO(),
+      previouslyCorrectedValue:existing?.correctedValue||''};
+    row.historicalCorrections=[...(row.historicalCorrections||[]),fix];
+    persist();invalidateWeeklyPreviewAfterHistoricalCorrectionV212716();
+    refreshHistoricalCorrectionEntriesV212716();
+    document.getElementById('historyCorrectionStatus').textContent='Rättningen sparades. Ursprungsposten är oförändrad. Kör om förhandsgranskningen under Inställningar → Komplettera kurshistorik.';
+    toast('Historiskt nyckeltal rättat');
+  }catch(error){alert('Rättningen kunde inte sparas: '+(error?.message||error));}
+}
+function revertHistoricalCorrectionV212716(fix){
+  const row=rows[detailIndex];
+  if(!confirm('Ångra rättningen av '+historicalCorrectionNamesV212716[fix.field]+' från '+String(fix.targetSavedAt).slice(0,10)+'? Originalet finns kvar.'))return;
+  try{
+    historicalCorrectionBackupV212716('before-historical-fundamental-correction-undo-v21.27.16');
+    row.historicalCorrections=[...(row.historicalCorrections||[]),{
+      targetSavedAt:fix.targetSavedAt,targetKind:fix.targetKind,field:fix.field,
+      originalValue:fix.originalValue,correctedValue:fix.originalValue,
+      correctedAt:nowISO(),reverted:true}];
+    persist();invalidateWeeklyPreviewAfterHistoricalCorrectionV212716();
+    refreshHistoricalCorrectionEntriesV212716();
+    document.getElementById('historyCorrectionStatus').textContent='Rättningen ångrades. Den ursprungliga historiken är fortfarande bevarad.';
+  }catch(error){alert('Kunde inte ångra rättningen: '+(error?.message||error));}
+}
+function toggleHistoricalCorrectionV212716(){
+  const panel=document.getElementById('historicalCorrectionTool');
+  const opening=panel.classList.contains('hidden');
+  panel.classList.toggle('hidden',!opening);
+  if(opening){
+    const selection=document.getElementById('historyCorrectionEntry');
+    document.getElementById('historyCorrectionShowAuto').checked=false;
+    selection.replaceChildren();refreshHistoricalCorrectionEntriesV212716();
+    panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+}
+
 // v21.27.14: explicit all-weeks reconstruction. This operation NEVER runs at
 // startup. A complete preview and a downloadable full backup precede commit.
 let weeklyRepairPreviewV212714=null;
@@ -11647,14 +11857,14 @@ function weeklyRepairFingerprintV212714(){
   // Include the data/parameters which can change a historical signal; never
   // allow an old preview to be applied after a market refresh or manual input.
   const parts=[weeklyPortfolios,benchmarkHistories,
-    rows.map(r=>[r.ticker,r.createdAt,r.history,r.priceHistory,r.pe,r.peBase,r.peBasePrice,r.companyType]),
+    rows.map(r=>[r.ticker,r.createdAt,r.history,r.historicalCorrections,r.priceHistory,r.pe,r.peBase,r.peBasePrice,r.companyType]),
     loadWhitePlateaus(),loadWeeklySettings()];
   let hash=2166136261;
   const txt=JSON.stringify(parts);
   for(let i=0;i<txt.length;i++)hash=Math.imul(hash^txt.charCodeAt(i),16777619)>>>0;
   return txt.length+':'+hash.toString(16);
 }
-// v21.27.15: A row belongs to the Friday's price-based universe even when
+// v21.27.16: A row belongs to the Friday's price-based universe even when
 // some dated fundamentals are missing. Blå/Snitt validate their OWN required
 // fundamentals in calc(); Vit/Grön rely on historical technical prices.
 // Reconstruct each field from the latest eligible date, never from the present.
@@ -11670,7 +11880,10 @@ function historicalRowAsOfV212714(row,cutoffDate){
       const rawTicker=canonicalTicker(h.raw.ticker||'');
       return !rawTicker||rawTicker===canonicalTicker(row.ticker||'');
     }).sort((a,b)=>String(a.savedAt).localeCompare(String(b.savedAt)));
-  const earlierHistory=entries.map(h=>({...h}));
+  // Apply explicit user-reviewed corrections to the original snapshots and to
+  // repeated copies of that SAME wrong value until a genuinely new number
+  // appears. Do not edit the originals in row.history.
+  const earlierHistory=correctedHistoricalEntriesV212716(row,entries);
   const raw={};
   // Later patches often contain ONLY the changed field (for example an MA200
   // screenshot). Such patches must not erase earlier dated fundamentals.
@@ -11678,7 +11891,7 @@ function historicalRowAsOfV212714(row,cutoffDate){
   const historicalNumeric=[...new Set([...numericIds,'rev1','rev2','rev3','rev4','rev3y',
     'ekYoy','ek3y','eps1','eps2','eps3','eps4','eps3y','pe','pe3','pe5','roe','debt','fcf'])];
   const allFields=new Set([...historicalNumeric,'companyType','reportingFrequency']);
-  for(const entry of entries){
+  for(const entry of earlierHistory){
     for(const key of allFields){
       if(!Object.prototype.hasOwnProperty.call(entry.raw,key))continue;
       const value=entry.raw[key];
@@ -11697,7 +11910,7 @@ function historicalRowAsOfV212714(row,cutoffDate){
       const timestamp=new Date(h.savedAt||'').getTime();
       return Number.isFinite(timestamp)&&timestamp<=cutoff;
     }),
-    fundamentalUpdatedAt:entries.length?entries[entries.length-1].savedAt:'',
+    fundamentalUpdatedAt:earlierHistory.length?earlierHistory[earlierHistory.length-1].savedAt:'',
     peBase:'',peBasePrice:'',peBaseDate:''
   };
   // Re-anchor historic P/E at the price documented when it was manually
@@ -11863,7 +12076,7 @@ async function previewWeeklyRepairV212714(){
 function exportWeeklyRepairPreviewV212714(){
   if(!weeklyRepairPreviewV212714)return;
   downloadTextFile(JSON.stringify({
-    version:'21.27.15',type:'point-in-time-weekly-reconstruction-preview',
+    version:'21.27.16',type:'point-in-time-weekly-reconstruction-preview',
     createdAt:weeklyRepairPreviewV212714.createdAt,
     differences:weeklyRepairPreviewV212714.diffs,
     historicalDataCoverage:weeklyRepairPreviewV212714.absences,
@@ -11886,7 +12099,7 @@ function applyWeeklyRepairV212714(){
   try{
     const backup={format:'MomentumScoreBackup',version:'7.6',exportedAt:nowISO(),
       rows,benchmarkHistories,weeklyPortfolios:original,weeklySettings:loadWeeklySettings(),
-      whitePlateaus:loadWhitePlateaus(),backupReason:'before-weekly-repair-v21.27.15'};
+      whitePlateaus:loadWhitePlateaus(),backupReason:'before-weekly-repair-v21.27.16'};
     downloadTextFile(JSON.stringify(backup),`Levande-aktier-FORE-reparation-${todayISO()}.json`,'application/json');
     const repaired=weeklyRepairPreviewV212714.snapshots.slice().sort((a,b)=>String(b.weekKey).localeCompare(String(a.weekKey)));
     localStorage.setItem(weeklyPortfolioKey,JSON.stringify(repaired));
