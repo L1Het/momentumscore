@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MomentumScore v21.27.10</title>
+<title>MomentumScore v21.27.12</title>
 <style>
 :root{
   --bg:#07111c;--card:#102131;--card2:#0b1926;--line:#294258;
@@ -286,7 +286,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
 </head>
 <body>
 <header>
-<h1>MomentumScore v21.27.10 – Hybrid speglar Vit exakt när Grön är av</h1>
+<h1>MomentumScore v21.27.12 – Hybrid speglar Vit exakt när Grön är av</h1>
 <div class="tabs">
 <button class="tab active" data-tab="dashboard">Översikt</button>
 <button class="tab" data-tab="input">Mata in</button>
@@ -498,7 +498,7 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
       <div id="devPortfolioDetailSummary" class="summary"></div>
       <div class="tablewrap" style="margin-top:12px"><table id="devPortfolioMembersTable"></table></div>
     </div>
-    <p class="note">De tre rullande Top 10-portföljerna visas överst. Startportföljen räknas som strategi­start och ger därför varken affär eller courtage. Därefter behålls innehav som ligger kvar utan omviktning; endast utgående och nya aktier handlas med 0,069 % courtage vid både köp och försäljning. <b>Handlad omsättning</b> räknas endast på den sålda sidan av varje byte, delat med startkapitalet 100 000 kr. Ett byte på 10 000 kr ger alltså cirka 10 % omsättning, inte 20 %. Under de rullande portföljerna visas de frysta veckoportföljerna. Klicka på en kolumnrubrik för att sortera.</p>
+    <p class="note">De tre rullande Top 10-portföljerna visas överst. Även första portföljens köp debiteras courtage enligt den rullande motorn. Därefter behålls innehav som ligger kvar utan omviktning; endast utgående och nya aktier handlas med 0,069 % courtage vid både köp och försäljning. <b>Handlad omsättning</b> räknas endast på den sålda sidan av varje byte, delat med startkapitalet 100 000 kr. Ett byte på 10 000 kr ger alltså cirka 10 % omsättning, inte 20 %. Under de rullande portföljerna visas de frysta veckoportföljerna. Klicka på en kolumnrubrik för att sortera.</p>
   </div>
 </section>
 
@@ -521,9 +521,11 @@ th{position:sticky;top:0;background:var(--card);z-index:2}
     <div class="actions" style="margin-top:12px">
       <button id="saveWeeklyNow">Spara veckans Top 10 nu</button>
       <button class="secondary" id="exportWeeklyCsv">Exportera uppföljning CSV</button>
+      <button class="secondary" id="auditWeeklyLocks">Granska låsta veckor (JSON)</button>
       <button class="secondary" id="deleteWeeklySnapshot">Radera vald vecka</button>
     </div>
     <div id="weeklyStatus" class="note" style="margin-top:8px"></div>
+    <div id="weeklyFreshnessStatus" class="note" style="margin-top:8px" aria-live="polite"></div>
   </div>
 
   <div id="weeklyBenchmarkReference" class="analysis-reference"></div>
@@ -567,9 +569,9 @@ Under 1,0 = 5 p · 1,0–2,0 = 4 p · över 2,0 till 3,0 = 2 p · över 3,0 = 0 
 90–100 = Mycket stark · 80–89 = Stark · 70–79 = Bevakning · under 70 = Avstå. En aktie som bryter en grundregel står alltid som Ej kvalificerad oavsett poäng.</div>
 
 <div class="rowcard"><b>⚪ Modell Vit – fast platåmodell</b><br>
-Vit använder exakt tre tekniska faktorer med fast vikt 1:1:1. Faktorerna ändras inte och inga fundamentala data, värderingsmått, indexjämförelser eller hårda grundkrav ingår.</div>
+Vit 2.1 använder fyra tekniska faktorer med fast vikt 10/30/30/30. Inga fundamentala data, värderingsmått eller indexjämförelser ingår i Vit-poängen.</div>
 <div class="rowcard"><b>Vit – faktorer och vikter</b><br>
-Kursens avstånd till MA200: max 33,33 p · MA50:s avstånd till MA200: max 33,33 p · MA200-trend senaste månaden: max 33,34 p.</div>
+Kursens avstånd till MA200: max 10 p · MA50:s avstånd till MA200: max 30 p · MA200-trend senaste månaden: max 30 p · Trendstabilitet fem handelsdagar: max 30 p.</div>
 <div class="rowcard"><b>Vit – platåprincip</b><br>
 Full poäng ges i faktorernas historiskt bästa intervall. Utanför intervallet faller poängen mjukt mot noll. Ett extremt högt trendvärde ger därför inte automatiskt högre poäng.</div>
 <div id="whitePlateauRules" class="plateau-grid"></div>
@@ -597,6 +599,7 @@ Gemensam bolagsvy används från Översikt, Poäng, Topplista, Utveckling och po
 Under Inställningar finns ett fristående walk-forward-test mot OMXSPI. Det hämtar tio års dagliga kurser i arbetsminnet, räknar Vit 2.1 endast med information som fanns på respektive historiskt datum och bygger nästa veckas Top 10 från sista handelsdagen i veckan. Kvarvarande innehav behålls, utgående säljs, nya köps och courtage 0,069 % räknas. Testdata skrivs inte över i den levande databasen.</div>
 <div class="rowcard"><b>Vit 2.1 – fyra tekniska pucklar · 10/30/30/30</b><br>
 Vit består av Kurs/MA200 (10 p), MA50/MA200 (30 p), MA200-trend 1 månad (30 p) och Trendstabilitet 5 dagar (30 p). Trendstabilitet mäter förändringen i avståndet Kurs–MA200 under fem handelsdagar och får full poäng ungefär mellan −2 och +1 procentenheter. Befintliga Vit- och Snittveckor räknas om historiskt med Vit 2.1; Blå lämnas oförändrad. Vit använder dessutom Top10 in / Top20 ut: nya innehav måste ligga i Top10, medan befintliga Vit-innehav får ligga kvar så länge de är Top20.</div>
+<div class="rowcard"><b>v21.27.11 – jämförelse mot OMXSPI</b><br>Rullande portföljer jämförs från första faktiska affären till fredagens stängning, inte från måndagens veckoetikett. Startdatum, OMXSPI:s start-/slutnivå samt indexavkastning redovisas separat. Om historisk indexstängning saknas flaggas den sparade nivån som ej verifierad. Detta ändrar inte genomförda affärer eller portföljhistorik.</div>
 <div class="rowcard"><b>Vit 2.1 – produktionsregel</b><br>Nya Vit-innehav måste vara rankade Top10. Ett befintligt Vit-innehav säljs först när det faller utanför Top20. Snitt påverkas av den nya Vit-poängen och byggs därför om, men Snitt behåller sin vanliga Top10-selektion. Blå ändras inte.</div>
 <div class="rowcard"><b>Fredag 18:00 – två separata regler</b><br>
 När nästa veckas Top 10 skapas efter fredagens kursuppdatering ombalanseras de rullande portföljerna omedelbart på samma fredagsstängning. Utgående innehav säljs till stängningskurs minus säljcourtage och nya innehav köps till stängningskurs plus köpcourtage. Den frysta nya veckoportföljen ligger samtidigt kvar på 0 % till måndag, eftersom fredagens rörelse redan är avslutad när portföljen skapas.</div>
@@ -606,7 +609,7 @@ Kolumnrubriker är klickbara även i tabeller som tidigare saknade egen sorterin
 Varje köp skapar ett permanent innehav med köpdatum, köpvecka, exakt startPrice, antal aktier och anskaffningsvärde inklusive köpcourtage. Oförändrade innehav skrivs aldrig om. Försäljningar beräknas från faktiskt antal aktier och sparat anskaffningsvärde. Dag-, vecko- och månadsresultat räknas genom att hela transaktionskedjan spelas upp på respektive historiskt datum.</div>
 <div class="rowcard"><b>Rullande Top 10-portföljer</b><br>Under Utveckling → Veckoportföljer visas fem rullande strategier för Blå, Vit, Snitt, Grön och Hybrid. Startkapitalet är 100 000 kr. Innehav som ligger kvar i nästa veckas Top 10 behålls utan omviktning. Köpdatum, antal aktier, exakt startPrice och anskaffningsvärde ändras aldrig förrän aktien säljs. Vid exakt lika poäng prioriteras alltid aktien som redan ingick i föregående veckas Top 10, så lika poäng utlöser inget byte. Aktier som lämnar säljs och nettolikviden delas lika mellan nya aktier. Courtage 0,069 % tas vid både köp och försäljning. Portföljerna sorteras kronologiskt efter veckonummer och återskapas deterministiskt från sparade veckosnapshots och följer med genom den befintliga veckoportföljhistoriken.</div>
 <div class="rowcard"><b>Veckoportföljer</b><br>
-Efter en lyckad kursuppdatering fredag 18:00 eller senare skapas nästa veckas tre frysta Top 10-portföljer direkt från den färdigräknade Topplistan. Topplistan är den enda sanningskällan: samma kvalificering, poäng och sorteringsordning kopieras, och startkursen hämtas uttryckligen från fredagens sista stängningskurs i kurshistoriken. Portföljerna visas direkt som kommande frysta portföljer men aktiveras i de rullande strategierna först på måndagen. Vid exakt lika poäng prioriteras befintligt innehav enligt nuvarande regel.</div>
+Efter en lyckad kursuppdatering fredag 18:00 eller senare skapas nästa veckas tre frysta Top 10-portföljer direkt från den färdigräknade Topplistan. Topplistan är den enda sanningskällan: samma kvalificering, poäng och sorteringsordning kopieras, och startkursen hämtas uttryckligen från fredagens sista stängningskurs i kurshistoriken. Portföljerna visas direkt som kommande frysta portföljer. Rullande affärer görs till fredagens stängning och måndagen är första avkastningsdagen. Vid exakt lika poäng prioriteras befintligt innehav enligt nuvarande regel.</div>
 <div class="rowcard"><b>Två modeller – inte en vald modell</b><br>
 Blå och Vit är separata modeller. Snitt är endast ett visat medelvärde. Vit får ingen poängförändring förrän separat Vit-historik har börjat samlas in. I Utveckling bestäms Status och radfärg av den poäng som tabellen är sorterad på.</div>
 <div class="rowcard"><b>Blå, Vit och Snitt</b><br>
@@ -614,9 +617,9 @@ Alla huvudtabeller visar kolumnerna i ordningen Blå, Vit och Snitt. Snittet ber
 <div class="rowcard"><b>Gemensam färgkodning för Blå och Vit</b><br>
 Båda modellernas poäng använder samma nivåer och färger: 90–100 grön, 80–89 blå, 70–79 gul, 60–69 orange och under 60 röd. Blå visas som heltal och Vit med en decimal.</div>
 <div class="rowcard"><b>Vit – bedömning och färger</b><br>
-90–100 = Extremt stark (grön) · 80–89,9 = Stark (blå) · 70–79,9 = Intressant (gul) · 60–69,9 = Neutral (orange) · under 60 = Svag (röd). Vit-poängen och alla tre delpoäng visas med en decimal. Rader, poäng och status färgkodas efter nivån. Saknas någon faktor visas Underlag saknas i grått.</div>
+90–100 = Extremt stark (grön) · 80–89,9 = Stark (blå) · 70–79,9 = Intressant (gul) · 60–69,9 = Neutral (orange) · under 60 = Svag (röd). Vit-poängen och alla fyra delpoäng visas med en decimal. Rader, poäng och status färgkodas efter nivån. Saknas någon faktor visas Underlag saknas i grått.</div>
 <div class="rowcard"><b>Vit – uppdatering av platåerna</b><br>
-Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gränser kan uppdateras från Intervalloptimeraren. Detta ändrar inte vilka faktorer som används.</div>
+De fyra faktorerna och vikterna 10/30/30/30 är låsta. Endast platåernas gränser kan uppdateras från Intervalloptimeraren. Detta ändrar inte vilka faktorer som används.</div>
 <div class="rowcard"><b>Import och versionskompatibilitet</b><br>Säkerhetskopior från version 6 och 7 kan importeras. Importförlopp och eventuella fel visas direkt bredvid filväljaren. Saknade fält för börs, Yahoo-symbol, teknisk historik och modeller fylls i automatiskt utan att äldre history, marketHistory eller transaktioner tas bort.</div>
 
 </div></section>
@@ -935,8 +938,8 @@ Faktorerna och 1:1:1-vikterna är låsta. Endast platåernas nedre och övre gr�
 
 
   <div class="card">
-    <h2>Vit – fasta platåer 1:1:1</h2>
-    <p class="note">Den aktiva Vit-modellen använder bara Kurs/MA200, MA50/MA200 och MA200-trend 1 månad. Alla väger lika mycket.</p>
+    <h2>Vit 2.1 – fasta vikter 10/30/30/30</h2>
+    <p class="note">Aktiva Vit 2.1 använder Kurs/MA200 (10 p), MA50/MA200 (30 p), MA200-trend 1 månad (30 p) och Trendstabilitet 5 dagar (30 p).</p>
     <div class="actions">
       <button id="applyIntervalsToWhite">Uppdatera platåer från senaste intervalltest</button>
       <button class="secondary" id="resetWhitePlateaus">Återställ testade standardplatåer</button>
@@ -1741,7 +1744,7 @@ function updateWhitePlateausFromIntervals(){
   setDevelopmentAnalysisMode('price');
   setWeeklyAnalysisMode('result');
   renderWeeklyPortfolios();
-  alert('Vit-platåerna har uppdaterats. Faktorer och vikter är fortfarande fasta 1:1:1.')
+  alert('Vit-platåerna har uppdaterats. De fyra faktorvikterna är fortfarande fasta 10/30/30/30.')
 }
 function resetWhitePlateaus(){
   saveWhitePlateaus(structuredClone(DEFAULT_WHITE_PLATEAUS));
@@ -1755,8 +1758,8 @@ function renderWhitePlateauRules(){
   el.innerHTML=Object.entries(cfg).map(([key,c])=>`
     <div class="plateau-card">
       <b>${c.name} – max ${c.maxPoints.toFixed(2)} p</b><br>
-      Full poäng: <b>${fmt(c.min)} till ${fmt(c.max)} %</b><br>
-      Mjuk nedtrappning till 0 p vid ${fmt(c.leftZero)} % respektive ${fmt(c.rightZero)} %.
+      Full poäng: <b>${fmt(c.min)} till ${fmt(c.max)} ${key==='trendStability5d'?'p.e.':'%'}</b><br>
+      Mjuk nedtrappning till 0 p vid ${fmt(c.leftZero)} ${key==='trendStability5d'?'p.e.':'%'} respektive ${fmt(c.rightZero)} ${key==='trendStability5d'?'p.e.':'%' }.
     </div>`).join('')
 }
 function latestModelDelta(r,key,currentValue){
@@ -2861,12 +2864,14 @@ function selectedScoreHtml(s,model,chip=true){
   return modelScoreHtml(s.score,model,s.dataReady,chip)
 }
 function whitePartsHtml(w){
+  // Visa den faktiska maxpoängen, inte den gamla hårdkodade 25/25/25/25-vyn.
+  const cfg=w?.plateaus||loadWhitePlateaus();
   return [
-    ['Kurs/MA200',w.parts?.distanceMa200,25],
-    ['MA50/MA200',w.parts?.ma50Spread,25],
-    ['MA200-trend',w.parts?.ma200Slope1m,25],
-    ['Trendstabilitet 5 d',w.parts?.trendStability5d,25]
-  ].map(([name,value,max])=>`<div class="metric"><small>${name}</small><b>${whitePartText(value)} / ${max.toFixed(1).replace('.',',')}</b></div>`).join('')
+    ['Kurs/MA200',w.parts?.distanceMa200,cfg.distanceMa200?.maxPoints??10],
+    ['MA50/MA200',w.parts?.ma50Spread,cfg.ma50Spread?.maxPoints??30],
+    ['MA200-trend 1 mån',w.parts?.ma200Slope1m,cfg.ma200Slope1m?.maxPoints??30],
+    ['Trendstabilitet 5 d',w.parts?.trendStability5d,cfg.trendStability5d?.maxPoints??30]
+  ].map(([name,value,max])=>`<div class="metric"><small>${name}</small><b>${whitePartText(value)} / ${Number(max).toFixed(1).replace('.',',')}</b></div>`).join('')
 }
 
 function averageScoreFromResults(b,w){
@@ -3250,7 +3255,14 @@ function rollingPriceAt(member,date){
 }
 function rollingCurrentPrice(member){
   const idx=findStockIndex(member),r=idx>=0?rows[idx]:null;
-  return r&&Number.isFinite(num(r.price))?num(r.price):NaN
+  if(!r)return NaN;
+  const last=(Array.isArray(r.priceHistory)?r.priceHistory:[])
+    .filter(p=>Number.isFinite(num(p?.close))&&num(p.close)>0)
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date))).at(-1);
+  const priceDate=String(r.currentMarketDate||r.technicalSourceDate||'').slice(0,10);
+  if(last&&String(last.date).slice(0,10)>priceDate)return num(last.close);
+  const current=num(r.price);
+  return Number.isFinite(current)&&current>0?current:(last?num(last.close):NaN)
 }
 function weeklySnapshotActivationDate(snapshot){
   return isoMondayFromWeekKey(snapshot?.weekKey)
@@ -3385,7 +3397,8 @@ function buildRollingPortfolio(model,asOfDate=''){
 
   let cash=ROLLING_START_CAPITAL;
   let fees=0,buyCount=0,sellCount=0,turnoverValue=0;
-  let startDate='',lastUpdateDate='',lastProcessedWeek='',benchmarkStart=NaN;
+  let startDate='',activationDate='',lastUpdateDate='',lastProcessedWeek='',benchmarkStart=NaN;
+  let benchmarkStartDate='',benchmarkStartSource='';
   const holdings=new Map();
   const transactions=[];
   const warnings=[];
@@ -3407,9 +3420,28 @@ function buildRollingPortfolio(model,asOfDate=''){
     lastUpdateDate=tradeDate||weeklySnapshotActivationDate(snapshot)||lastUpdateDate;
 
     if(snapshotIndex===0){
-      startDate=weeklySnapshotActivationDate(snapshot);
-      lastUpdateDate=startDate;
-      benchmarkStart=num(snapshot.benchmarkStart);
+      // Den ekonomiska startpunkten är första köpet till fredagens stängning,
+      // inte måndagens veckostart. Samma datum måste gälla för OMXSPI.
+      startDate=tradeDate;
+      activationDate=weeklySnapshotActivationDate(snapshot);
+      lastUpdateDate=tradeDate;
+      const market=snapshot.benchmarkMarket||'SE';
+      const exactIndexStart=benchmarkValueExact(market,tradeDate);
+      if(Number.isFinite(exactIndexStart)&&exactIndexStart>0){
+        benchmarkStart=exactIndexStart;
+        benchmarkStartDate=tradeDate;
+        benchmarkStartSource='historisk indexstängning';
+        const savedIndexStart=num(snapshot.benchmarkStart);
+        if(Number.isFinite(savedIndexStart)&&Math.abs(savedIndexStart-exactIndexStart)>0.00001){
+          warnings.push(`OMXSPI:s sparade startnivå avvek från ${tradeDate}; exakt historisk stängning används för jämförelsen.`);
+        }
+      }else{
+        // Äldre importer kan sakna kurshistoriken för första fredagen.
+        // Behåll då historisk jämförelse, men märk datumet som overifierat.
+        benchmarkStart=num(snapshot.benchmarkStart);
+        benchmarkStartSource='sparad snapshot (ej datumverifierad)';
+        warnings.push(`OMXSPI:s historiska stängning saknas för första köpdatum ${tradeDate}. Kontrollera benchmarkStart i ursprungssnapshoten.`);
+      }
 
       // v21.26.0: även de tio första köpen är riktiga affärer och betalar
       // samma courtage som alla senare köp. Inga specialregler vid start.
@@ -3630,15 +3662,25 @@ function buildRollingPortfolio(model,asOfDate=''){
     ?benchmarkValueOnOrBefore(market,asOfDate)
     :currentBenchmarkValue(market);
   const benchmarkReturn=
-    Number.isFinite(benchmarkStart)&&benchmarkStart!==0&&Number.isFinite(benchmarkCurrent)
+    Number.isFinite(benchmarkStart)&&benchmarkStart>0&&Number.isFinite(benchmarkCurrent)
       ?(benchmarkCurrent/benchmarkStart-1)*100
       :NaN;
+  const indexHistory=(benchmarkHistories[market]||[])
+    .filter(p=>String(p?.date||'').slice(0,10)<=valuationDate&&Number.isFinite(num(p?.close)))
+    .slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  const benchmarkEndDate=indexHistory.length?String(indexHistory[indexHistory.length-1].date).slice(0,10):'';
 
   return{
     type:'rolling',
     engineVersion:3,
     model,
     startDate,
+    activationDate,
+    benchmarkStart,
+    benchmarkCurrent,
+    benchmarkStartDate,
+    benchmarkEndDate,
+    benchmarkStartSource,
     lastUpdateDate:lastUpdateDate||startDate,
     lastProcessedWeek,
     valuationDate,
@@ -3750,11 +3792,11 @@ function renderDevelopmentPortfolios(){
   const newestWeek=weeklyPortfolios.slice().sort((a,b)=>String(b.weekKey||'').localeCompare(String(a.weekKey||'')))[0]?.weekKey||'–';
   document.getElementById('devPortfolioSummary').innerHTML=[['Rullande portföljer',rolling.length],['Frysta veckor',weeklyPortfolios.length],['Senast låsta vecka',newestWeek],['Slår index',allRows.filter(x=>Number.isFinite(x.excess)).length?`${beat.length}/${allRows.filter(x=>Number.isFinite(x.excess)).length}`:'–'],['Bästa frysta',best?`${portfolioModelName(best.model)} ${signed(best.ret,' %')}`:'–']].map(([a,b])=>`<div class="metric"><small>${a}</small><b>${b}</b></div>`).join('');
   const th=(key,label)=>`<th class="sortable-head${devPortfolioActiveSort===key?' active-sort'+(devPortfolioDirection==='asc'?' sort-asc':''):''}" data-dev-portfolio-sort="${key}">${label}</th>`;
-  const head='<tr>'+th('week','Portfölj / start')+th('model','Modell')+th('day','Dag')+th('excessDay','Mot OMX dag')+th('weekReturn','Vecka')+th('excessWeek','Mot OMX vecka')+th('month','Månad')+th('excessMonth','Mot OMX månad')+th('return','Sedan start')+th('profit','Utveckling kr')+th('excess','Mot OMX start')+th('winners','Vinnare')+'</tr>';
+  const head='<tr>'+th('week','Portfölj / start')+th('model','Modell')+th('day','Dag')+th('excessDay','Mot OMX dag')+th('weekReturn','Vecka')+th('excessWeek','Mot OMX vecka')+th('month','Månad')+th('excessMonth','Mot OMX månad')+th('return','Sedan start')+th('profit','Utveckling kr')+th('excess','Mot OMX från köp')+th('winners','Vinnare')+'</tr>';
   const periodCells=x=>[
     ['day',' %'],['excessDay',' p.e.'],['weekReturn',' %'],['excessWeek',' p.e.'],['month',' %'],['excessMonth',' p.e.']
   ].map(([key,suffix])=>{const value=devPortfolioSortValue(x,key);return `<td class="${portfolioReturnClass(value)}"><b>${signed(value,suffix)}</b></td>`}).join('');
-  const rollingHtml=sortedRolling.length?'<tr class="portfolio-section-row"><td colspan="12">Rullande Top 10</td></tr>'+sortedRolling.map(x=>`<tr class="portfolio-row rolling-portfolio-row" data-rolling-model="${x.model}"><td><b>Rullande Top 10</b><br><small>${dateFmt(x.startDate)}</small></td><td>${portfolioModelName(x.model)}</td>${periodCells(x)}<td class="${portfolioReturnClass(x.returnPct)}"><b>${signed(x.returnPct,' %')}</b></td><td class="${portfolioReturnClass(x.profit)}"><b>${signed(x.profit,' kr')}</b></td><td class="${portfolioReturnClass(x.excess)}"><b>${signed(x.excess,' p.e.')}</b></td><td>${x.winners}/${x.result.available}</td></tr>`).join(''):'';
+  const rollingHtml=sortedRolling.length?'<tr class="portfolio-section-row"><td colspan="12">Rullande Top 10</td></tr>'+sortedRolling.map(x=>`<tr class="portfolio-row rolling-portfolio-row" data-rolling-model="${x.model}"><td><b>Rullande Top 10</b><br><small>${dateFmt(x.startDate)}</small></td><td>${portfolioModelName(x.model)}</td>${periodCells(x)}<td class="${portfolioReturnClass(x.returnPct)}"><b>${signed(x.returnPct,' %')}</b></td><td class="${portfolioReturnClass(x.profit)}"><b>${signed(x.profit,' kr')}</b></td><td class="${portfolioReturnClass(x.excess)}"><b>${signed(x.excess,' p.e.')}</b><br><small>OMXSPI ${signed(x.benchmarkReturn,' %')}</small></td><td>${x.winners}/${x.result.available}</td></tr>`).join(''):'';
   const frozenHtml=sortedFrozen.length?'<tr class="portfolio-section-row"><td colspan="12">Frysta veckoportföljer</td></tr>'+sortedFrozen.map(x=>{const frozenProfit=Number.isFinite(x.returns.start)?ROLLING_START_CAPITAL*x.returns.start/100:NaN;return `<tr class="portfolio-row" data-frozen-id="${x.snapshot.id}" data-frozen-model="${x.model}"><td><b>${x.snapshot.weekKey}</b><br><small>${dateFmt(weeklySnapshotActivationDate(x.snapshot))}</small></td><td>${portfolioModelName(x.model)}</td>${periodCells(x)}<td class="${portfolioReturnClass(x.returns.start)}"><b>${signed(x.returns.start,' %')}</b></td><td class="${portfolioReturnClass(frozenProfit)}"><b>${signed(frozenProfit,' kr')}</b></td><td class="${portfolioReturnClass(x.excessReturns.start)}"><b>${signed(x.excessReturns.start,' p.e.')}</b></td><td>${x.winners}/${x.result.available}</td></tr>`}).join(''):'';
   table.innerHTML=head+rollingHtml+frozenHtml;
   table.querySelectorAll('[data-dev-portfolio-sort]').forEach(header=>header.onclick=()=>{const key=header.dataset.devPortfolioSort;if(devPortfolioActiveSort===key)devPortfolioDirection=devPortfolioDirection==='desc'?'asc':'desc';else{devPortfolioActiveSort=key;devPortfolioDirection=['model','fees'].includes(key)?'asc':'desc'}const select=document.getElementById('devPortfolioSort');if(select&&[...select.options].some(o=>o.value===key))select.value=key;renderDevelopmentPortfolios()});
@@ -4007,11 +4049,17 @@ function openRollingDevelopmentPortfolio(model){
     ['Idag i kr',signed(dayStats.kr,' kr')],
     ['Mot OMX idag',signed(dayStats.excessPct,' p.e.')],
     ['Senast uppdaterad',dateFmt(x.lastUpdateDate||x.startDate)],
-    ['Strategistart',dateFmt(x.startDate)],
+    ['Första köp (fredagsclose)',dateFmt(x.startDate)],
+    ['Första portföljvecka',dateFmt(x.activationDate)],
+    ['OMXSPI från första köp',signed(x.benchmarkReturn,' %')],
+    ['OMXSPI basdatum',x.benchmarkStartDate?dateFmt(x.benchmarkStartDate):'Ej verifierat'],
+    ['OMXSPI senaste datum',x.benchmarkEndDate?dateFmt(x.benchmarkEndDate):'Okänt'],
+    ['OMXSPI startnivå',fmt(x.benchmarkStart)],
+    ['OMXSPI slutnivå',fmt(x.benchmarkCurrent)],
     ['Portföljvärde',`${Math.round(x.value).toLocaleString('sv-SE')} kr`],
     ['Utveckling i kr',signed(x.profit,' kr')],
     ['Avkastning',signed(x.returnPct,' %')],
-    ['Mot OMX',signed(x.excess,' p.e.')],
+    ['Mot OMXSPI (samma köpdatum)',signed(x.excess,' p.e.')],
     ['Courtage',`${x.fees.toLocaleString('sv-SE',{maximumFractionDigits:0})} kr`],
     ['Köp',x.buyCount],
     ['Försäljningar',x.sellCount],
@@ -9368,6 +9416,51 @@ function benchmarkValueExact(market,date){
   const p=(benchmarkHistories[market]||[]).find(x=>String(x?.date||'').slice(0,10)===target);
   return p&&Number.isFinite(num(p.close))?num(p.close):NaN
 }
+// v21.27.12: fail-closed Friday data gate. EVERY tracked ticker must have an
+// exact positive daily close AND enough history to compute MA200 trend at cutoff.
+// Never infer a Friday close from last known price, lastUpdate, or a weekend score.
+let weeklyLastBlock=null;
+const WEEKLY_MIN_TECHNICAL_DAYS=263;
+function weeklyFridayDataReadiness(cutoffDate,market=loadWeeklySettings().benchmarkMarket||'SE'){
+  const date=String(cutoffDate||'').slice(0,10);
+  const missing=[],short=[];
+  const b=benchmarkValueExact(market,date);
+  const se=benchmarkValueExact('SE',date);
+  if(!Number.isFinite(b)||b<=0)missing.push('Index '+benchmarkSymbol(market)+' '+date);
+  if(!Number.isFinite(se)||se<=0)missing.push('OMXSPI (Grön) '+date);
+  const indexHistory=(benchmarkHistories.SE||[]).filter(p=>String(p?.date||'').slice(0,10)<=date&&num(p?.close)>0);
+  if(indexHistory.length<WEEKLY_MIN_TECHNICAL_DAYS)short.push('OMXSPI: '+indexHistory.length+' dagar');
+  for(const row of rows){
+    const ticker=row.ticker||row.company||'Okänd';
+    const hist=(Array.isArray(row.priceHistory)?row.priceHistory:[])
+      .filter(p=>String(p?.date||'').slice(0,10)<=date&&num(p?.close)>0);
+    if(!hist.some(p=>String(p.date).slice(0,10)===date))missing.push(ticker);
+    if(hist.length<WEEKLY_MIN_TECHNICAL_DAYS)short.push(ticker+': '+hist.length+' dagar');
+  }
+  const ready=rows.length>=10&&missing.length===0&&short.length===0;
+  return {ready,date,market,checkedStocks:rows.length,missing,short,
+    reason:rows.length<10?'Färre än 10 aktier i databasen':
+      missing.length?`Saknad exakt fredagsstängning (${missing.length}): ${missing.slice(0,6).join(', ')}${missing.length>6?' …':''}`:
+      short.length?`För kort kurshistorik (${short.length}): ${short.slice(0,6).join(', ')}${short.length>6?' …':''}`:'Alla fredagskurser och tekniska underlag verifierade'};
+}
+function weeklyReadinessForTarget(){
+  const friday=latestCompletedFriday(new Date());
+  const target=isoWeekInfo(followingMonday(friday));
+  return {...weeklyFridayDataReadiness(isoDate(friday)),weekKey:target.key,
+    alreadyLocked:weeklyPortfolios.some(s=>s.weekKey===target.key)}
+}
+function renderWeeklyFreshnessStatus(){
+  const el=document.getElementById('weeklyFreshnessStatus');
+  if(!el)return;
+  const r=weeklyReadinessForTarget();
+  const lock=r.alreadyLocked?'Veckan är redan sparad och ändras inte automatiskt.':
+    r.ready?'Veckan får låsas från verifierade fredagskurser.':
+    'NY VECKA SPÄRRAD – hämta/komplettera kurshistoriken och försök igen.';
+  el.textContent=`v21.27.12 · ${r.weekKey} · Handelsdag ${r.date} · ${lock} ${r.reason}. `+
+    'Gamla veckor lämnas orörda. Använd ”Granska låsta veckor” för avvikelser.';
+  el.style.color=r.alreadyLocked?'':r.ready?'var(--green)':'var(--yellow)';
+}
+
 function isoMondayFromWeekKey(weekKey){
   const match=String(weekKey||'').match(/^(\d{4})-W(\d{2})$/);
   if(!match)return '';
@@ -9559,6 +9652,13 @@ function fridayWeekendSignalPoint(row,fridayDate){
   return points[0]||null
 }
 function historicalCandidateForWeeklyLock(row,cutoffDate){
+  // Nya veckolås använder endast prisserien fram till cutoff, ALDRIG
+  // sparade score-fält från en äldre eller senare marknadsuppdatering.
+  const completeHistory=priceHistoryOnOrBefore(row,cutoffDate);
+  if(completeHistory.length>=WEEKLY_MIN_TECHNICAL_DAYS &&
+     completeHistory.some(p=>String(p?.date||'').slice(0,10)===String(cutoffDate).slice(0,10))){
+    return historicalCandidate(row,cutoffDate)
+  }
   const base=historicalCandidate(row,cutoffDate);
   const weekend=fridayWeekendSignalPoint(row,cutoffDate);
   if(!weekend)return base;
@@ -9608,7 +9708,13 @@ function historicalCandidate(row,cutoffDate){
   let blue,white,average,blueQualified,whiteReady;
   const savedBlue=num(marketPoint?.blueScore??marketPoint?.score);
 
-  if(Number.isFinite(savedBlue)){
+  if(prices.length>=WEEKLY_MIN_TECHNICAL_DAYS){
+    // Samma dags historiska teknik för Blå som för Vit och Snitt.
+    blue=calc(historicalRow);
+    blueQualified=blue.qualified
+  }else if(Number.isFinite(savedBlue)){
+    // Endast äldre ofullständiga perioder för ANALYS av redan sparade veckor.
+    // weeklyFridayDataReadiness hindrar att nya veckor skapas på detta.
     blue={total:savedBlue,qualified:marketPoint?.blueQualified!==false};
     blueQualified=blue.qualified
   }else{
@@ -9899,17 +10005,25 @@ function buildCanonicalHistoricalWeeklySnapshot(friday,previousSnapshot=null){
   const targetInfo=isoWeekInfo(monday);
   const settings=loadWeeklySettings();
   const benchmarkMarket=settings.benchmarkMarket||'SE';
+  const readiness=weeklyFridayDataReadiness(cutoffDate,benchmarkMarket);
+  if(!readiness.ready){
+    weeklyLastBlock={...readiness,weekKey:targetInfo.key};
+    console.warn('Veckolås avbrutet (ingen gammal kurs eller poäng får användas):',weeklyLastBlock);
+    return null
+  }
 
   const members=fiveModelMembersAtFriday(cutoffDate,previousSnapshot);
   const coreModels=['blue','white','average'];
-  if(coreModels.some(model=>(members[model]||[]).length!==10)){
-    console.warn('Kärnportföljerna kunde inte låsas',cutoffDate,
+  if(WEEKLY_MODELS.some(model=>(members[model]||[]).length!==10)){
+    weeklyLastBlock={weekKey:targetInfo.key,date:cutoffDate,reason:'Alla fem modeller kunde inte ge exakt tio giltiga innehav.'};
+    console.warn('Femmodellsportföljerna kunde inte låsas',cutoffDate,
       Object.fromEntries(WEEKLY_MODELS.map(model=>[model,(members[model]||[]).length])));
     return null
   }
 
-  const benchmarkStart=benchmarkValueOnOrBefore(benchmarkMarket,cutoffDate);
-  if(!Number.isFinite(benchmarkStart))return null;
+  const benchmarkStart=benchmarkValueExact(benchmarkMarket,cutoffDate);
+  if(!Number.isFinite(benchmarkStart)||benchmarkStart<=0)return null;
+  weeklyLastBlock=null;
 
   return{
     id:`${targetInfo.key}-${cutoffDate}`,
@@ -9926,7 +10040,9 @@ function buildCanonicalHistoricalWeeklySnapshot(friday,previousSnapshot=null){
     executionMode:'friday-close',
     preparedFrom:'canonical-five-model-friday-engine',
     selectionSource:'locked-friday-close-five-model-v1',
-    weeklyLockVersion:6,
+    weeklyLockVersion:7,
+    dataVerifiedDate:cutoffDate,
+    dataVerificationRule:'exact-friday-all-stocks-index-263-trading-days',
     benchmarkMarket,
     benchmarkSymbol:benchmarkSymbol(benchmarkMarket),
     benchmarkStart,
@@ -9943,6 +10059,21 @@ function buildCanonicalHistoricalWeeklySnapshot(friday,previousSnapshot=null){
 function persistCanonicalWeeklySnapshot(snapshot,automatic=true){
   if(!snapshot)return false;
   if(weeklyPortfolios.some(s=>s.weekKey===snapshot.weekKey))return false;
+  // Final independent check immediately before writing the immutable snapshot.
+  const cutoff=String(snapshot.executionDate||'').slice(0,10);
+  const readiness=weeklyFridayDataReadiness(cutoff,snapshot.benchmarkMarket||'SE');
+  if(!readiness.ready)return false;
+  for(const model of WEEKLY_MODELS){
+    const members=snapshot.portfolios?.[model]?.members||[];
+    if(members.length!==10)return false;
+    for(const member of members){
+      const exact=exactStockClose(member,cutoff);
+      if(!Number.isFinite(exact)||exact<=0||Math.abs(exact-num(member.startPrice))>0.00001){
+        weeklyLastBlock={weekKey:snapshot.weekKey,date:cutoff,reason:'Fel startkurs i '+model+' för '+(member.ticker||member.company)};
+        return false
+      }
+    }
+  }
   weeklyPortfolios.push(snapshot);
   weeklyPortfolios.sort((a,b)=>String(b.lockDate||b.executionDate||'').localeCompare(String(a.lockDate||a.executionDate||'')));
   weeklyPersist();
@@ -10234,6 +10365,7 @@ function backfillMissingWeeklyPortfolios(){
       friday.setHours(12,0,0,0);
 
       if(createHistoricalWeeklySnapshot(friday,true))created++;
+      else break; // Ingen hoppa-över-vecka: Top20-hysteres kräver rätt föregångare.
     }
     monday.setDate(monday.getDate()+7)
   }
@@ -10367,7 +10499,7 @@ function weeklyPortfolioReturn(snapshot,model){
     // vecka aktiveras. Fram till dess är startkurs = aktuell värderingskurs.
     const current=!active
       ?num(m.startPrice)
-      :(row?num(row.price):NaN);
+      :(row?rollingCurrentPrice(m):NaN);
 
     const ret=Number.isFinite(current)&&Number.isFinite(num(m.startPrice))&&num(m.startPrice)!==0
       ?(current/num(m.startPrice)-1)*100
@@ -10401,7 +10533,13 @@ function createWeeklySnapshot(overwrite=false,automatic=false){
     if(!automatic)alert('Veckans portföljer är redan låsta. En låst vecka skrivs inte om.');
     return false
   }
-  return createWeekendLockedSnapshotFromFriday(friday,automatic)
+  const created=createWeekendLockedSnapshotFromFriday(friday,automatic);
+  if(!created&&!automatic){
+    const block=weeklyLastBlock||weeklyFridayDataReadiness(isoDate(friday));
+    alert('Veckan har INTE låsts. '+(block.reason||'Underlaget kunde inte verifieras')+'\nKör kursuppdatering och försök igen.');
+  }
+  renderWeeklyFreshnessStatus();
+  return created
 }
 
 
@@ -10534,19 +10672,16 @@ function repairLegacyWeeklyV2Snapshots(){
 }
 
 function ensureWeeklyPortfolioSnapshot(){
-  const repairedLegacy=repairLegacyWeeklyV2Snapshots()>0;
-  const backfilled=backfillMissingWeeklyPortfolios()>0;
-  const migrated=migrateExtendedModelsToCanonicalEngine();
-  return repairedLegacy||backfilled||migrated
+  // Inga automatiska reparationer eller modellmigreringar av låsta veckor.
+  // Befintlig historik måste granskas separat innan någon ändring tillåts.
+  return backfillMissingWeeklyPortfolios()>0
 }
 function weeklySnapshotLabel(s){return `${s.weekKey} · ${dateFmt(s.savedAt)}`}
 let extendedWeeklyRepairRunning=false;
 function ensureExtendedWeeklyModelsNow(){
-  if(extendedWeeklyRepairRunning)return false;
-  extendedWeeklyRepairRunning=true;
-  try{return migrateExtendedModelsToCanonicalEngine()}
-  catch(error){console.error('Grön/Hybrid-integritetskontroll misslyckades',error);return false}
-  finally{extendedWeeklyRepairRunning=false}
+  // Historiska Grön/Hybrid får inte skrivas om automatiskt när data uppdateras.
+  // ”Granska låsta veckor” visar avvikelser; reparationsbeslut tas separat.
+  return false
 }
 function renderWeeklyPortfolios(){
   // Visning är också en integritetsgräns: importerade eller äldre veckor får
@@ -10567,6 +10702,7 @@ function renderWeeklyPortfolios(){
   if(old&&weeklyPortfolios.some(s=>s.id===old))select.value=old;
 
   const coverage=Object.fromEntries(WEEKLY_MODELS.map(model=>[model,weeklyPortfolios.filter(s=>(s.portfolios?.[model]?.members||[]).length===10).length]));
+  renderWeeklyFreshnessStatus();
   document.getElementById('weeklyStatus').textContent=weeklyPortfolios.length
     ?`${weeklyPortfolios.length} veckor sparade. Frysta portföljer: Blå ${coverage.blue}, Vit ${coverage.white}, Snitt ${coverage.average}, Grön ${coverage.green}, Hybrid ${coverage.hybrid}. Varje ISO-vecka låses exakt en gång från föregående fredags slutdata.`
     :'Ingen veckoportfölj sparad ännu.';
@@ -10970,12 +11106,12 @@ function weeklyTargetIsMissing(now=new Date()){
 function weeklyNeedsForcedMarketRefresh(now=new Date()){
   const {friday,targetInfo}=targetWeekFromLatestCompletedFriday(now);
   if(weeklyPortfolios.some(s=>s?.weekKey===targetInfo.key))return false;
-
+  if(weeklyFridayDataReadiness(isoDate(friday)).ready)return false;
   const lastUpdate=loadMarketSettings()?.lastUpdate;
   if(!lastUpdate)return true;
-
-  const t=new Date(lastUpdate);
-  const cutoff=fridayCutoffMoment(friday);
+  const t=new Date(lastUpdate),cutoff=fridayCutoffMoment(friday);
+  // Om en uppdatering redan gjorts efter cutoff men vissa dagskurser saknas
+  // visas spärren. Vi gör inte oändliga Yahoo-anrop varje sidöppning.
   return !Number.isFinite(t.getTime())||t<cutoff
 }
 
@@ -10983,22 +11119,15 @@ async function ensureWeeklyFreshnessV211(){
   if(weeklyFreshnessRunning)return false;
   weeklyFreshnessRunning=true;
   try{
-    // Först: skapa allt som redan kan skapas från befintlig historik.
-    let created=backfillMissingWeeklyPortfolios();
-    const repaired=ensureExtendedWeeklyModelsNow();
-
-    if(!weeklyTargetIsMissing())return created>0||repaired;
-
-    // Om fredagens data ännu inte hämtats efter cutoff får "en gång per dygn"
-    // INTE stoppa veckomotorn. Tvinga en säker marknadsuppdatering.
-    if(weeklyNeedsForcedMarketRefresh()){
+    // Ordningen är avgörande: HÄMTA först, verifiera exakt fredag, lås sist.
+    // Endast senaste fredagen kan behöva en nätuppdatering. Äldre luckor får
+    // aldrig fyllas med den senaste tillgängliga kursen.
+    if(weeklyTargetIsMissing()&&weeklyNeedsForcedMarketRefresh()){
       await updateAllPrices(true);
-      created+=backfillMissingWeeklyPortfolios();
-    }else{
-      created+=backfillMissingWeeklyPortfolios()
     }
-
-    return created>0||ensureExtendedWeeklyModelsNow()
+    const created=backfillMissingWeeklyPortfolios();
+    renderWeeklyFreshnessStatus();
+    return created>0
   }catch(error){
     console.error('Veckofärskheten kunde inte säkerställas',error);
     return false
@@ -11201,9 +11330,9 @@ async function importSelectedFile(file){
   rows=result.clean;
   benchmarkHistories=importedBenchmarks;
   weeklyPortfolios=importedWeekly;
-  localStorage.removeItem(WHITE2_WEEKLY_REBUILD_KEY);
-  const rebuiltWhiteWeeks=rebuildWhite2WeeklyPortfolios(true);
-  const repairedExtendedWeeks=ensureExtendedWeeklyModelsNow();
+  // Importerade historiska affärer bevaras exakt. Ingen tyst Vit-omräkning.
+  const rebuiltWhiteWeeks=0;
+  const repairedExtendedWeeks=false;
   const uiErrors=[];
   for(const [name,fn] of [
     ['Poäng/översikt',()=>render()],
@@ -11217,8 +11346,44 @@ async function importSelectedFile(file){
   setImportStatus(`Import klar: ${rows.length} bolag. ${Object.keys(benchmarkHistories).length?'Jämförelseindex följde med.':'Jämförelseindex saknas – kör kursuppdatering för full uppföljning.'} ${weeklyPortfolios.length?weeklyPortfolios.length+' veckoportföljer återställdes. ':''}${rebuiltWhiteWeeks?rebuiltWhiteWeeks+' veckor räknades om med Vit 2.1. ':''}${repairedExtendedWeeks?'Grön/Hybrid kontrollerades och reparerades. ':''}${result.skipped.length?result.skipped.length+' dubbletter hoppades över. ':''}${uiErrors.length?'Visningsvarning: '+uiErrors.join(' · '):''}`,uiErrors.length>0);
   toast(`Import klar: ${rows.length} bolag`);
 }
+// Export only: read-only audit of old locks, including all five models.
+function auditLockedWeeklyPortfoliosV212712(){
+  const weeks=weeklyPortfolios.slice().sort((a,b)=>String(a.weekKey).localeCompare(String(b.weekKey)))
+    .map(snapshot=>{
+      const date=String(snapshot.executionDate||snapshot.lockDate||'').slice(0,10);
+      const market=snapshot.benchmarkMarket||'SE';
+      const actualBenchmark=num(snapshot.benchmarkStart);
+      const exactBenchmark=benchmarkValueExact(market,date);
+      const priceMismatches=[],missingHistoricalPrices=[];
+      for(const model of WEEKLY_MODELS){
+        for(const member of snapshot.portfolios?.[model]?.members||[]){
+          const exact=exactStockClose(member,date);
+          const saved=num(member.startPrice);
+          const detail={model,ticker:member.ticker,date,savedPrice:saved,exactClose:exact};
+          if(!Number.isFinite(exact)||exact<=0)missingHistoricalPrices.push(detail);
+          else if(!Number.isFinite(saved)||Math.abs(exact-saved)>0.0001)priceMismatches.push(detail);
+        }
+      }
+      const indexMismatch=Number.isFinite(exactBenchmark)&&Math.abs(exactBenchmark-actualBenchmark)>0.0001;
+      const readiness=weeklyFridayDataReadiness(date,market);
+      return {weekKey:snapshot.weekKey,date,recordedVersion:snapshot.weeklyLockVersion||null,
+        benchmark:{market,stored:actualBenchmark,historical:exactBenchmark,mismatch:indexMismatch},
+        priceMismatches,missingHistoricalPrices,dataReadiness:{ready:readiness.ready,
+          missing:readiness.missing,short:readiness.short},
+        status:indexMismatch||priceMismatches.length||missingHistoricalPrices.length||!readiness.ready?'kontrollera':'godkänd'}
+    });
+  return {engine:'MomentumScore v21.27.12',createdAt:nowISO(),readOnly:true,
+    note:'Endast avvikelsekontroll; historiska val/affärer har inte ändrats.',
+    totalWeeks:weeks.length,flaggedWeeks:weeks.filter(w=>w.status!=='godkänd').length,weeks}
+}
+function exportWeeklyLockAuditV212712(){
+  const report=auditLockedWeeklyPortfoliosV212712();
+  downloadTextFile(JSON.stringify(report,null,2),`MomentumScore_veckolas_granskning_${todayISO()}.json`,'application/json');
+  alert(`Granskning exporterad.\nVeckor: ${report.totalWeeks}\nVeckor att kontrollera: ${report.flaggedWeeks}\nIngen historik har ändrats.`)
+}
 document.getElementById('saveWeeklyNow').onclick=()=>createWeeklySnapshot(false,false);
 document.getElementById('exportWeeklyCsv').onclick=exportWeeklyPortfoliosCsv;
+document.getElementById('auditWeeklyLocks').onclick=exportWeeklyLockAuditV212712;
 document.getElementById('deleteWeeklySnapshot').onclick=deleteSelectedWeeklySnapshot;
 document.getElementById('weeklySnapshotSelect').onchange=renderWeeklyPortfolios;
 document.getElementById('weeklyPeriod').onchange=renderWeeklyPortfolios;
